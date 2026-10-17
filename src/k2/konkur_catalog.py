@@ -71,6 +71,23 @@ GROUPS = tuple(SUBJECTS_BY_GROUP)
 EXAM_YEAR_OPTIONS = ("۱۴۰۵", "۱۴۰۶", "سال دیگر / هنوز مشخص نیست")
 
 
+def is_official_exam_source_url(url: str) -> bool:
+    """اعتبارسنجی دامنهٔ منبعِ اعلام‌شده؛ محتوای صفحه را تأیید نمی‌کند."""
+    from urllib.parse import urlsplit
+
+    try:
+        parsed = urlsplit(url.strip())
+        host = (parsed.hostname or "").lower().rstrip(".")
+    except ValueError:
+        return False
+    if parsed.scheme.lower() not in {"http", "https"} or not host:
+        return False
+    if parsed.username is not None or parsed.password is not None:
+        return False
+    official_roots = ("sanjesh.org", "sccr.ir", "medu.gov.ir")
+    return any(host == root or host.endswith("." + root) for root in official_roots)
+
+
 def source_status_for_year(year: int | None) -> str:
     """وضعیت بستهٔ منبع برای سال انتخابی، بدون تعمیم سال قبل به سال جدید."""
     if year == 1405:

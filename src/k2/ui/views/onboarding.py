@@ -25,7 +25,11 @@ from PySide6.QtWidgets import (
 
 from ...domain.enums import DateStatus
 from ...domain.models import ExamProfile, Subject
-from ...konkur_catalog import SUBJECTS_BY_GROUP, source_status_for_year
+from ...konkur_catalog import (
+    SUBJECTS_BY_GROUP,
+    is_official_exam_source_url,
+    source_status_for_year,
+)
 from ...onboarding import (
     ONBOARDING_STEPS,
     OnboardingState,
@@ -590,9 +594,8 @@ class OnboardingWizard(QDialog):
             )
             return
         if self.state.values.get("exam_date_status") == "رسمی (منبع ثبت‌شده)":
-            source = self.state.values.get("exam_source", "").lower()
-            official_domains = ("sanjesh.org", "sccr.ir", "medu.gov.ir", "chap.sch.ir")
-            if not any(domain in source for domain in official_domains):
+            source = self.state.values.get("exam_source", "")
+            if not is_official_exam_source_url(source):
                 QMessageBox.warning(
                     self, "منبع رسمی لازم است",
                     "برای انتخاب وضعیت رسمی، نشانی منبع از دامنهٔ رسمی سنجش، "
