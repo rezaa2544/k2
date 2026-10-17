@@ -1,0 +1,87 @@
+name: build-windows
+
+# ساخت اجرایی ویندوزی و اجرای تست‌ها روی windows-latest
+# توجه: این گردش‌کار «build موفق» را به‌معنای «اجرای موفق» نمی‌گیرد؛
+# مرحلهٔ verify اجرای واقعی EXE را جداگانه بررسی می‌کند.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+          python -m pip install "pyinstaller>=6.0"
+
+      - name: Unit / integration / invariant / e2e tests
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = "$PWD\src"
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          python -m pytest tests -q --junitxml=pytest-report.xml
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-report
+          path: pytest-report.xml
+
+      - name: Build EXE (PyInstaller)
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = "$PWD\src"
+          python -m PyInstaller k2.spec --noconfirm --distpath packaging/output --workpath packaging/work
+
+      - name: Verify the built EXE actually runs
+        shell: pwsh
+        run: |
+          $exe = "packaging\output\K2\K2.exe"
+          if (-not (Test-Path $exe)) { throw "EXE not found: $exe" }
+          $db = "$env:RUNNER_TEMP\k2-smoke.db"
+          & $exe --db $db --headless
+          if ($LASTEXITCODE -ne 0) { throw "EXE exited with $LASTEXITCODE" }
+          if (-not (Test-Path $db)) { throw "EXE did not create the database" }
+          Write-Host "EXE ran successfully and created $db"
+
+      - name: Upload distributable
+        uses: actions/upload-artifact@v4
+        with:
+          name: K2-windows-x64
+          path: packaging/output/K2
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            packaging/output/K2/**/*
+          draft: true
+          generate_release_notes: true
