@@ -21,7 +21,27 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require HTML preview update with application source changes
+        if: github.event_name != 'workflow_dispatch'
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          base_sha="$PUSH_BEFORE"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then base_sha="$PR_BASE"; fi
+          if [[ -z "$base_sha" || "$base_sha" =~ ^0+$ ]]; then exit 0; fi
+          changed_files="$(git diff --name-only "$base_sha" "$GITHUB_SHA")"
+          if grep -Eq '^(src/|k2\.spec$)' <<< "$changed_files" && ! grep -qx 'preview/K2-preview.html' <<< "$changed_files"; then
+            echo "::error::Application source changed; update preview/K2-preview.html in the same push."
+            exit 1
+          fi
 
       - uses: actions/setup-python@v5
         with:

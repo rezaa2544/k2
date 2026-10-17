@@ -102,7 +102,7 @@
 
 | شناسه | اولویت | پیاده‌سازی | تست | وضعیت |
 |---|---|---|---|---|
-| QA-01 | P0 | ۱۴ فایل تست، ۱۷۰ تست | `test_jdate`، `test_capacity`، `test_scheduler`، `test_activity_lifecycle`، `test_review_engine`، `test_exam_analysis`، `test_gui.py::test_navigation_and_dashboard_have_clear_visual_hierarchy` | کامل |
+| QA-01 | P0 | ۱۶ فایل تست، ۱۷۵ تست | پوشش واحد/یکپارچگی/end-to-end، GUI، headless، بسته‌بندی ZIP و HTML preview | کامل |
 | QA-02 | P0 | `tests/test_e2e_scenario.py::test_full_learning_cycle` | همان تست | کامل |
 | QA-03 | P0 | `tests/test_invariants.py`، `tests/test_edge_cases.py` | `test_invariants_hold_for_random_schedules` (۵ seed)، `test_capacity_never_exceeded_over_a_week`، `test_no_activity_is_scheduled_in_the_past` | کامل |
 | QA-04 | P0 | `tests/test_storage.py` | `test_backup_and_restore_roundtrip`، `test_migration_from_v1_preserves_data` | کامل |

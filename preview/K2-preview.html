@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="fa" dir="rtl" data-source-revision="pending">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>پیش‌نمایش K2 — مشاور هوشمند کنکور</title>
+<style>
+:root {
+  --bg:#f3f6f8; --surface:#fff; --surface-soft:#f8fafb; --text:#182b2a;
+  --muted:#687b7a; --border:#e2e9e8; --accent:#176b55; --accent-hover:#105742;
+  --accent-soft:#e4f2ed; --sidebar:#102d2a; --sidebar-soft:#193c37;
+  --sidebar-text:#d9e8e4; --sidebar-muted:#91aaa4; --info:#385f88;
+  --info-soft:#eaf1f8; --warn:#87641b; --warn-soft:#fbf4e4;
+  --danger:#8a4848; --danger-soft:#faeeee; --shadow:0 24px 72px #1736331a;
+}
+*{box-sizing:border-box}
+html{min-width:320px;background:#edf1f3}
+body{margin:0;padding:24px;color:var(--text);font-family:Tahoma,"Segoe UI",Arial,sans-serif;font-size:14px;line-height:1.65;background:radial-gradient(ellipse at 50% -15%,#fff 0,#edf1f3 66%);}
+button,input,select{font:inherit}
+button{cursor:pointer}
+.preview-wrap{max-width:1390px;margin:0 auto}
+.preview-note{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 13px;padding:10px 15px;border:1px solid #dbe7e4;border-radius:12px;background:#f8fbfa;color:#526765;font-size:12px}
+.preview-note strong{color:var(--accent)}
+.preview-note .note-mark{display:flex;align-items:center;gap:8px;min-width:0}
+.note-dot{width:9px;height:9px;border-radius:50%;background:#4e9b7c;box-shadow:0 0 0 4px #4e9b7c1c;flex:none}
+.preview-note .note-rev{white-space:nowrap;color:#81918f;font-size:11px}
+.app-window{overflow:hidden;border:1px solid #dce4e3;border-radius:17px;background:var(--bg);box-shadow:var(--shadow)}
+.menu-bar{position:relative;z-index:5;display:flex;align-items:center;justify-content:space-between;min-height:49px;padding:5px 12px;background:var(--surface);border-bottom:1px solid var(--border)}
+.menu-group{display:flex;align-items:center;gap:3px}
+.menu-wrap{position:relative}
+.menu-button{min-height:36px;padding:5px 15px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--text);font-weight:700;transition:background .15s,color .15s,border-color .15s}
+.menu-button:hover,.menu-button[aria-expanded="true"]{background:var(--accent-soft);color:var(--accent)}
+.menu-button:focus-visible,.menu-item:focus-visible,.nav-item:focus-visible,.btn:focus-visible{outline:3px solid #6cb99b;outline-offset:2px}
+.menu-meta{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:11px}
+.preview-chip{padding:3px 9px;border:1px solid #cde4d9;border-radius:99px;background:#eff8f4;color:var(--accent);font-weight:700}
+.menu-panel{position:absolute;top:calc(100% + 5px);right:0;display:none;width:285px;padding:7px;border:1px solid var(--border);border-radius:12px;background:var(--surface);box-shadow:0 18px 42px #152c2924}
+.menu-panel.open{display:block;animation:menu-in .12s ease-out}
+@keyframes menu-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.menu-item{display:flex;width:100%;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:0;border-radius:8px;background:transparent;text-align:right;color:var(--text);font-size:13px}
+.menu-item:hover{background:var(--accent-soft);color:var(--accent)}
+.menu-item-copy{display:flex;flex-direction:column;align-items:flex-start;gap:1px}
+.menu-item-title{font-weight:700}
+.menu-item-hint{color:var(--muted);font-size:10px;font-weight:400}
+.shortcut{direction:ltr;white-space:nowrap;padding:2px 7px;border:1px solid #e6ecea;border-radius:5px;background:#f8faf9;color:#637571;font-family:Consolas,monospace;font-size:10px}
+.menu-separator{height:1px;margin:5px 8px;background:var(--border)}
+.app-layout{display:flex;min-height:750px;direction:rtl}
+.sidebar{display:flex;flex:0 0 246px;flex-direction:column;padding:19px 13px 14px;background:var(--sidebar);color:var(--sidebar-text)}
+.brand{display:flex;align-items:center;gap:11px;padding:3px 3px 0}
+.brand-mark{display:grid;width:42px;height:42px;place-items:center;border-radius:12px;background:var(--accent);color:white;font-size:18px;font-weight:900;letter-spacing:-1px}
+.brand-name{color:white;font-size:15px;font-weight:800;line-height:1.45}
+.brand-caption{color:var(--sidebar-muted);font-size:10px}
+.side-divider{height:1px;margin:20px 7px 13px;background:#294541}
+.side-caption{padding:0 11px 7px;color:var(--sidebar-muted);font-size:10px;font-weight:700}
+.nav-list{display:flex;flex:1;flex-direction:column;gap:4px;margin:0;padding:0;list-style:none}
+.nav-item{display:flex;min-height:44px;align-items:center;gap:11px;padding:7px 12px;border:0;border-right:3px solid transparent;border-radius:9px;background:transparent;color:var(--sidebar-text);text-align:right;transition:background .15s,color .15s}
+.nav-item:hover{background:var(--sidebar-soft)}
+.nav-item.active{border-right-color:#8dd5b9;background:var(--accent);color:#fff;font-weight:800}
+.nav-icon{display:grid;width:20px;place-items:center;color:#a8c6bd;font-size:17px}
+.nav-item.active .nav-icon{color:white}
+.sidebar-footer{margin-top:17px;padding:12px 11px;border:1px solid #294541;border-radius:10px;background:var(--sidebar-soft);color:var(--sidebar-text);font-size:11px}
+.sidebar-footer strong{display:block;margin-bottom:3px;color:#a6dfc7;font-size:11px}
+.content-area{display:flex;min-width:0;flex:1;flex-direction:column;padding:16px 19px 12px;gap:14px}
+.topbar{display:flex;min-height:70px;align-items:center;gap:12px;padding:10px 16px;border:1px solid var(--border);border-radius:14px;background:var(--surface)}
+.top-title-box{min-width:0;flex:1}
+.top-title{margin:0;color:var(--text);font-size:17px;font-weight:800;line-height:1.5}
+.top-subtitle{margin:1px 0 0;color:var(--muted);font-size:11px}
+.date-label{white-space:nowrap;color:var(--muted);font-size:11px}
+.btn{display:inline-flex;min-height:37px;align-items:center;justify-content:center;gap:7px;padding:7px 13px;border:1px solid var(--border);border-radius:9px;background:white;color:var(--text);font-size:12px;font-weight:700;transition:background .15s,border-color .15s,transform .15s}
+.btn:hover{border-color:#b9ceca;background:var(--surface-soft)}
+.btn:active{transform:translateY(1px)}
+.btn.primary{border-color:var(--accent);background:var(--accent);color:#fff}
+.btn.primary:hover{border-color:var(--accent-hover);background:var(--accent-hover)}
+.btn.soft{background:#ffffffb8}
+.page-content{min-height:0;flex:1}
+.page-scroll{display:flex;flex-direction:column;gap:13px;padding:1px 2px 7px}
+.page-heading{margin:0;color:var(--text);font-size:16px;font-weight:900}
+.page-intro{margin:-9px 0 0;color:var(--muted);font-size:11px}
+.hero{display:flex;align-items:center;justify-content:space-between;gap:22px;padding:18px 20px;border:1px solid #d6e9e1;border-radius:17px;background:linear-gradient(110deg,#edf7f3 0%,#e6f2ed 100%)}
+.hero-copy{min-width:0;flex:1}
+.eyebrow{margin:0 0 3px;color:var(--accent);font-size:11px;font-weight:800}
+.hero-title{margin:0;color:var(--text);font-size:17px;font-weight:900;line-height:1.55}
+.hero-body{margin:4px 0 0;color:var(--muted);font-size:11px}
+.hero-actions{display:flex;flex:0 0 auto;flex-direction:column;gap:7px}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.metric{min-height:106px;padding:14px 15px;border:1px solid var(--border);border-radius:13px;background:var(--surface)}
+.metric-label{margin:0;color:var(--muted);font-size:11px;font-weight:700}
+.metric-value{margin:4px 0 1px;color:var(--accent);font-size:20px;font-weight:900;line-height:1.45}
+.metric:nth-child(2) .metric-value{color:var(--info)}
+.metric:nth-child(3) .metric-value{color:#71817d}
+.metric:nth-child(4) .metric-value{color:var(--warn)}
+.metric-hint{margin:0;color:#879592;font-size:10px}
+.detail-grid{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:10px}
+.card{min-width:0;padding:15px 16px;border:1px solid var(--border);border-radius:13px;background:var(--surface)}
+.card-title{margin:0 0 10px;color:var(--text);font-size:12px;font-weight:800}
+.card-body{margin:0;color:#526765;font-size:11px;line-height:2}
+.card-body .row{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dashed #edf0ef}
+.card-body .row:last-child{border:0}
+.value-strong{color:var(--text);font-weight:800}
+.advice{display:flex;align-items:flex-start;gap:9px;padding:12px 14px;border:1px solid #dce9e4;border-radius:11px;background:#f8fbf9;color:#48635d;font-size:11px}
+.advice-mark{display:grid;width:22px;height:22px;flex:none;place-items:center;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-weight:900}
+.status-bar{display:flex;min-height:32px;align-items:center;justify-content:space-between;gap:12px;padding:7px 12px;border-top:1px solid var(--border);background:#fff;color:var(--muted);font-size:10px}
+.privacy{display:flex;align-items:center;gap:6px;color:#647e76}
+.privacy-dot{color:#36926e;font-size:12px}
+.preview-stamp{direction:ltr;white-space:nowrap;color:#8b9996;font-family:Consolas,monospace;font-size:9px}
+/* reusable page components */
+.section-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px;background:white}
+table{width:100%;border-collapse:collapse;white-space:nowrap;font-size:11px}
+th{padding:10px 12px;background:#f8faf9;color:#667773;text-align:right;font-weight:800;border-bottom:1px solid var(--border)}
+td{padding:10px 12px;border-bottom:1px solid #edf1f0;color:#405350}
+tr:last-child td{border-bottom:0}
+.pill{display:inline-flex;align-items:center;padding:3px 8px;border-radius:99px;background:#eff7f3;color:var(--accent);font-size:10px;font-weight:800}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.info{background:var(--info-soft);color:var(--info)}
+.pill.gray{background:#f0f3f2;color:#657672}
+.mini-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.small-stat{padding:12px;border:1px solid var(--border);border-radius:11px;background:#fff}
+.small-stat span{display:block;color:var(--muted);font-size:10px}
+.small-stat strong{display:block;margin-top:3px;color:var(--text);font-size:16px}
+.list-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #eef2f1;font-size:11px}
+.list-row:last-child{border:0}
+.progress{height:8px;overflow:hidden;border-radius:99px;background:#edf2f0}
+.progress>i{display:block;height:100%;border-radius:99px;background:var(--accent)}
+.chart{display:flex;height:135px;align-items:flex-end;justify-content:space-around;gap:12px;padding:12px 12px 0;border-bottom:1px solid var(--border)}
+.chart-col{display:flex;width:11%;height:100%;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;color:var(--muted);font-size:9px}
+.chart-bar{width:100%;max-width:35px;min-height:5px;border-radius:7px 7px 0 0;background:linear-gradient(#3d9577,#176b55)}
+.setting-row{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:12px 0;border-bottom:1px solid #eef2f1}
+.setting-row:last-child{border:0}
+.setting-row span{color:#516460;font-size:11px}
+.setting-row input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
+.toast{position:fixed;right:24px;bottom:22px;z-index:30;max-width:min(420px,calc(100vw - 32px));padding:11px 15px;border:1px solid #cfe5dc;border-radius:11px;background:#fff;color:#34584c;box-shadow:0 12px 32px #17363324;font-size:12px;opacity:0;pointer-events:none;transform:translateY(8px);transition:opacity .2s,transform .2s}
+.toast.show{opacity:1;transform:translateY(0)}
+.modal-backdrop{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;padding:20px;background:#102d2a66;backdrop-filter:blur(3px)}
+.modal-backdrop.show{display:flex}
+.modal{width:min(480px,100%);padding:21px;border:1px solid var(--border);border-radius:17px;background:white;box-shadow:0 24px 70px #0e272540}
+.modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.modal h2{margin:0;font-size:17px}
+.modal-close{width:33px;height:33px;border:0;border-radius:8px;background:#f3f6f5;color:#536763;font-size:18px}
+.modal p{color:var(--muted);font-size:12px;line-height:1.9}
+.modal-progress{height:7px;margin:16px 0;border-radius:99px;background:#eef2f0}
+.modal-progress i{display:block;width:8.33%;height:100%;border-radius:inherit;background:var(--accent)}
+.modal-actions{display:flex;justify-content:flex-start;gap:8px;margin-top:15px}
+@media(max-width:1000px){body{padding:12px}.sidebar{flex-basis:220px}.content-area{padding:13px}.detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.detail-grid .card:first-child{grid-column:span 2}}
+@media(max-width:720px){.app-layout{min-height:720px;flex-direction:column}.sidebar{flex:0 0 auto;padding:10px 10px 8px}.brand{display:none}.side-divider,.side-caption,.sidebar-footer{display:none}.nav-list{flex-direction:row;overflow:auto;gap:4px}.nav-item{min-width:max-content;min-height:39px;padding:6px 10px;font-size:11px}.content-area{padding:10px;gap:10px}.topbar{min-height:61px;padding:8px 11px}.date-label{display:none}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.hero{align-items:flex-start;flex-direction:column;gap:13px}.hero-actions{width:100%;flex-direction:row}.hero-actions .btn{flex:1}.detail-grid{grid-template-columns:1fr}.detail-grid .card:first-child{grid-column:auto}.mini-grid{grid-template-columns:1fr}.menu-meta .note-hide{display:none}}
+@media(max-width:450px){body{padding:7px}.preview-note{align-items:flex-start;flex-direction:column}.app-window{border-radius:12px}.menu-bar{min-height:45px;padding:4px 7px}.menu-button{padding:5px 10px}.menu-meta{font-size:10px}.menu-panel{width:min(285px,calc(100vw - 24px))}.content-area{padding:8px}.top-title{font-size:15px}.btn{padding:6px 9px;font-size:11px}.metric{padding:11px}.metric-value{font-size:18px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+<div class="preview-wrap">
+  <div class="preview-note" role="note">
+    <div class="note-mark"><span class="note-dot" aria-hidden="true"></span><span><strong>پیش‌نمایش تعاملی K2</strong> · یک فایل HTML آفلاین با داده‌های نمونه؛ برای دیدن ظاهر برنامه نیازی به دانلود EXE حجیم نیست.</span></div>
+    <span class="note-rev">کد مبدأ: <b id="sourceRevision">pending</b></span>
+  </div>
+  <section class="app-window" aria-label="پیش‌نمایش برنامهٔ K2">
+    <header class="menu-bar">
+      <div class="menu-group" aria-label="نوار منو">
+        <div class="menu-wrap">
+          <button class="menu-button" id="programMenuButton" aria-expanded="false" aria-controls="programMenu">برنامه</button>
+          <div class="menu-panel" id="programMenu" role="menu" aria-label="منوی برنامه">
+            <button class="menu-item" role="menuitem" data-action="setup"><span class="menu-item-copy"><span class="menu-item-title">راه‌اندازی / ادامهٔ مصاحبه</span><span class="menu-item-hint">ادامه یا آغاز راه‌اندازی مرحله‌ای</span></span></button>
+            <button class="menu-item" role="menuitem" data-action="refresh"><span class="menu-item-copy"><span class="menu-item-title">تازه‌سازی همهٔ نماها</span><span class="menu-item-hint">به‌روزرسانی اطلاعات صفحه‌ها</span></span><span class="shortcut">F5</span></button>
+            <div class="menu-separator" role="separator"></div>
+            <button class="menu-item" role="menuitem" data-action="quit"><span class="menu-item-copy"><span class="menu-item-title">خروج از برنامه</span><span class="menu-item-hint">در پیش‌نمایش، پنجره بسته نمی‌شود</span></span><span class="shortcut">Ctrl+Q</span></button>
+          </div>
+        </div>
+        <div class="menu-wrap">
+          <button class="menu-button" id="helpMenuButton" aria-expanded="false" aria-controls="helpMenu">راهنما</button>
+          <div class="menu-panel" id="helpMenu" role="menu" aria-label="منوی راهنما">
+            <button class="menu-item" role="menuitem" data-action="about"><span class="menu-item-copy"><span class="menu-item-title">دربارهٔ K2</span><span class="menu-item-hint">نسخه و توضیحات برنامه</span></span></button>
+          </div>
+        </div>
+      </div>
+      <div class="menu-meta"><span class="preview-chip">نسخهٔ نمایشی</span><span class="note-hide">محیط آفلاین · دادهٔ نمونه</span></div>
+    </header>
+
+    <div class="app-layout">
+      <aside class="sidebar">
+        <div class="brand"><div class="brand-mark" aria-hidden="true">K2</div><div><div class="brand-name">مشاور هوشمند</div><div class="brand-caption">کنکور · برنامه‌ریزی واقع‌بینانه</div></div></div>
+        <div class="side-divider"></div>
+        <div class="side-caption">فضای مطالعه</div>
+        <nav aria-label="بخش‌های برنامه"><ul class="nav-list" id="navList">
+          <li><button class="nav-item active" data-page="dashboard" aria-current="page"><span class="nav-icon">⌂</span><span>داشبورد</span></button></li>
+          <li><button class="nav-item" data-page="today"><span class="nav-icon">◷</span><span>برنامهٔ امروز</span></button></li>
+          <li><button class="nav-item" data-page="activities"><span class="nav-icon">▦</span><span>فعالیت‌ها</span></button></li>
+          <li><button class="nav-item" data-page="exams"><span class="nav-icon">◎</span><span>آزمون و تحلیل</span></button></li>
+          <li><button class="nav-item" data-page="review"><span class="nav-icon">↻</span><span>مرور تطبیقی</span></button></li>
+          <li><button class="nav-item" data-page="reports"><span class="nav-icon">▤</span><span>گزارش‌ها</span></button></li>
+          <li><button class="nav-item" data-page="settings"><span class="nav-icon">⚙</span><span>تنظیمات</span></button></li>
+        </ul></nav>
+        <div class="sidebar-footer"><strong>● آفلاین و خصوصی</strong>برنامه‌ریزی با توجه به ظرفیت واقعی شما</div>
+      </aside>
+
+      <main class="content-area">
+        <header class="topbar">
+          <div class="top-title-box"><h1 class="top-title" id="pageTitle">داشبورد</h1><p class="top-subtitle" id="pageHint">یک نگاه کوتاه؛ بعد فقط قدم بعدی</p></div>
+          <span class="date-label">شنبه ۲۵ مهر ۱۴۰۵</span>
+          <button class="btn" id="refreshButton" title="به‌روزرسانی همهٔ نماها"><span aria-hidden="true">↻</span> تازه‌سازی</button>
+        </header>
+        <section class="page-content" id="pageContent" aria-live="polite">
+          <div class="page-scroll">
+            <div><h2 class="page-heading">خلاصهٔ امروز · شنبه ۲۵ مهر ۱۴۰۵</h2><p class="page-intro">برنامهٔ خوب، با قدمی روشن و قابل انجام شروع می‌شود.</p></div>
+            <section class="hero" aria-label="پیشنهاد مشاور">
+              <div class="hero-copy"><p class="eyebrow">پیشنهاد مشاور برای قدم بعدی</p><h2 class="hero-title">پردازش اولیهٔ کلاس زیست</h2><p class="hero-body">۴۵ دقیقه · بعد از استراحت کوتاه؛ این گام را انجام بده و سپس وضعیتت را ثبت کن.</p></div>
+              <div class="hero-actions"><button class="btn primary" data-action="plan">ساخت برنامهٔ امروز</button><button class="btn soft" data-action="minimal">روز حداقلی</button></div>
+            </section>
+            <div class="metrics" aria-label="آمار امروز">
+              <article class="metric"><p class="metric-label">ظرفیت واقعی امروز</p><p class="metric-value">۵ ساعت و ۴۰ دقیقه</p><p class="metric-hint">پس از تعهدها و حاشیهٔ اطمینان</p></article>
+              <article class="metric"><p class="metric-label">برنامهٔ ساخته‌شده</p><p class="metric-value">۴ ساعت و ۲۰ دقیقه</p><p class="metric-hint">۵ بازهٔ پیشنهادی</p></article>
+              <article class="metric"><p class="metric-label">زمان آزادِ محفوظ</p><p class="metric-value">۱ ساعت و ۲۰ دقیقه</p><p class="metric-hint">برای وقفه‌های طبیعی</p></article>
+              <article class="metric"><p class="metric-label">کارهای عقب‌افتاده</p><p class="metric-value">۳ کار</p><p class="metric-hint">سطح فشار: عادی</p></article>
+            </div>
+            <div class="detail-grid">
+              <article class="card"><h3 class="card-title">ظرفیت از کجا آمده؟</h3><div class="card-body"><div class="row"><span>پنجرهٔ بیداری</span><span class="value-strong">۱۶ ساعت</span></div><div class="row"><span>کلاس‌ها و تعهدها</span><span class="value-strong">۵ ساعت</span></div><div class="row"><span>زمان مؤثر امروز</span><span class="value-strong">۵ ساعت و ۴۰ دقیقه</span></div><div class="row"><span>حاشیهٔ اطمینان</span><span class="value-strong">۲۰٪</span></div></div></article>
+              <article class="card"><h3 class="card-title">فاز زمانی و آزمون هدف</h3><p class="card-body">آزمون هدف هنوز ثبت نشده است.<br>می‌توانی تاریخ را از تنظیمات اضافه یا ویرایش کنی.</p><span class="pill gray" style="margin-top:9px">تاریخ رسمی حدس زده نمی‌شود</span></article>
+              <article class="card"><h3 class="card-title">صف عقب‌افتادگی</h3><p class="card-body">۳ فعالیت · ۲ ساعت و ۱۵ دقیقه<br>ظرفیت جبران این هفته: ۹۰ دقیقه<br>اولویت با کارهای ضروری است.</p></article>
+            </div>
+            <div class="advice"><span class="advice-mark">i</span><span><strong>یادآوری مشاور:</strong> خواب و تعهدها محفوظ می‌مانند؛ کار جا‌نشده صریح گزارش می‌شود و هیچ فعالیتی بی‌خبر ناپدید نمی‌شود. برای پرکردن زمان آزاد عجله نکن.</span></div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <footer class="status-bar"><span id="statusMessage">آمادهٔ شروع یک روز متعادل · دادهٔ نمایشی است</span><span class="privacy"><span class="privacy-dot">●</span> در نسخهٔ اصلی، داده‌ها روی دستگاه می‌مانند</span></footer>
+  </section>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="modal-backdrop" id="modalBackdrop" role="presentation">
+  <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-head"><h2 id="modalTitle"></h2><button class="modal-close" id="modalClose" aria-label="بستن">×</button></div>
+    <div id="modalBody"></div>
+    <div class="modal-actions" id="modalActions"></div>
+  </section>
+</div>
+<script>
+(() => {
+  const pages = {
+    dashboard: ["داشبورد", "یک نگاه کوتاه؛ بعد فقط قدم بعدی"],
+    today: ["برنامهٔ امروز", "کارهای امروز و زمان‌بندی پیشنهادی"],
+    activities: ["فعالیت‌ها", "ثبت و پیگیری مطالعه"],
+    exams: ["آزمون و تحلیل", "نتیجه‌ها، خطاها و اقدام اصلاحی"],
+    review: ["مرور تطبیقی", "مرور بر اساس یادگیری و عملکرد واقعی"],
+    reports: ["گزارش‌ها", "نگاهی آرام به روند روزانه و هفتگی"],
+    settings: ["تنظیمات", "ترجیحات، حریم خصوصی و پشتیبان‌گیری"]
+  };
+  const pageContent = document.getElementById('pageContent');
+  const pageTitle = document.getElementById('pageTitle');
+  const pageHint = document.getElementById('pageHint');
+  const statusMessage = document.getElementById('statusMessage');
+  const toast = document.getElementById('toast');
+  const backdrop = document.getElementById('modalBackdrop');
+  let toastTimer;
+
+  const templates = {
+    today: `<div class="page-scroll"><div class="section-row"><div><h2 class="page-heading">برنامهٔ شنبه ۲۵ مهر</h2><p class="page-intro">زمان‌بند قاعده‌محور؛ خواب و تعهدها محفوظ‌اند.</p></div><button class="btn primary" data-action="plan">بازسازی برنامه</button></div><div class="mini-grid"><div class="small-stat"><span>ظرفیت</span><strong>۵ ساعت و ۴۰ دقیقه</strong></div><div class="small-stat"><span>برنامه‌ریزی‌شده</span><strong>۴ ساعت و ۲۰ دقیقه</strong></div><div class="small-stat"><span>حاشیهٔ آزاد</span><strong>۱ ساعت و ۲۰ دقیقه</strong></div></div><div class="card"><h3 class="card-title">بازه‌های پیشنهادی</h3><div class="table-wrap"><table><thead><tr><th>زمان</th><th>مدت</th><th>فعالیت</th><th>دلیل جای‌گذاری</th><th>وضعیت</th></tr></thead><tbody><tr><td>۰۸:۰۰–۰۸:۴۵</td><td>۴۵ دقیقه</td><td>پردازش کلاس زیست</td><td>اولویت امروز · انرژی بالا</td><td><span class="pill">برنامه‌ریزی‌شده</span></td></tr><tr><td>۰۹:۰۰–۰۹:۴۰</td><td>۴۰ دقیقه</td><td>تمرین ریاضی</td><td>پس از وقفهٔ کوتاه</td><td><span class="pill">برنامه‌ریزی‌شده</span></td></tr><tr><td>۱۰:۱۰–۱۰:۵۰</td><td>۴۰ دقیقه</td><td>مرور واژگان</td><td>بازهٔ سبک‌تر</td><td><span class="pill">برنامه‌ریزی‌شده</span></td></tr><tr><td>۱۱:۱۰–۱۲:۰۰</td><td>۵۰ دقیقه</td><td>تحلیل آزمون</td><td>مهلت نزدیک‌تر</td><td><span class="pill info">پیشنهادی</span></td></tr></tbody></table></div></div><div class="advice"><span class="advice-mark">i</span><span>اگر کاری در ظرفیت امروز جا نشود، دلیلش شفاف می‌ماند و فعالیت بی‌خبر حذف نمی‌شود.</span></div></div>`,
+    activities: `<div class="page-scroll"><div class="section-row"><div><h2 class="page-heading">فعالیت‌ها و صف عقب‌افتادگی</h2><p class="page-intro">وضعیت کارها را ثبت کن؛ کار ناقص، باقی‌مانده‌اش را حفظ می‌کند.</p></div><button class="btn primary" data-action="add">＋ افزودن فعالیت</button></div><div class="card"><h3 class="card-title">همهٔ فعالیت‌ها</h3><div class="table-wrap"><table><thead><tr><th>عنوان</th><th>نوع</th><th>درس</th><th>برآورد</th><th>باقی‌مانده</th><th>وضعیت</th></tr></thead><tbody><tr><td>پردازش اولیهٔ کلاس زیست</td><td>پردازش</td><td>زیست‌شناسی</td><td>۴۵ دقیقه</td><td>۴۵ دقیقه</td><td><span class="pill">آماده</span></td></tr><tr><td>تمرین تابع</td><td>تمرین</td><td>ریاضی</td><td>۶۰ دقیقه</td><td>۳۰ دقیقه</td><td><span class="pill warn">ناقص</span></td></tr><tr><td>تحلیل آزمون جامع</td><td>تحلیل</td><td>چنددرس</td><td>۹۰ دقیقه</td><td>۹۰ دقیقه</td><td><span class="pill info">برنامه‌ریزی‌شده</span></td></tr><tr><td>مرور فصل سلولی</td><td>مرور</td><td>زیست‌شناسی</td><td>۳۰ دقیقه</td><td>۳۰ دقیقه</td><td><span class="pill gray">به‌تعویق‌افتاده</span></td></tr></tbody></table></div></div><div class="section-row"><button class="btn" data-action="activity">شروع</button><button class="btn" data-action="activity">ثبت اتمام</button><button class="btn" data-action="activity">تعویق با دلیل</button><span class="pill gray">نمونهٔ نمایشی · بدون ذخیرهٔ واقعی</span></div></div>`,
+    exams: `<div class="page-scroll"><div class="section-row"><div><h2 class="page-heading">آزمون‌ها و تحلیل خطا</h2><p class="page-intro">درصد بر اساس پروفایل قابل‌ویرایش؛ خطاها به اقدام اصلاحی تبدیل می‌شوند.</p></div><button class="btn primary" data-action="add">＋ ثبت آزمون</button></div><div class="mini-grid"><div class="small-stat"><span>آخرین آزمون</span><strong>آزمون نمونه</strong></div><div class="small-stat"><span>دقت پاسخ‌گویی</span><strong>۶۸٪</strong></div><div class="small-stat"><span>خطای پرتکرار</span><strong>بی‌دقتی محاسباتی</strong></div></div><div class="detail-grid"><article class="card"><h3 class="card-title">عملکرد در درس‌ها</h3><div class="list-row"><span>زیست‌شناسی</span><strong>۷۲٪</strong></div><div class="progress"><i style="width:72%"></i></div><div class="list-row"><span>ریاضی</span><strong>۵۸٪</strong></div><div class="progress"><i style="width:58%;background:#6589ad"></i></div><div class="list-row"><span>شیمی</span><strong>۶۵٪</strong></div><div class="progress"><i style="width:65%;background:#c69b47"></i></div></article><article class="card"><h3 class="card-title">اقدام اصلاحی پیشنهادی</h3><p class="card-body">برای خطاهای محاسباتی، یک تمرین کوتاهِ مرحله‌به‌مرحله بساز؛ سپس دوباره ارزیابی کن.</p><span class="pill warn" style="margin-top:8px">بدون برچسب‌زنی شخصی</span></article><article class="card"><h3 class="card-title">یادآوری</h3><p class="card-body">نتیجهٔ آزمون، ابزار بازبینی برنامه است؛ رتبه‌سازی یا مقایسهٔ اجتماعی در این برنامه وجود ندارد.</p></article></div></div>`,
+    review: `<div class="page-scroll"><div><h2 class="page-heading">مرور تطبیقی</h2><p class="page-intro">فاصلهٔ مرور بر اساس یادآوری واقعی، دشواری و اطمینان تنظیم می‌شود.</p></div><div class="mini-grid"><div class="small-stat"><span>مرورهای آماده</span><strong>۴ مبحث</strong></div><div class="small-stat"><span>مرورهای این هفته</span><strong>۹ مورد</strong></div><div class="small-stat"><span>نیازمند تثبیت</span><strong>۲ مبحث</strong></div></div><div class="card"><h3 class="card-title">صف مرور امروز</h3><div class="list-row"><span><strong>زیست · غشای سلولی</strong><br><span style="color:var(--muted)">یادآوری فعال · مرور کوتاه</span></span><span class="pill warn">اولویت بالا</span></div><div class="list-row"><span><strong>ریاضی · تابع درجه‌دو</strong><br><span style="color:var(--muted)">تمرین بازیابی · ۲۰ دقیقه</span></span><span class="pill info">آمادهٔ مرور</span></div><div class="list-row"><span><strong>شیمی · پیوندها</strong><br><span style="color:var(--muted)">پس از حل مثال، اطمینان ثبت شود</span></span><span class="pill">مرور تطبیقی</span></div></div><div class="advice"><span class="advice-mark">↻</span><span>این پیش‌نمایش نمونه است؛ در برنامهٔ اصلی فاصلهٔ مرور از نتیجهٔ ثبت‌شدهٔ خودت یاد می‌گیرد.</span></div></div>`,
+    reports: `<div class="page-scroll"><div><h2 class="page-heading">گزارش‌ها</h2><p class="page-intro">روند شخصی و قابل‌فهم؛ نه رتبه‌بندی و نه مقایسه با دیگران.</p></div><div class="mini-grid"><div class="small-stat"><span>مطالعهٔ ثبت‌شده</span><strong>۲۳ ساعت و ۱۰ دقیقه</strong></div><div class="small-stat"><span>کارهای تکمیل‌شده</span><strong>۱۸ فعالیت</strong></div><div class="small-stat"><span>تغییر نسبت به هفتهٔ قبل</span><strong>+۸٪</strong></div></div><div class="card"><h3 class="card-title">زمان مطالعه در هفت روز اخیر · دادهٔ نمونه</h3><div class="chart"><div class="chart-col"><i class="chart-bar" style="height:53%"></i>شنبه</div><div class="chart-col"><i class="chart-bar" style="height:78%"></i>یکشنبه</div><div class="chart-col"><i class="chart-bar" style="height:61%"></i>دوشنبه</div><div class="chart-col"><i class="chart-bar" style="height:90%"></i>سه‌شنبه</div><div class="chart-col"><i class="chart-bar" style="height:47%"></i>چهارشنبه</div><div class="chart-col"><i class="chart-bar" style="height:72%"></i>پنجشنبه</div><div class="chart-col"><i class="chart-bar" style="height:35%;background:#aabbb6"></i>جمعه</div></div></div><div class="section-row"><button class="btn" data-action="export">دریافت CSV</button><span class="pill gray">PDF در این نسخه ارائه نمی‌شود</span></div></div>`,
+    settings: `<div class="page-scroll"><div><h2 class="page-heading">تنظیمات و حریم خصوصی</h2><p class="page-intro">ترجیحات نمونه؛ این فرم نمایشی چیزی را ذخیره نمی‌کند.</p></div><div class="card"><h3 class="card-title">برنامه‌ریزی روزانه</h3><div class="setting-row"><span>حاشیهٔ اطمینان روزانه</span><strong>۲۰٪</strong></div><div class="setting-row"><span>محافظت از زمان خواب و تعهدها</span><input type="checkbox" checked aria-label="محافظت از زمان خواب"></div><div class="setting-row"><span>نمایش ارقام فارسی</span><input type="checkbox" checked aria-label="نمایش ارقام فارسی"></div><div class="setting-row"><span>یادآوری پشتیبان‌گیری محلی</span><input type="checkbox" aria-label="یادآوری پشتیبان‌گیری"></div></div><div class="card"><h3 class="card-title">داده‌ها و حریم خصوصی</h3><p class="card-body">نسخهٔ دسکتاپ اطلاعات را در SQLite روی همین دستگاه نگه می‌دارد. این فایل HTML نمایشی است و هیچ داده‌ای به جایی ارسال یا ذخیره نمی‌کند.</p><button class="btn" data-action="backup" style="margin-top:10px">پشتیبان‌گیری محلی (نمایشی)</button></div></div>`
+  };
+
+  function notify(message){
+    toast.textContent=message; toast.classList.add('show'); clearTimeout(toastTimer);
+    toastTimer=setTimeout(()=>toast.classList.remove('show'),2600);
+    statusMessage.textContent=message;
+  }
+  function closeMenus(){
+    document.querySelectorAll('.menu-panel').forEach(p=>p.classList.remove('open'));
+    document.querySelectorAll('.menu-button').forEach(b=>b.setAttribute('aria-expanded','false'));
+  }
+  function toggleMenu(button,panel){
+    const open=!panel.classList.contains('open'); closeMenus();
+    if(open){panel.classList.add('open');button.setAttribute('aria-expanded','true');}
+  }
+  document.getElementById('programMenuButton').addEventListener('click',e=>{e.stopPropagation();toggleMenu(e.currentTarget,document.getElementById('programMenu'));});
+  document.getElementById('helpMenuButton').addEventListener('click',e=>{e.stopPropagation();toggleMenu(e.currentTarget,document.getElementById('helpMenu'));});
+  document.addEventListener('click',e=>{if(!e.target.closest('.menu-wrap'))closeMenus();});
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){closeMenus();backdrop.classList.remove('show');}
+    if(e.key==='F5'){e.preventDefault();closeMenus();notify('پیش‌نمایش به‌روزرسانی شد؛ داده‌ها نمونه‌اند.');}
+    if(e.ctrlKey&&e.key.toLowerCase()==='q'){e.preventDefault();closeMenus();notify('در فایل پیش‌نمایش، خروج از برنامه انجام نمی‌شود.');}
+  });
+  document.getElementById('refreshButton').addEventListener('click',()=>notify('نماها تازه شدند؛ داده‌های این پیش‌نمایش ثابت و نمونه‌اند.'));
+
+  function setPage(key){
+    const page=pages[key]||pages.dashboard;
+    pageTitle.textContent=page[0];pageHint.textContent=page[1];
+    pageContent.innerHTML=key==='dashboard'?document.querySelector('.page-content').dataset.initial||dashboardMarkup:templates[key];
+    document.querySelectorAll('.nav-item').forEach(b=>{
+      const active=b.dataset.page===key;b.classList.toggle('active',active);
+      if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');
+    });
+    closeMenus();
+  }
+  const dashboardMarkup=pageContent.innerHTML;
+  pageContent.dataset.initial=dashboardMarkup;
+  document.getElementById('navList').addEventListener('click',e=>{
+    const button=e.target.closest('.nav-item');if(!button)return;
+    setPage(button.dataset.page);statusMessage.textContent=`نمای ${pages[button.dataset.page][0]} · دادهٔ نمونه`;
+  });
+  function openModal(title,body,actions){
+    document.getElementById('modalTitle').textContent=title;
+    document.getElementById('modalBody').innerHTML=body;
+    const holder=document.getElementById('modalActions');holder.innerHTML='';
+    actions.forEach(({label,primary=false,action='close'})=>{
+      const b=document.createElement('button');b.className='btn'+(primary?' primary':'');b.textContent=label;
+      b.addEventListener('click',()=>{backdrop.classList.remove('show');if(action==='next')notify('گام بعدی مصاحبهٔ نمایشی آماده است.');});holder.appendChild(b);
+    });
+    backdrop.classList.add('show');closeMenus();document.getElementById('modalClose').focus();
+  }
+  document.getElementById('modalClose').addEventListener('click',()=>backdrop.classList.remove('show'));
+  backdrop.addEventListener('click',e=>{if(e.target===backdrop)backdrop.classList.remove('show');});
+  document.addEventListener('click',e=>{
+    const item=e.target.closest('[data-action]');if(!item)return;
+    const action=item.dataset.action;
+    if(action==='refresh'){closeMenus();notify('همهٔ نماها تازه شدند؛ داده‌ها نمونه‌اند.');}
+    else if(action==='setup')openModal('راه‌اندازی مرحله‌ای',`<p>این پیش‌نمایش فقط ظاهر مصاحبه را نشان می‌دهد. در برنامهٔ اصلی، پاسخ‌ها ذخیره می‌شوند و می‌توانی بعداً ادامه بدهی.</p><div class="modal-progress"><i></i></div><div class="card-body">گام ۱ از ۱۲ · ساعت خواب و بیداری<br><strong>برنامه با ظرفیت واقعی روز شروع می‌شود.</strong></div>`,[{label:'بعدی',primary:true,action:'next'},{label:'بستن'}]);
+    else if(action==='about')openModal('دربارهٔ K2',`<p><strong>مشاور هوشمند کنکور</strong> یک برنامهٔ دسکتاپ فارسی، راست‌چین و آفلاین‌محور برای برنامه‌ریزی واقع‌بینانهٔ مطالعه است.</p><p>این HTML یک پیش‌نمایش ظاهری و تعاملی با داده‌های نمونه است؛ موتور برنامه‌ریزی، SQLite و ذخیره‌سازی نسخهٔ EXE را اجرا نمی‌کند.</p><span class="pill">پیش‌نمایش رابط · آفلاین</span>`,[{label:'متوجه شدم',primary:true}]);
+    else if(action==='quit'){closeMenus();notify('در پیش‌نمایش HTML پنجره بسته نمی‌شود؛ در برنامهٔ اصلی Ctrl+Q برای خروج است.');}
+    else if(action==='plan')notify('برنامهٔ نمایشی بازسازی شد؛ منطق واقعی در فایل EXE اجرا می‌شود.');
+    else if(action==='minimal')notify('نمایش نمونهٔ «روز حداقلی»؛ در نسخهٔ اصلی برنامه حفظ خواب و تعهدها در اولویت است.');
+    else if(action==='add')openModal('افزودن مورد · پیش‌نمایش',`<p>فرم تعاملی این فایل نمونه‌ای است؛ برای ثبت واقعی فعالیت یا آزمون از برنامهٔ دسکتاپ استفاده کن.</p><label class="card-body">عنوان <input type="text" placeholder="مثلاً مرور فصل زیست" style="display:block;width:100%;margin-top:5px;padding:9px;border:1px solid var(--border);border-radius:8px"></label>`,[{label:'ذخیرهٔ نمونه',primary:true,action:'next'},{label:'انصراف'}]);
+    else if(action==='activity')notify('کنش انتخاب‌شده فقط در نسخهٔ نمایشی است و چیزی ذخیره نشد.');
+    else if(action==='export')notify('در نسخهٔ اصلی، گزارش‌ها به CSV خروجی گرفته می‌شوند.');
+    else if(action==='backup')notify('این HTML داده‌ای ذخیره نمی‌کند؛ پشتیبان‌گیری فقط در برنامهٔ دسکتاپ انجام می‌شود.');
+  });
+})();
+</script>
+</body>
+</html>

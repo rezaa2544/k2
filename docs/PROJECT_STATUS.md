@@ -7,7 +7,7 @@
 
 ## ۱. خلاصهٔ اجرایی
 
-پیاده‌سازی دامنه، موتورهای تصمیم‌گیری و ذخیره‌سازی کامل شده است. منوهای «برنامه» و «راهنما» با استایل خوانا و میانبرهای صفحه‌کلید به‌روزرسانی شده‌اند؛ **۱۷۴ تست** در محیط لینوکس پاس شده و گردش‌کار Windows نیز در [GitHub Actions](https://github.com/rezaa2544/k2/actions/runs/39051925261) تست‌ها، ساخت PyInstaller و اجرای headless EXE را با موفقیت گذرانده است. ZIP کامل one-folder شامل `_internal` و checksum تازه در مخزن ثبت شده و به‌صورت خودکار پس از هر build موفق Windows به‌روز می‌شود. تصویر داشبورد `docs/images/k2-dashboard.png` مربوط به build قبلی است و اسکرین‌شات GUI ویندوزی از build جدید نداریم. راهنمای توکن‌ها و اصول طراحی در `docs/UI_UX_GUIDE.md` آمده است.
+پیاده‌سازی دامنه، موتورهای تصمیم‌گیری و ذخیره‌سازی کامل شده است. منوهای «برنامه» و «راهنما» با استایل خوانا و میانبرهای صفحه‌کلید به‌روزرسانی شده‌اند؛ **۱۷۵ تست** در محیط لینوکس پاس شده و گردش‌کار Windows نیز در [GitHub Actions](https://github.com/rezaa2544/k2/actions/runs/39051925261) تست‌ها، ساخت PyInstaller و اجرای headless EXE را با موفقیت گذرانده است. ZIP کامل one-folder شامل `_internal` و checksum تازه در مخزن ثبت شده و به‌صورت خودکار پس از هر build موفق Windows به‌روز می‌شود. تصویر داشبورد `docs/images/k2-dashboard.png` مربوط به build قبلی است و اسکرین‌شات GUI ویندوزی از build جدید نداریم. راهنمای توکن‌ها و اصول طراحی در `docs/UI_UX_GUIDE.md` آمده است.
 
 آنچه هنوز **تأیید نشده**: نمایش گرافیکی build جدید روی ویندوز فیزیکی، تست نصب تمیز، امضای دیجیتال و آزمون میدانی کاربران.
 
@@ -39,7 +39,7 @@ python3 -m pytest tests -q
 ```
 
 ```
-174 passed
+175 passed
 ```
 
 | فایل | تعداد |
@@ -58,9 +58,9 @@ python3 -m pytest tests -q
 | `tests/test_reporting.py` | 10 |
 | `tests/test_gui.py` | 14 |
 | `tests/test_app.py` | 2 |
-| `tests/test_windows_download.py` | 2 |
+| `tests/test_windows_download.py` | 3 |
 | `tests/test_e2e_scenario.py` | 4 |
-| **مجموع** | **174** |
+| **مجموع** | **175** |
 
 محیط اجرا: تست محلی در Debian 13 / Python 3.13 / PySide6 6.9.1؛ build و smoke test ویندوز در GitHub Actions / `windows-latest` / Python 3.12.
 

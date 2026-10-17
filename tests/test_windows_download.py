@@ -55,9 +55,12 @@ def test_release_metadata_tracks_exe_and_zip_hashes_and_sizes(tmp_path: Path):
         ROOT / "docs" / "RELEASE_AND_WINDOWS_PACKAGING.md",
         metadata_root / "docs" / "RELEASE_AND_WINDOWS_PACKAGING.md",
     )
+    (metadata_root / "preview").mkdir()
+    shutil.copyfile(ROOT / "preview" / "K2-preview.html", metadata_root / "preview" / "K2-preview.html")
     _packager.ROOT = metadata_root
 
-    exe_hash, zip_hash = _packager.update_release_metadata(exe, archive)
+    source_revision = "abcdef1234567890abcdef1234567890abcdef12"
+    exe_hash, zip_hash = _packager.update_release_metadata(exe, archive, source_revision)
     readme = (metadata_root / "README.md").read_text(encoding="utf-8")
     release_doc = (metadata_root / "docs" / "RELEASE_AND_WINDOWS_PACKAGING.md").read_text(encoding="utf-8")
 
@@ -68,3 +71,15 @@ def test_release_metadata_tracks_exe_and_zip_hashes_and_sizes(tmp_path: Path):
     assert f"{zip_hash}  K2-windows-x64.zip" in release_doc
     assert f"{_packager.persian_grouped_number(exe.stat().st_size)} بایت" in release_doc
     assert f"{_packager.persian_grouped_number(archive.stat().st_size)} بایت" in release_doc
+    preview = (metadata_root / "preview" / "K2-preview.html").read_text(encoding="utf-8")
+    assert f'data-source-revision="{source_revision}"' in preview
+    assert f'<b id="sourceRevision">{source_revision[:8]}</b>' in preview
+
+
+def test_html_preview_is_offline_and_contains_app_menus_and_navigation():
+    preview = (ROOT / "preview" / "K2-preview.html").read_text(encoding="utf-8")
+
+    for label in ("برنامه", "راهنما", "داشبورد", "برنامهٔ امروز", "فعالیت‌ها", "F5", "Ctrl+Q"):
+        assert label in preview
+    assert "https://" not in preview
+    assert "http://" not in preview

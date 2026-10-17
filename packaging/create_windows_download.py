@@ -91,7 +91,13 @@ def _replace_once(text: str, pattern: str, replacement: str, *, path: Path) -> s
     return updated
 
 
-def update_release_metadata(exe_path: Path, archive_path: Path) -> tuple[str, str]:
+def update_release_metadata(
+    exe_path: Path,
+    archive_path: Path,
+    source_revision: str | None = None,
+) -> tuple[str, str]:
+    if source_revision is not None and not re.fullmatch(r"[0-9a-f]{7,40}", source_revision):
+        raise ValueError("source_revision باید SHA کوتاه یا کامل Git باشد.")
     exe_hash = sha256(exe_path)
     archive_hash = sha256(archive_path)
     exe_size = persian_grouped_number(exe_path.stat().st_size)
@@ -140,6 +146,24 @@ def update_release_metadata(exe_path: Path, archive_path: Path) -> tuple[str, st
         path=doc_path,
     )
     doc_path.write_text(doc, encoding="utf-8", newline="\n")
+
+    if source_revision is not None:
+        preview_path = ROOT / "preview" / "K2-preview.html"
+        preview = preview_path.read_text(encoding="utf-8")
+        preview = _replace_once(
+            preview,
+            r'data-source-revision="(?:pending|[0-9a-f]{7,40})"',
+            f'data-source-revision="{source_revision}"',
+            path=preview_path,
+        )
+        preview = _replace_once(
+            preview,
+            r'(<b id="sourceRevision">)[^<]+(</b>)',
+            rf"\g<1>{source_revision[:8]}\g<2>",
+            path=preview_path,
+        )
+        preview_path.write_text(preview, encoding="utf-8", newline="\n")
+
     return exe_hash, archive_hash
 
 
@@ -148,17 +172,22 @@ def main() -> int:
     parser.add_argument("--source", type=Path, required=True, help="پوشهٔ PyInstaller شامل K2.exe و _internal")
     parser.add_argument("--destination", type=Path, required=True, help="مسیر ZIP قابل دانلود در مخزن")
     parser.add_argument("--no-metadata", action="store_true", help="ساخت بسته بدون تغییر README/سند release")
+    parser.add_argument("--source-revision", help="SHA مبدأ برای ثبت در پیش‌نمایش HTML")
     args = parser.parse_args()
     create_archive(args.source, args.destination)
     exe_path = args.source / "K2.exe"
     if args.no_metadata:
         exe_hash, archive_hash = sha256(exe_path), sha256(args.destination)
     else:
-        exe_hash, archive_hash = update_release_metadata(exe_path, args.destination)
+        exe_hash, archive_hash = update_release_metadata(
+            exe_path, args.destination, source_revision=args.source_revision
+        )
     print(f"EXE_SIZE={exe_path.stat().st_size}")
     print(f"EXE_SHA256={exe_hash}")
     print(f"ZIP_SIZE={args.destination.stat().st_size}")
     print(f"ZIP_SHA256={archive_hash}")
+    if args.source_revision:
+        print(f"SOURCE_REVISION={args.source_revision}")
     return 0
 
 
