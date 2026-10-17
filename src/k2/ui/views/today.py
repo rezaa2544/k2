@@ -94,9 +94,20 @@ class TodayPlanPage(QWidget):
 
     def refresh(self) -> None:
         today = _dt.date.today()
+        self.title.setText(f"برنامهٔ {format_jalali_long(today)}")
+        if not self.service.list_activities() and not self.service.list_review_items():
+            self.summary.setText("هنوز فعالیت یا مورد مروری ثبت نشده است؛ برای شروع، اطلاعات خود را اضافه کنید.")
+            self.table.setRowCount(0)
+            self.unplaced_table.setRowCount(0)
+            self.btn_refresh.setEnabled(False)
+            conflicts = self.service.schedule_conflicts()
+            self.conflicts.setVisible(bool(conflicts))
+            if conflicts:
+                self.conflicts.setText("\n".join(item.describe() for item in conflicts))
+            return
+        self.btn_refresh.setEnabled(True)
         plan = self.service.plan_day(today)
 
-        self.title.setText(f"برنامهٔ {format_jalali_long(today)}")
         self.summary.setText(
             f"ظرفیت {format_minutes(plan.capacity_minutes)} — "
             f"زمان خام {format_minutes(plan.raw_minutes)} — "

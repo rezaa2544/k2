@@ -85,6 +85,12 @@ class ReportsPage(QWidget):
 
     def refresh(self) -> None:
         today = _dt.date.today()
+        if not self.service.list_activities() and not self.service.list_attempts():
+            self.daily_text.setText("هنوز فعالیت یا آزمونی ثبت نشده است.")
+            self.weekly_text.setPlainText("پس از ثبت داده‌های واقعی، گزارش هفتگی در اینجا نمایش داده می‌شود.")
+            self.trend_text.setText("برای نمایش روند، ابتدا نتایج آزمون خود را ثبت کنید.")
+            self.pressure_text.setText("تا زمان ثبت اطلاعات، نشانگر فشار محاسبه نمی‌شود.")
+            return
 
         daily = self.service.daily_report(today)
         self.daily_text.setText(daily.to_text())

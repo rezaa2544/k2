@@ -51,6 +51,35 @@ KEY_ENERGY = "daily.energy_level"
 KEY_PEAK = "daily.peak_hours"
 KEY_SUBJECT_RATIOS = "estimation.subject_ratios"
 
+# Upgrade-only fingerprints of the exact seed dataset shipped by earlier builds.
+# They are never inserted or displayed; cleanup runs only when the legacy import
+# marker is present and the complete, unmodified rows still match exactly.
+LEGACY_IMPORTED_EVENT_SIGNATURES = frozenset({
+    ("زیست", "live_class", None, 0, 900, 1140, False, ""),
+    ("فیزیک", "live_class", None, 0, 1170, 1365, False, ""),
+    ("شیمی", "live_class", None, 1, 900, 1140, False, ""),
+    ("دینی", "live_class", None, 1, 915, 1245, False, "هم‌پوشان با شیمی — باید در راه‌اندازی روشن شود کدام ضبط‌شده است."),
+    ("زبان انگلیسی", "live_class", None, 1, 1260, 1380, False, ""),
+    ("ریاضی", "live_class", None, 2, 1170, 1380, False, ""),
+    ("زمین‌شناسی (ضبط‌شده)", "recorded_class", None, 2, 0, 0, True, "کلاس ضبط‌شده؛ زمان جداگانه لازم دارد و باید به‌صورت فعالیت قابل تقسیم ثبت شود."),
+    ("زیست", "live_class", None, 3, 900, 1140, False, ""),
+    ("عربی", "live_class", None, 3, 1155, 1260, False, ""),
+    ("فیزیک", "live_class", None, 4, 900, 1170, False, ""),
+    ("شیمی", "live_class", None, 4, 1170, 1365, False, ""),
+    ("فارسی", "live_class", None, 5, 795, 885, False, ""),
+    ("هویت اجتماعی", "live_class", None, 5, 900, 990, False, ""),
+    ("ریاضی", "live_class", None, 6, 720, 900, False, ""),
+})
+LEGACY_IMPORTED_ROUTINE_SIGNATURES = frozenset({
+    ("خواب شب", "sleep", 1380, 360, (0, 1, 2, 3, 4, 5, 6), "daily", False),
+    ("خواب روز (چرت)", "sleep", 780, 810, (0, 1, 2, 3, 4, 5, 6), "daily", False),
+    ("صبحانه", "meal", 420, 450, (0, 1, 2, 3, 4, 5, 6), "daily", False),
+    ("ناهار", "meal", 750, 780, (0, 1, 2, 3, 4, 5, 6), "daily", False),
+    ("شام", "meal", 1200, 1245, (0, 1, 2, 3, 4, 5, 6), "daily", False),
+    ("استراحت", "rest", 990, 1005, (0, 1, 2, 3, 4, 5, 6), "daily", False),
+    ("حمام", "hygiene", 1365, 1380, (0, 1, 2, 3, 4, 5, 6), "daily", False),
+})
+
 
 @dataclass
 class DayContext:
@@ -73,6 +102,7 @@ class AdvisorService:
         self.db_path = Path(db_path) if db_path is not None else database_path()
         self.conn = initialize(self.db_path)
         self.repo = Repository(self.conn)
+        self._remove_untouched_legacy_schedule_seed()
         self.settings = settings or Settings.load()
         self.scheduler = Scheduler(self.settings)
         self._estimation = EstimationModel()
@@ -85,6 +115,52 @@ class AdvisorService:
         self.conn.close()
 
     def commit(self) -> None:
+        self.conn.commit()
+
+    def _remove_untouched_legacy_schedule_seed(self) -> None:
+        """فقط bundle نمونهٔ قدیمیِ دست‌نخورده را با marker معتبر پاک می‌کند.
+
+        اگر حتی یک رویداد/روال تغییر کرده، رکوردی اضافه شده یا استثنایی ثبت
+        شده باشد، هیچ‌چیز حذف نمی‌شود تا دادهٔ واقعی کاربر محفوظ بماند.
+        """
+        if self.repo.get_setting("schedule.sample_imported") != "1":
+            return
+        events = self.repo.list_fixed_events()
+        routines = self.repo.list_routines()
+        event_signatures = frozenset(
+            (
+                item.title, item.kind.value, item.subject_id, item.weekday,
+                item.start_minute, item.end_minute, item.is_recorded, item.notes,
+            )
+            for item in events
+        )
+        routine_signatures = frozenset(
+            (
+                item.title, item.kind.value, item.start_minute, item.end_minute,
+                tuple(sorted(item.weekdays)), item.scope.value, item.counts_as_study,
+            )
+            for item in routines
+        )
+        if (
+            len(events) != len(LEGACY_IMPORTED_EVENT_SIGNATURES)
+            or len(routines) != len(LEGACY_IMPORTED_ROUTINE_SIGNATURES)
+            or event_signatures != LEGACY_IMPORTED_EVENT_SIGNATURES
+            or routine_signatures != LEGACY_IMPORTED_ROUTINE_SIGNATURES
+        ):
+            return
+        event_ids = tuple(item.id for item in events if item.id is not None)
+        placeholders = ",".join("?" for _ in event_ids)
+        if event_ids and self.conn.execute(
+            f"SELECT 1 FROM event_exception WHERE event_id IN ({placeholders}) LIMIT 1",
+            event_ids,
+        ).fetchone():
+            return
+
+        for item in events:
+            self.repo.delete_fixed_event(int(item.id))
+        for item in routines:
+            self.repo.delete_routine(int(item.id))
+        self.repo.set_setting("schedule.sample_imported", "legacy-cleaned")
         self.conn.commit()
 
     # ------------------------------------------------------------------
@@ -233,26 +309,8 @@ class AdvisorService:
         self.repo.delete_routine(routine_id)
         self.conn.commit()
 
-    def import_sample_schedule(self) -> tuple[int, int]:
-        """ورود یک‌بارهٔ برنامهٔ نمونه؛ ورود تکراری یا روی برنامهٔ موجود ممنوع است."""
-        if self.repo.get_setting("schedule.sample_imported") == "1":
-            return 0, 0
-        if self.repo.list_fixed_events() or self.repo.list_routines():
-            return 0, 0
-        event_count = 0
-        for event in onboarding.build_sample_fixed_events():
-            self.repo.create_fixed_event(event)
-            event_count += 1
-        routine_count = 0
-        for routine in onboarding.build_sample_routines():
-            self.repo.create_routine(routine)
-            routine_count += 1
-        self.repo.set_setting("schedule.sample_imported", "1")
-        self.conn.commit()
-        return event_count, routine_count
-
     def schedule_conflicts(self) -> list[onboarding.ScheduleConflict]:
-        """تعارض‌های رویدادهای واقعی ثبت‌شده، نه فقط برنامهٔ نمونه."""
+        """تعارض‌های رویدادهای واقعی ثبت‌شده."""
         return onboarding.detect_event_conflicts(self.repo.list_fixed_events())
 
     # ------------------------------------------------------------------

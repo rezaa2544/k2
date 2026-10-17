@@ -55,7 +55,7 @@
 | `exam_analysis.py` | درصد، تجزیهٔ خطا، ضعف مبحث، فعالیت اصلاحی | `AttemptAnalysis`, `RemediationPlan` |
 | `advisor_engine.py` | فاز زمانی، تسلط، گلوگاه، «کار بعدی» | `MasteryAssessment`, `BottleneckResult` |
 | `backlog.py` | صف بدهی، سطوح، سقف جبرانی، برنامهٔ حداقلی | `BacklogState`, `RecoveryPlan` |
-| `onboarding.py` | مصاحبهٔ ۱۶ مرحله‌ای، دادهٔ نمونه، تعارض‌ها | `OnboardingState`, `ONBOARDING_STEPS` |
+| `onboarding.py` | مصاحبهٔ مرحله‌ای، برنامهٔ هفتگی اختیاری و خالی، تعارض رویدادهای واقعی | `OnboardingState`, `ONBOARDING_STEPS` |
 | `reporting.py` | گزارش روز/هفته، روند، فشار، CSV | `DailyReport`, `WeeklyReport` |
 | `storage/*` | schema نسخه‌دار، مهاجرت، CRUD، پشتیبان | `Database`, `Repository` |
 | `service.py` | سناریوهای سطح بالا | `AdvisorService` |

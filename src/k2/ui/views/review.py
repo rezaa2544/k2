@@ -78,10 +78,13 @@ class ReviewPage(QWidget):
         today = _dt.date.today()
         items = self.service.list_review_items()
         due = self.service.due_review_items(today)
-        self.summary.setText(
-            f"{len(due)} مورد سررسیدشده از {len(items)} مورد ثبت‌شده — "
-            f"سقف روزانهٔ مرور {format_number(self._cap(today))} درصد ظرفیت روز است."
-        )
+        if items:
+            self.summary.setText(
+                f"{len(due)} مورد سررسیدشده از {len(items)} مورد ثبت‌شده — "
+                f"سقف روزانهٔ مرور {format_number(self._cap(today))} درصد ظرفیت روز است."
+            )
+        else:
+            self.summary.setText("هنوز موردی برای مرور ثبت نشده است.")
 
         self.table.setRowCount(0)
         for item in due:

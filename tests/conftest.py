@@ -42,15 +42,6 @@ def service(tmp_path: Path) -> AdvisorService:
     svc.close()
 
 
-@pytest.fixture()
-def service_with_schedule(service: AdvisorService) -> AdvisorService:
-    """سرویس با برنامهٔ نمونهٔ کاربر."""
-    service.import_sample_schedule()
-    service.wake_minute = 6 * 60
-    service.sleep_minute = 23 * 60
-    return service
-
-
 def make_activity(
     activity_id: int,
     title: str = "کار",

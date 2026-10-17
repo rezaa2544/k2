@@ -45,7 +45,7 @@ class AddActivityDialog(QDialog):
 
         form = QFormLayout(self)
         self.title_edit = QLineEdit()
-        self.title_edit.setPlaceholderText("مثلاً پردازش اولیهٔ کلاس زیست")
+        self.title_edit.setPlaceholderText("عنوان فعالیت خودتان")
         form.addRow("عنوان:", self.title_edit)
 
         self.type_combo = QComboBox()
@@ -59,8 +59,8 @@ class AddActivityDialog(QDialog):
         form.addRow("درس:", self.subject_combo)
 
         self.est_spin = QSpinBox()
-        self.est_spin.setRange(5, 600)
-        self.est_spin.setValue(45)
+        self.est_spin.setRange(0, 600)
+        self.est_spin.setSpecialValueText("وارد نشده")
         self.est_spin.setSuffix(" دقیقه")
         form.addRow("زمان برآوردی:", self.est_spin)
 
@@ -70,7 +70,7 @@ class AddActivityDialog(QDialog):
         form.addRow("نوع مهلت:", self.deadline_combo)
 
         self.deadline_date = QLineEdit()
-        self.deadline_date.setPlaceholderText("۱۴۰۵/۰۷/۲۴ (اختیاری)")
+        self.deadline_date.setPlaceholderText("سال/ماه/روز (اختیاری)")
         form.addRow("تاریخ مهلت:", self.deadline_date)
 
         self.energy_combo = QComboBox()
@@ -98,6 +98,9 @@ class AddActivityDialog(QDialog):
         title = self.title_edit.text().strip()
         if not title:
             QMessageBox.warning(self, "ورودی ناقص", "عنوان فعالیت را وارد کنید.")
+            return
+        if self.est_spin.value() <= 0:
+            QMessageBox.warning(self, "ورودی ناقص", "زمان برآوردی را وارد کنید.")
             return
 
         deadline_at = None

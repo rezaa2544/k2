@@ -78,6 +78,7 @@ class SettingsPage(QWidget):
         self.sleep_edit.setPlaceholderText("۲۳:۰۰")
         form.addRow("ساعت خواب:", self.sleep_edit)
         self.energy_combo = QComboBox()
+        self.energy_combo.addItem("انتخاب کنید", None)
         for value, label in ((1, "کم"), (2, "متوسط"), (3, "خوب")):
             self.energy_combo.addItem(label, value)
         form.addRow("انرژی امروز:", self.energy_combo)
@@ -102,9 +103,10 @@ class SettingsPage(QWidget):
         self.exam_year_spin.setSpecialValueText("نامشخص")
         exam_form.addRow("سال آزمون:", self.exam_year_spin)
         self.exam_date_edit = QLineEdit()
-        self.exam_date_edit.setPlaceholderText("۱۴۰۵/۰۷/۲۴")
+        self.exam_date_edit.setPlaceholderText("سال/ماه/روز")
         exam_form.addRow("تاریخ هدف (شمسی):", self.exam_date_edit)
         self.exam_status_combo = QComboBox()
+        self.exam_status_combo.addItem("انتخاب وضعیت", None)
         for status in DateStatus:
             self.exam_status_combo.addItem(status.label, status.value)
         exam_form.addRow("وضعیت تاریخ:", self.exam_status_combo)
@@ -169,11 +171,6 @@ class SettingsPage(QWidget):
         self.btn_delete_routine.clicked.connect(self._delete_routine)
         routine_buttons.addWidget(self.btn_delete_routine)
         schedule_card.add_layout(routine_buttons)
-        buttons = QHBoxLayout()
-        btn_import = QPushButton("افزودن برنامهٔ نمونهٔ قابل‌ویرایش")
-        btn_import.clicked.connect(self._import_sample)
-        buttons.addWidget(btn_import)
-        schedule_card.add_layout(buttons)
         root.addWidget(schedule_card)
 
         backup_card = Card("پشتیبان‌گیری و بازیابی")
@@ -206,15 +203,22 @@ class SettingsPage(QWidget):
     def refresh(self) -> None:
         from ...jdate import minutes_to_clock
 
+        wake_value = self.service.repo.get_setting("daily.wake_minute")
+        sleep_value = self.service.repo.get_setting("daily.sleep_minute")
         self.wake_edit.setText(
-            f"{minutes_to_clock(self.service.wake_minute)[0]:02d}:"
-            f"{minutes_to_clock(self.service.wake_minute)[1]:02d}"
+            f"{minutes_to_clock(int(wake_value))[0]:02d}:"
+            f"{minutes_to_clock(int(wake_value))[1]:02d}"
+            if wake_value else ""
         )
         self.sleep_edit.setText(
-            f"{minutes_to_clock(self.service.sleep_minute)[0]:02d}:"
-            f"{minutes_to_clock(self.service.sleep_minute)[1]:02d}"
+            f"{minutes_to_clock(int(sleep_value))[0]:02d}:"
+            f"{minutes_to_clock(int(sleep_value))[1]:02d}"
+            if sleep_value else ""
         )
-        self.energy_combo.setCurrentIndex(max(0, self.service.energy_level - 1))
+        energy_value = self.service.repo.get_setting("daily.energy_level")
+        self.energy_combo.setCurrentIndex(
+            self.energy_combo.findData(int(energy_value)) if energy_value else 0
+        )
 
         profile = self.service.active_exam_profile()
         if profile is not None:
@@ -281,7 +285,8 @@ class SettingsPage(QWidget):
             return
         self.service.wake_minute = wake
         self.service.sleep_minute = sleep
-        self.service.energy_level = int(self.energy_combo.currentData())
+        if self.energy_combo.currentData() is not None:
+            self.service.energy_level = int(self.energy_combo.currentData())
 
         peaks: list[tuple[int, int]] = []
         for chunk in self.peak_edit.text().split(","):
@@ -311,36 +316,28 @@ class SettingsPage(QWidget):
                 return
 
         profile = self.service.active_exam_profile()
+        entered_name = self.exam_name_edit.text().strip()
         if profile is None:
-            profile = ExamProfile(name=self.exam_name_edit.text() or "آزمون هدف")
+            if not entered_name:
+                notify(self, "ورودی ناقص", "برای ساخت پروفایل، نام آزمون را وارد کنید.")
+                return
+            if self.exam_status_combo.currentData() is None:
+                notify(self, "وضعیت تاریخ", "وضعیت تاریخ را انتخاب کنید؛ در صورت نامعلوم بودن، «نامشخص» را برگزینید.")
+                return
+            profile = ExamProfile(name=entered_name)
             self.service.create_exam_profile(profile)
-        profile.name = self.exam_name_edit.text() or profile.name
+        if entered_name:
+            profile.name = entered_name
         profile.group_name = self.exam_group_edit.text()
         profile.exam_year = self.exam_year_spin.value() or None
         profile.target_date = target_date
-        profile.date_status = DateStatus(self.exam_status_combo.currentData())
+        if self.exam_status_combo.currentData() is not None:
+            profile.date_status = DateStatus(self.exam_status_combo.currentData())
         profile.source_note = self.exam_source_edit.text()
         profile.negative_marking_ratio = self.negative_spin.value()
         profile.percentage_formula = str(self.formula_combo.currentData())
         self.service.update_exam_profile(profile)
         notify(self, "ذخیره شد", "پروفایل آزمون به‌روزرسانی شد.")
-
-    def _import_sample(self) -> None:
-        event_count, routine_count = self.service.import_sample_schedule()
-        if not event_count and not routine_count:
-            notify(
-                self, "ورود نمونه انجام نشد",
-                "برای جلوگیری از تکرار، نمونه فقط یک‌بار و فقط وقتی برنامه خالی است افزوده می‌شود. "
-                "رویدادهای موجود دست‌نخورده ماندند.",
-            )
-            return
-        notify(
-            self,
-            "برنامهٔ نمونه وارد شد",
-            f"{event_count} رویداد ثابت و {routine_count} بازهٔ ضروری ثبت شد.\n"
-            "تعارض یکشنبه تا زمانی که یک کلاس ضبط‌شده یا زمان جایگزین ثبت نشود باز است.",
-        )
-        self.refresh()
 
     def _clear_events(self) -> None:
         if not confirm(

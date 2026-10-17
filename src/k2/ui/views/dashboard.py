@@ -154,7 +154,34 @@ class DashboardPage(QWidget):
     def refresh(self) -> None:
         today = _dt.date.today()
         self.header.setText(f"خلاصهٔ امروز  ·  {format_jalali_long(today)}")
+        has_user_data = any((
+            self.service.active_exam_profile(),
+            self.service.list_activities(),
+            self.service.list_attempts(),
+            self.service.list_review_items(),
+            self.service.repo.list_fixed_events(),
+            self.service.repo.list_routines(),
+            self.service.repo.get_setting("daily.wake_minute"),
+            self.service.repo.get_setting("daily.sleep_minute"),
+            self.service.repo.get_setting("daily.energy_level"),
+            self.service.repo.get_setting("daily.peak_hours"),
+        ))
+        if not has_user_data:
+            self.next_title.setText("هنوز اطلاعاتی ثبت نشده است")
+            self.next_reason.setText("راه‌اندازی را کامل کنید یا اطلاعات واقعی خود را از بخش‌های مربوط اضافه کنید.")
+            for tile in (self.tile_capacity, self.tile_planned, self.tile_margin, self.tile_debt):
+                tile.set_value("—", "پس از ثبت اطلاعات نمایش داده می‌شود")
+            self.capacity_text.setText("برای محاسبهٔ ظرفیت، ساعت خواب و بیداری یا تعهدهای خود را ثبت کنید.")
+            self.phase_label.setText("هنوز آزمون هدفی ثبت نشده است.")
+            self.backlog_label.setText("هنوز فعالیتی ثبت نشده است.")
+            self.advice_text.setText("پس از ورود اطلاعات واقعی، پیشنهادهای شخصی در اینجا نمایش داده می‌شوند.")
+            self.conflict_box.setVisible(False)
+            self.btn_plan.setEnabled(False)
+            self.btn_minimal.setEnabled(False)
+            return
 
+        self.btn_plan.setEnabled(True)
+        self.btn_minimal.setEnabled(True)
         context = self.service.build_context(today)
         breakdown = context.capacity_for(today)
         self.tile_capacity.set_value(

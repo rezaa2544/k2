@@ -98,6 +98,8 @@ button{cursor:pointer}
 .card-body .row:last-child{border:0}
 .value-strong{color:var(--text);font-weight:800}
 .advice{display:flex;align-items:flex-start;gap:9px;padding:12px 14px;border:1px solid #dce9e4;border-radius:11px;background:#f8fbf9;color:#48635d;font-size:11px}
+.empty-state{display:flex;min-height:220px;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:22px;text-align:center;border:1px dashed #cbdad4;border-radius:14px;background:#fbfdfc;color:var(--muted)}
+.empty-state h3{margin:0;color:var(--text);font-size:15px}.empty-state p{max-width:520px;margin:0 0 6px;line-height:2}.empty-mark{display:grid;width:38px;height:38px;place-items:center;border-radius:50%;background:#e9f3ef;color:var(--accent);font-size:23px;font-weight:700}
 .advice-mark{display:grid;width:22px;height:22px;flex:none;place-items:center;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-weight:900}
 .status-bar{display:flex;min-height:32px;align-items:center;justify-content:space-between;gap:12px;padding:7px 12px;border-top:1px solid var(--border);background:#fff;color:var(--muted);font-size:10px}
 .privacy{display:flex;align-items:center;gap:6px;color:#647e76}
@@ -150,7 +152,7 @@ tr:last-child td{border-bottom:0}
 <body>
 <div class="preview-wrap">
   <div class="preview-note" role="note">
-    <div class="note-mark"><span class="note-dot" aria-hidden="true"></span><span><strong>پیش‌نمایش تعاملی K2</strong> · یک فایل HTML آفلاین با داده‌های نمونه؛ برای دیدن ظاهر برنامه نیازی به دانلود EXE حجیم نیست.</span></div>
+    <div class="note-mark"><span class="note-dot" aria-hidden="true"></span><span><strong>پیش‌نمایش تعاملی K2</strong> · یک فایل HTML آفلاین و خالی؛ برای دیدن ظاهر برنامه نیازی به دانلود EXE حجیم نیست.</span></div>
     <span class="note-rev">کد مبدأ: <b id="sourceRevision">513092b4</b></span>
   </div>
   <section class="app-window" aria-label="پیش‌نمایش برنامهٔ K2">
@@ -172,7 +174,7 @@ tr:last-child td{border-bottom:0}
           </div>
         </div>
       </div>
-      <div class="menu-meta"><span class="preview-chip">نسخهٔ نمایشی</span><span class="note-hide">محیط آفلاین · دادهٔ نمونه</span></div>
+      <div class="menu-meta"><span class="preview-chip">پیش‌نمایش خالی</span><span class="note-hide">آفلاین · بدون دادهٔ شخصی</span></div>
     </header>
 
     <div class="app-layout">
@@ -195,33 +197,33 @@ tr:last-child td{border-bottom:0}
       <main class="content-area">
         <header class="topbar">
           <div class="top-title-box"><h1 class="top-title" id="pageTitle">داشبورد</h1><p class="top-subtitle" id="pageHint">یک نگاه کوتاه؛ بعد فقط قدم بعدی</p></div>
-          <span class="date-label">شنبه ۲۵ مهر ۱۴۰۵</span>
+          <span class="date-label">بدون دادهٔ ثبت‌شده</span>
           <button class="btn" id="refreshButton" title="به‌روزرسانی همهٔ نماها"><span aria-hidden="true">↻</span> تازه‌سازی</button>
         </header>
         <section class="page-content" id="pageContent" aria-live="polite">
           <div class="page-scroll">
-            <div><h2 class="page-heading">خلاصهٔ امروز · شنبه ۲۵ مهر ۱۴۰۵</h2><p class="page-intro">برنامهٔ خوب، با قدمی روشن و قابل انجام شروع می‌شود.</p></div>
-            <section class="hero" aria-label="پیشنهاد مشاور">
-              <div class="hero-copy"><p class="eyebrow">پیشنهاد مشاور برای قدم بعدی</p><h2 class="hero-title">پردازش اولیهٔ کلاس زیست</h2><p class="hero-body">۴۵ دقیقه · بعد از استراحت کوتاه؛ این گام را انجام بده و سپس وضعیتت را ثبت کن.</p></div>
-              <div class="hero-actions"><button class="btn primary" data-action="plan">ساخت برنامهٔ امروز</button><button class="btn soft" data-action="minimal">روز حداقلی</button></div>
+            <div><h2 class="page-heading">شروع کار</h2><p class="page-intro">این برنامه از ابتدا خالی است؛ اطلاعات واقعی خودتان را وارد کنید.</p></div>
+            <section class="hero" aria-label="شروع استفاده">
+              <div class="hero-copy"><p class="eyebrow">خوش آمدید</p><h2 class="hero-title">هنوز اطلاعاتی ثبت نشده است</h2><p class="hero-body">هیچ درس، فعالیت، کتاب، آزمون، برنامهٔ هفتگی یا آمار نمونه‌ای در این پیش‌نمایش وجود ندارد.</p></div>
+              <div class="hero-actions"><button class="btn primary" data-action="setup">شروع راه‌اندازی</button></div>
             </section>
-            <div class="metrics" aria-label="آمار امروز">
-              <article class="metric"><p class="metric-label">ظرفیت واقعی امروز</p><p class="metric-value">۵ ساعت و ۴۰ دقیقه</p><p class="metric-hint">پس از تعهدها و حاشیهٔ اطمینان</p></article>
-              <article class="metric"><p class="metric-label">برنامهٔ ساخته‌شده</p><p class="metric-value">۴ ساعت و ۲۰ دقیقه</p><p class="metric-hint">۵ بازهٔ پیشنهادی</p></article>
-              <article class="metric"><p class="metric-label">زمان آزادِ محفوظ</p><p class="metric-value">۱ ساعت و ۲۰ دقیقه</p><p class="metric-hint">برای وقفه‌های طبیعی</p></article>
-              <article class="metric"><p class="metric-label">کارهای عقب‌افتاده</p><p class="metric-value">۳ کار</p><p class="metric-hint">سطح فشار: عادی</p></article>
+            <div class="metrics" aria-label="آمار">
+              <article class="metric"><p class="metric-label">ظرفیت امروز</p><p class="metric-value">—</p><p class="metric-hint">پس از ورود ترجیحات</p></article>
+              <article class="metric"><p class="metric-label">برنامهٔ ساخته‌شده</p><p class="metric-value">—</p><p class="metric-hint">هنوز برنامه‌ای ساخته نشده</p></article>
+              <article class="metric"><p class="metric-label">زمان آزاد</p><p class="metric-value">—</p><p class="metric-hint">پس از ثبت تعهدها محاسبه می‌شود</p></article>
+              <article class="metric"><p class="metric-label">فعالیت‌های عقب‌افتاده</p><p class="metric-value">—</p><p class="metric-hint">هنوز فعالیتی ثبت نشده</p></article>
             </div>
             <div class="detail-grid">
-              <article class="card"><h3 class="card-title">ظرفیت از کجا آمده؟</h3><div class="card-body"><div class="row"><span>پنجرهٔ بیداری</span><span class="value-strong">۱۶ ساعت</span></div><div class="row"><span>کلاس‌ها و تعهدها</span><span class="value-strong">۵ ساعت</span></div><div class="row"><span>زمان مؤثر امروز</span><span class="value-strong">۵ ساعت و ۴۰ دقیقه</span></div><div class="row"><span>حاشیهٔ اطمینان</span><span class="value-strong">۲۰٪</span></div></div></article>
-              <article class="card"><h3 class="card-title">فاز زمانی و آزمون هدف</h3><p class="card-body">آزمون هدف هنوز ثبت نشده است.<br>می‌توانی تاریخ را از تنظیمات اضافه یا ویرایش کنی.</p><span class="pill gray" style="margin-top:9px">تاریخ رسمی حدس زده نمی‌شود</span></article>
-              <article class="card"><h3 class="card-title">صف عقب‌افتادگی</h3><p class="card-body">۳ فعالیت · ۲ ساعت و ۱۵ دقیقه<br>ظرفیت جبران این هفته: ۹۰ دقیقه<br>اولویت با کارهای ضروری است.</p></article>
+              <article class="card"><h3 class="card-title">ظرفیت روز</h3><p class="card-body">با ثبت زمان خواب و بیداری و تعهدهای واقعی محاسبه می‌شود.</p></article>
+              <article class="card"><h3 class="card-title">آزمون هدف</h3><p class="card-body">هنوز آزمونی ثبت نشده است. تاریخ رسمی حدس زده نمی‌شود.</p></article>
+              <article class="card"><h3 class="card-title">فهرست فعالیت‌ها</h3><p class="card-body">هنوز فعالیتی ثبت نشده است.</p></article>
             </div>
-            <div class="advice"><span class="advice-mark">i</span><span><strong>یادآوری مشاور:</strong> خواب و تعهدها محفوظ می‌مانند؛ کار جا‌نشده صریح گزارش می‌شود و هیچ فعالیتی بی‌خبر ناپدید نمی‌شود. برای پرکردن زمان آزاد عجله نکن.</span></div>
+            <div class="advice"><span class="advice-mark">i</span><span>داده‌ای از کاربر قبلی یا برنامهٔ نمونه نمایش داده نمی‌شود. اطلاعاتی که خودتان وارد کنید در نسخهٔ دسکتاپ محلی ذخیره می‌شود.</span></div>
           </div>
         </section>
       </main>
     </div>
-    <footer class="status-bar"><span id="statusMessage">آمادهٔ شروع یک روز متعادل · دادهٔ نمایشی است</span><span class="privacy"><span class="privacy-dot">●</span> در نسخهٔ اصلی، داده‌ها روی دستگاه می‌مانند</span></footer>
+    <footer class="status-bar"><span id="statusMessage">آمادهٔ شروع · هیچ داده‌ای ثبت نشده است</span><span class="privacy"><span class="privacy-dot">●</span> در نسخهٔ اصلی، داده‌ها روی دستگاه می‌مانند</span></footer>
   </section>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -235,14 +237,15 @@ tr:last-child td{border-bottom:0}
 <script>
 (() => {
   const pages = {
-    dashboard: ["داشبورد", "یک نگاه کوتاه؛ بعد فقط قدم بعدی"],
-    today: ["برنامهٔ امروز", "کارهای امروز و زمان‌بندی پیشنهادی"],
-    activities: ["فعالیت‌ها", "ثبت و پیگیری مطالعه"],
-    exams: ["آزمون و تحلیل", "نتیجه‌ها، خطاها و اقدام اصلاحی"],
-    review: ["مرور تطبیقی", "مرور بر اساس یادگیری و عملکرد واقعی"],
-    reports: ["گزارش‌ها", "نگاهی آرام به روند روزانه و هفتگی"],
-    settings: ["تنظیمات", "ترجیحات، حریم خصوصی و پشتیبان‌گیری"]
+    dashboard: ["داشبورد", "نمای آغازین · آمادهٔ ورود داده‌های خودتان"],
+    today: ["برنامهٔ امروز", "پس از ثبت فعالیت‌ها و تعهدهای خودتان"],
+    activities: ["فعالیت‌ها", "فعالیت‌های واقعی خودتان را ثبت و پیگیری کنید"],
+    exams: ["آزمون و تحلیل", "نتایج فقط پس از ثبت آزمون شما نمایش داده می‌شوند"],
+    review: ["مرور تطبیقی", "مرور بر اساس داده‌های یادگیری خودتان"],
+    reports: ["گزارش‌ها", "گزارش شخصی پس از ثبت فعالیت‌ها ساخته می‌شود"],
+    settings: ["تنظیمات", "اطلاعات شخصی و ترجیحات شما"]
   };
+  const empty = (title, text, action="") => `<div class="empty-state"><div class="empty-mark" aria-hidden="true">＋</div><h3>${title}</h3><p>${text}</p>${action ? `<button class="btn primary" data-action="${action}">افزودن اطلاعات</button>` : ""}</div>`;
   const pageContent = document.getElementById('pageContent');
   const pageTitle = document.getElementById('pageTitle');
   const pageHint = document.getElementById('pageHint');
@@ -250,102 +253,38 @@ tr:last-child td{border-bottom:0}
   const toast = document.getElementById('toast');
   const backdrop = document.getElementById('modalBackdrop');
   let toastTimer;
-
+  const dashboardMarkup = pageContent.innerHTML;
   const templates = {
-    today: `<div class="page-scroll"><div class="section-row"><div><h2 class="page-heading">برنامهٔ شنبه ۲۵ مهر</h2><p class="page-intro">زمان‌بند قاعده‌محور؛ خواب و تعهدها محفوظ‌اند.</p></div><button class="btn primary" data-action="plan">بازسازی برنامه</button></div><div class="mini-grid"><div class="small-stat"><span>ظرفیت</span><strong>۵ ساعت و ۴۰ دقیقه</strong></div><div class="small-stat"><span>برنامه‌ریزی‌شده</span><strong>۴ ساعت و ۲۰ دقیقه</strong></div><div class="small-stat"><span>حاشیهٔ آزاد</span><strong>۱ ساعت و ۲۰ دقیقه</strong></div></div><div class="card"><h3 class="card-title">بازه‌های پیشنهادی</h3><div class="table-wrap"><table><thead><tr><th>زمان</th><th>مدت</th><th>فعالیت</th><th>دلیل جای‌گذاری</th><th>وضعیت</th></tr></thead><tbody><tr><td>۰۸:۰۰–۰۸:۴۵</td><td>۴۵ دقیقه</td><td>پردازش کلاس زیست</td><td>اولویت امروز · انرژی بالا</td><td><span class="pill">برنامه‌ریزی‌شده</span></td></tr><tr><td>۰۹:۰۰–۰۹:۴۰</td><td>۴۰ دقیقه</td><td>تمرین ریاضی</td><td>پس از وقفهٔ کوتاه</td><td><span class="pill">برنامه‌ریزی‌شده</span></td></tr><tr><td>۱۰:۱۰–۱۰:۵۰</td><td>۴۰ دقیقه</td><td>مرور واژگان</td><td>بازهٔ سبک‌تر</td><td><span class="pill">برنامه‌ریزی‌شده</span></td></tr><tr><td>۱۱:۱۰–۱۲:۰۰</td><td>۵۰ دقیقه</td><td>تحلیل آزمون</td><td>مهلت نزدیک‌تر</td><td><span class="pill info">پیشنهادی</span></td></tr></tbody></table></div></div><div class="advice"><span class="advice-mark">i</span><span>اگر کاری در ظرفیت امروز جا نشود، دلیلش شفاف می‌ماند و فعالیت بی‌خبر حذف نمی‌شود.</span></div></div>`,
-    activities: `<div class="page-scroll"><div class="section-row"><div><h2 class="page-heading">فعالیت‌ها و صف عقب‌افتادگی</h2><p class="page-intro">وضعیت کارها را ثبت کن؛ کار ناقص، باقی‌مانده‌اش را حفظ می‌کند.</p></div><button class="btn primary" data-action="add">＋ افزودن فعالیت</button></div><div class="card"><h3 class="card-title">همهٔ فعالیت‌ها</h3><div class="table-wrap"><table><thead><tr><th>عنوان</th><th>نوع</th><th>درس</th><th>برآورد</th><th>باقی‌مانده</th><th>وضعیت</th></tr></thead><tbody><tr><td>پردازش اولیهٔ کلاس زیست</td><td>پردازش</td><td>زیست‌شناسی</td><td>۴۵ دقیقه</td><td>۴۵ دقیقه</td><td><span class="pill">آماده</span></td></tr><tr><td>تمرین تابع</td><td>تمرین</td><td>ریاضی</td><td>۶۰ دقیقه</td><td>۳۰ دقیقه</td><td><span class="pill warn">ناقص</span></td></tr><tr><td>تحلیل آزمون جامع</td><td>تحلیل</td><td>چنددرس</td><td>۹۰ دقیقه</td><td>۹۰ دقیقه</td><td><span class="pill info">برنامه‌ریزی‌شده</span></td></tr><tr><td>مرور فصل سلولی</td><td>مرور</td><td>زیست‌شناسی</td><td>۳۰ دقیقه</td><td>۳۰ دقیقه</td><td><span class="pill gray">به‌تعویق‌افتاده</span></td></tr></tbody></table></div></div><div class="section-row"><button class="btn" data-action="activity">شروع</button><button class="btn" data-action="activity">ثبت اتمام</button><button class="btn" data-action="activity">تعویق با دلیل</button><span class="pill gray">نمونهٔ نمایشی · بدون ذخیرهٔ واقعی</span></div></div>`,
-    exams: `<div class="page-scroll"><div class="section-row"><div><h2 class="page-heading">آزمون‌ها و تحلیل خطا</h2><p class="page-intro">درصد بر اساس پروفایل قابل‌ویرایش؛ خطاها به اقدام اصلاحی تبدیل می‌شوند.</p></div><button class="btn primary" data-action="add">＋ ثبت آزمون</button></div><div class="mini-grid"><div class="small-stat"><span>آخرین آزمون</span><strong>آزمون نمونه</strong></div><div class="small-stat"><span>دقت پاسخ‌گویی</span><strong>۶۸٪</strong></div><div class="small-stat"><span>خطای پرتکرار</span><strong>بی‌دقتی محاسباتی</strong></div></div><div class="detail-grid"><article class="card"><h3 class="card-title">عملکرد در درس‌ها</h3><div class="list-row"><span>زیست‌شناسی</span><strong>۷۲٪</strong></div><div class="progress"><i style="width:72%"></i></div><div class="list-row"><span>ریاضی</span><strong>۵۸٪</strong></div><div class="progress"><i style="width:58%;background:#6589ad"></i></div><div class="list-row"><span>شیمی</span><strong>۶۵٪</strong></div><div class="progress"><i style="width:65%;background:#c69b47"></i></div></article><article class="card"><h3 class="card-title">اقدام اصلاحی پیشنهادی</h3><p class="card-body">برای خطاهای محاسباتی، یک تمرین کوتاهِ مرحله‌به‌مرحله بساز؛ سپس دوباره ارزیابی کن.</p><span class="pill warn" style="margin-top:8px">بدون برچسب‌زنی شخصی</span></article><article class="card"><h3 class="card-title">یادآوری</h3><p class="card-body">نتیجهٔ آزمون، ابزار بازبینی برنامه است؛ رتبه‌سازی یا مقایسهٔ اجتماعی در این برنامه وجود ندارد.</p></article></div></div>`,
-    review: `<div class="page-scroll"><div><h2 class="page-heading">مرور تطبیقی</h2><p class="page-intro">فاصلهٔ مرور بر اساس یادآوری واقعی، دشواری و اطمینان تنظیم می‌شود.</p></div><div class="mini-grid"><div class="small-stat"><span>مرورهای آماده</span><strong>۴ مبحث</strong></div><div class="small-stat"><span>مرورهای این هفته</span><strong>۹ مورد</strong></div><div class="small-stat"><span>نیازمند تثبیت</span><strong>۲ مبحث</strong></div></div><div class="card"><h3 class="card-title">صف مرور امروز</h3><div class="list-row"><span><strong>زیست · غشای سلولی</strong><br><span style="color:var(--muted)">یادآوری فعال · مرور کوتاه</span></span><span class="pill warn">اولویت بالا</span></div><div class="list-row"><span><strong>ریاضی · تابع درجه‌دو</strong><br><span style="color:var(--muted)">تمرین بازیابی · ۲۰ دقیقه</span></span><span class="pill info">آمادهٔ مرور</span></div><div class="list-row"><span><strong>شیمی · پیوندها</strong><br><span style="color:var(--muted)">پس از حل مثال، اطمینان ثبت شود</span></span><span class="pill">مرور تطبیقی</span></div></div><div class="advice"><span class="advice-mark">↻</span><span>این پیش‌نمایش نمونه است؛ در برنامهٔ اصلی فاصلهٔ مرور از نتیجهٔ ثبت‌شدهٔ خودت یاد می‌گیرد.</span></div></div>`,
-    reports: `<div class="page-scroll"><div><h2 class="page-heading">گزارش‌ها</h2><p class="page-intro">روند شخصی و قابل‌فهم؛ نه رتبه‌بندی و نه مقایسه با دیگران.</p></div><div class="mini-grid"><div class="small-stat"><span>مطالعهٔ ثبت‌شده</span><strong>۲۳ ساعت و ۱۰ دقیقه</strong></div><div class="small-stat"><span>کارهای تکمیل‌شده</span><strong>۱۸ فعالیت</strong></div><div class="small-stat"><span>تغییر نسبت به هفتهٔ قبل</span><strong>+۸٪</strong></div></div><div class="card"><h3 class="card-title">زمان مطالعه در هفت روز اخیر · دادهٔ نمونه</h3><div class="chart"><div class="chart-col"><i class="chart-bar" style="height:53%"></i>شنبه</div><div class="chart-col"><i class="chart-bar" style="height:78%"></i>یکشنبه</div><div class="chart-col"><i class="chart-bar" style="height:61%"></i>دوشنبه</div><div class="chart-col"><i class="chart-bar" style="height:90%"></i>سه‌شنبه</div><div class="chart-col"><i class="chart-bar" style="height:47%"></i>چهارشنبه</div><div class="chart-col"><i class="chart-bar" style="height:72%"></i>پنجشنبه</div><div class="chart-col"><i class="chart-bar" style="height:35%;background:#aabbb6"></i>جمعه</div></div></div><div class="section-row"><button class="btn" data-action="export">دریافت CSV</button><span class="pill gray">PDF در این نسخه ارائه نمی‌شود</span></div></div>`,
-    settings: `<div class="page-scroll"><div><h2 class="page-heading">تنظیمات و حریم خصوصی</h2><p class="page-intro">تنظیم‌های واقعی در نسخهٔ دسکتاپ در SQLite محلی ذخیره می‌شوند؛ این HTML فقط پیش‌نمایش است.</p></div><div class="card"><h3 class="card-title">پنجرهٔ روز و آزمون هدف</h3><div class="setting-row"><span>ساعت بیداری / خواب</span><strong>قابل‌ویرایش</strong></div><div class="setting-row"><span>سال آزمون و وضعیت تاریخ</span><strong>با منبع/وضعیت تأیید</strong></div><p class="card-body">ضریب آزمون اختصاصی از ضرایب سوابق تحصیلی جدا نگهداری می‌شود؛ مقدار تأییدنشده در اولویت رسمی وارد نمی‌شود.</p></div><div class="card"><h3 class="card-title">رویدادهای هفتگی و تعهدها</h3><div class="setting-row"><span>کلاس زیست · شنبه ۱۵:۰۰ تا ۱۹:۰۰</span><span class="pill">قابل ویرایش</span></div><div class="setting-row"><span>وعده، خواب، استراحت و روال‌ها</span><span class="pill info">قابل ثبت/حذف</span></div><div class="section-row"><button class="btn" data-action="add">افزودن رویداد</button><button class="btn" data-action="add">ویرایش انتخاب</button><button class="btn" data-action="add">حذف انتخاب</button></div><p class="card-body">تعارض‌های زمانی نمایش داده می‌شوند؛ بازه‌های ضبط‌شده زمان زنده را مسدود نمی‌کنند.</p></div><div class="card"><h3 class="card-title">داده‌ها و حریم خصوصی</h3><p class="card-body">نسخهٔ دسکتاپ اطلاعات را در SQLite روی همین دستگاه نگه می‌دارد. این فایل HTML داده‌ای ذخیره نمی‌کند و موتور برنامه‌ریزی/پایگاه داده را اجرا نمی‌کند.</p><button class="btn" data-action="backup" style="margin-top:10px">پشتیبان‌گیری محلی · فقط پیش‌نمایش</button></div></div>`
+    today: `<div class="page-scroll"><div class="section-row"><div><h2 class="page-heading">برنامهٔ امروز</h2><p class="page-intro">زمان‌بندی پس از ثبت داده‌های واقعی شما ساخته می‌شود.</p></div><button class="btn primary" data-action="plan">ساخت برنامهٔ امروز</button></div>${empty("هنوز برنامه‌ای ساخته نشده", "برای برنامه‌ریزی، ابتدا فعالیت‌ها و کلاس‌ها یا تعهدهای خود را ثبت کنید.", "add")}</div>`,
+    activities: `<div class="page-scroll"><div class="section-row"><div><h2 class="page-heading">فعالیت‌ها</h2><p class="page-intro">هیچ فعالیتی از پیش وارد نشده است.</p></div><button class="btn primary" data-action="add">＋ افزودن فعالیت</button></div>${empty("فهرست فعالیت‌ها خالی است", "فعالیت‌ها و زمان موردنیاز را خودتان اضافه کنید؛ اطلاعات نمونه در این صفحه وجود ندارد.", "add")}</div>`,
+    exams: `<div class="page-scroll"><div class="section-row"><div><h2 class="page-heading">آزمون و تحلیل</h2><p class="page-intro">نتیجه‌ها تنها از آزمون‌هایی که خودتان ثبت کنید محاسبه می‌شوند.</p></div><button class="btn primary" data-action="add">＋ ثبت آزمون</button></div>${empty("هنوز آزمونی ثبت نشده", "درصد، روند و تحلیل خطا تا زمان ثبت نتیجه نمایش داده نمی‌شوند.", "add")}</div>`,
+    review: `<div class="page-scroll"><div><h2 class="page-heading">مرور تطبیقی</h2><p class="page-intro">مرورهای این بخش از سوابق ثبت‌شدهٔ خودتان ساخته می‌شوند.</p></div>${empty("موردی برای مرور نیست", "با ثبت درس‌ها و نتایج یادآوری، فهرست مرور شخصی شکل می‌گیرد.")}</div>`,
+    reports: `<div class="page-scroll"><div><h2 class="page-heading">گزارش‌ها</h2><p class="page-intro">گزارش شخصی؛ بدون رتبه‌بندی یا مقایسه با دیگران.</p></div>${empty("هنوز داده‌ای برای گزارش وجود ندارد", "پس از ثبت فعالیت‌ها و نتایج خودتان، روندها در اینجا نمایش داده می‌شوند.")}</div>`,
+    settings: `<div class="page-scroll"><div><h2 class="page-heading">تنظیمات و حریم خصوصی</h2><p class="page-intro">در آغاز، هیچ ترجیح یا برنامهٔ هفتگی از پیش ثبت نشده است.</p></div><div class="card"><h3 class="card-title">پنجرهٔ روز و آزمون هدف</h3><div class="setting-row"><span>ساعت بیداری / خواب</span><strong>تنظیم‌نشده</strong></div><div class="setting-row"><span>سال و تاریخ آزمون</span><strong>ثبت‌نشده</strong></div><p class="card-body">اطلاعات رسمی یا ضرایب حدس زده نمی‌شوند؛ هر مقدار پس از ورود و بررسی منبع شما قابل استفاده است.</p></div><div class="card"><h3 class="card-title">کلاس‌ها و تعهدهای هفتگی</h3>${empty("هیچ رویدادی ثبت نشده", "کلاس‌ها، روال‌ها و تعهدهای واقعی خودتان را اضافه کنید.", "add")}<p class="card-body">تعارض فقط میان رویدادهایی گزارش می‌شود که خودتان ثبت کرده‌اید.</p></div><div class="card"><h3 class="card-title">داده‌ها و حریم خصوصی</h3><p class="card-body">این فایل HTML فقط پیش‌نمایش است و چیزی ذخیره نمی‌کند. نسخهٔ دسکتاپ داده‌های ثبت‌شده را در SQLite محلی نگه می‌دارد.</p><button class="btn" data-action="backup" style="margin-top:10px">پشتیبان‌گیری محلی</button></div></div>`
   };
-
-  function notify(message){
-    toast.textContent=message; toast.classList.add('show'); clearTimeout(toastTimer);
-    toastTimer=setTimeout(()=>toast.classList.remove('show'),2600);
-    statusMessage.textContent=message;
-  }
-  function closeMenus(){
-    document.querySelectorAll('.menu-panel').forEach(p=>p.classList.remove('open'));
-    document.querySelectorAll('.menu-button').forEach(b=>b.setAttribute('aria-expanded','false'));
-  }
-  function toggleMenu(button,panel){
-    const open=!panel.classList.contains('open'); closeMenus();
-    if(open){panel.classList.add('open');button.setAttribute('aria-expanded','true');}
-  }
+  function notify(message){toast.textContent=message;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),2600);statusMessage.textContent=message;}
+  function closeMenus(){document.querySelectorAll('.menu-panel').forEach(p=>p.classList.remove('open'));document.querySelectorAll('.menu-button').forEach(b=>b.setAttribute('aria-expanded','false'));}
+  function toggleMenu(button,panel){const open=!panel.classList.contains('open');closeMenus();if(open){panel.classList.add('open');button.setAttribute('aria-expanded','true');}}
   document.getElementById('programMenuButton').addEventListener('click',e=>{e.stopPropagation();toggleMenu(e.currentTarget,document.getElementById('programMenu'));});
   document.getElementById('helpMenuButton').addEventListener('click',e=>{e.stopPropagation();toggleMenu(e.currentTarget,document.getElementById('helpMenu'));});
   document.addEventListener('click',e=>{if(!e.target.closest('.menu-wrap'))closeMenus();});
-  document.addEventListener('keydown',e=>{
-    if(e.key==='Escape'){closeMenus();backdrop.classList.remove('show');}
-    if(e.key==='F5'){e.preventDefault();closeMenus();notify('پیش‌نمایش به‌روزرسانی شد؛ داده‌ها نمونه‌اند.');}
-    if(e.ctrlKey&&e.key.toLowerCase()==='q'){e.preventDefault();closeMenus();notify('در فایل پیش‌نمایش، خروج از برنامه انجام نمی‌شود.');}
-  });
-  document.getElementById('refreshButton').addEventListener('click',()=>notify('نماها تازه شدند؛ داده‌های این پیش‌نمایش ثابت و نمونه‌اند.'));
-
-  function setPage(key){
-    const page=pages[key]||pages.dashboard;
-    pageTitle.textContent=page[0];pageHint.textContent=page[1];
-    pageContent.innerHTML=key==='dashboard'?document.querySelector('.page-content').dataset.initial||dashboardMarkup:templates[key];
-    document.querySelectorAll('.nav-item').forEach(b=>{
-      const active=b.dataset.page===key;b.classList.toggle('active',active);
-      if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');
-    });
-    closeMenus();
-  }
-  const dashboardMarkup=pageContent.innerHTML;
-  pageContent.dataset.initial=dashboardMarkup;
-  document.getElementById('navList').addEventListener('click',e=>{
-    const button=e.target.closest('.nav-item');if(!button)return;
-    setPage(button.dataset.page);statusMessage.textContent=`نمای ${pages[button.dataset.page][0]} · دادهٔ نمونه`;
-  });
-  function openModal(title,body,actions){
-    document.getElementById('modalTitle').textContent=title;
-    document.getElementById('modalBody').innerHTML=body;
-    const holder=document.getElementById('modalActions');holder.innerHTML='';
-    actions.forEach(({label,primary=false,action='close'})=>{
-      const b=document.createElement('button');b.className='btn'+(primary?' primary':'');b.textContent=label;
-      b.addEventListener('click',()=>{backdrop.classList.remove('show');if(action==='next')notify('گام بعدی مصاحبهٔ نمایشی آماده است.');});holder.appendChild(b);
-    });
-    backdrop.classList.add('show');closeMenus();document.getElementById('modalClose').focus();
-  }
-  let previewSetupStep=0;
-  const previewSetupSteps=[
-    {title:'سال آزمون و گروه آزمایشی',body:`<p>گروه: <select aria-label="گروه آزمایشی"><option>علوم تجربی</option><option>علوم ریاضی و فنی</option><option>علوم انسانی</option></select></p><p>سال هدف: <select aria-label="سال آزمون"><option>۱۴۰۶</option><option>۱۴۰۵</option><option>نامشخص</option></select></p><div class="advice"><span class="advice-mark">!</span><span>دادهٔ رسمی ۱۴۰۶ در این پیش‌نمایش وارد نشده است؛ ضریب سال قبل به آن تعمیم داده نمی‌شود.</span></div>`},
-    {title:'انتخاب درس‌ها',body:`<p>انتخاب همه، لغو انتخاب‌ها و ترکیب دلخواه در نسخهٔ اصلی ذخیره می‌شود.</p><label><input type="checkbox" checked> زیست‌شناسی</label>　<label><input type="checkbox" checked> شیمی</label>　<label><input type="checkbox"> فیزیک</label>　<label><input type="checkbox"> ریاضی</label>　<label><input type="checkbox"> زمین‌شناسی</label><p class="card-body">وزن رسمی درس در این نمونه خالی است؛ این انتخاب به‌تنهایی ضریب نمی‌سازد.</p>`},
-    {title:'کتاب‌ها و منابع',body:`<p>عنوان، کد کتاب، پایه، سال چاپ و پیوند منبع برای هر درس ثبت می‌شود.</p><div class="setting-row"><span>زیست‌شناسی · کتاب انتخابی</span><span class="pill warn">منبع نیازمند بازبینی</span></div><p class="card-body">کتاب فاقد منبع تأییدشده به‌عنوان «واردشده/تأییدنشده» باقی می‌ماند.</p>`},
-    {title:'کلاس‌ها و زمان‌های ثابت',body:`<p>رویدادهای هفتگی و روال‌های خواب، غذا و استراحت قابل افزودن، ویرایش و حذف‌اند.</p><div class="advice"><span class="advice-mark">!</span><span>تعارض نمونهٔ یکشنبه شیمی/دینی حل‌نشده است؛ برنامهٔ قطعی ساخته نمی‌شود تا یکی ضبط‌شده شود یا زمان اصلاح گردد.</span></div>`},
-    {title:'بازبینی و پایان',body:`<p>برای برچسب رسمی، دامنهٔ منبع باید متعلق به مرجع رسمی باشد؛ این کنترل، محتوای صفحه یا PDF را مستقلاً تأیید نمی‌کند.</p><p>اطلاعات محلی ذخیره می‌شود و راه‌اندازی پس از تأیید نهایی خودکار دوباره باز نمی‌شود.</p><p class="card-body">این پیش‌نمایش برای نمایش ظاهر است؛ داده‌های واقعی فقط در برنامهٔ دسکتاپ ثبت می‌شوند.</p>`}
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeMenus();backdrop.classList.remove('show');}if(e.key==='F5'){e.preventDefault();notify('پیش‌نمایش تازه شد؛ اطلاعات شخصی‌ای در آن نگهداری نمی‌شود.');}if(e.ctrlKey&&e.key.toLowerCase()==='q'){e.preventDefault();notify('در فایل پیش‌نمایش، خروج از برنامه انجام نمی‌شود.');}});
+  document.getElementById('refreshButton').addEventListener('click',()=>notify('نماها تازه شدند؛ داده‌ای برای تغییر وجود ندارد.'));
+  function setPage(key){const page=pages[key]||pages.dashboard;pageTitle.textContent=page[0];pageHint.textContent=page[1];pageContent.innerHTML=key==='dashboard'?dashboardMarkup:templates[key];document.querySelectorAll('.nav-item').forEach(b=>{const active=b.dataset.page===key;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});closeMenus();}
+  document.getElementById('navList').addEventListener('click',e=>{const button=e.target.closest('.nav-item');if(!button)return;setPage(button.dataset.page);statusMessage.textContent=`نمای ${pages[button.dataset.page][0]} · بدون دادهٔ نمونه`;});
+  function openModal(title,body,actions){document.getElementById('modalTitle').textContent=title;document.getElementById('modalBody').innerHTML=body;const holder=document.getElementById('modalActions');holder.innerHTML='';actions.forEach(({label,primary=false,action='close'})=>{const b=document.createElement('button');b.className='btn'+(primary?' primary':'');b.textContent=label;b.addEventListener('click',()=>{backdrop.classList.remove('show');if(action==='next')notify('این پیش‌نمایش چیزی ذخیره نمی‌کند.');});holder.appendChild(b);});backdrop.classList.add('show');closeMenus();document.getElementById('modalClose').focus();}
+  let setupStep=0;
+  const setupSteps=[
+    {title:'گروه و سال آزمون',body:`<p>گروه آزمایشی: <select aria-label="گروه آزمایشی"><option selected disabled value="">انتخاب کنید</option><option>علوم تجربی</option><option>علوم ریاضی و فنی</option><option>علوم انسانی</option><option>سایر / تغییر رشته</option></select></p><p>سال آزمون: <select aria-label="سال آزمون"><option selected disabled value="">انتخاب کنید</option><option>سال دیگر / نامشخص</option></select></p><p class="card-body">تاریخ یا ضریب رسمی از پیش وارد نشده است.</p>`},
+    {title:'انتخاب درس‌ها',body:`<p>هیچ درسی از پیش انتخاب نشده است. ترکیب دلخواه خود را انتخاب کنید.</p><label><input type="checkbox"> زیست‌شناسی</label>　<label><input type="checkbox"> شیمی</label>　<label><input type="checkbox"> فیزیک</label>　<label><input type="checkbox"> ریاضی</label>　<label><input type="checkbox"> سایر</label>`},
+    {title:'کتاب‌ها و منابع',body:`<p>هیچ کتاب یا منبعی ثبت نشده است.</p>${empty("فهرست کتاب خالی است", "پس از انتخاب درس، اطلاعات کتاب را از منبع رسمی وارد کنید.", "add")}`},
+    {title:'کلاس‌ها و زمان‌های ثابت',body:`<p>هیچ کلاس، روال یا تعهدی ثبت نشده است.</p>${empty("برنامهٔ هفتگی خالی است", "می‌توانید این مرحله را رد کنید و بعداً اطلاعات خودتان را در تنظیمات اضافه کنید.", "add")}`},
+    {title:'بازبینی و پایان',body:`<p>برای شروع، اطلاعات واقعی خود را وارد کنید. موارد تأییدنشده با برچسب روشن می‌مانند.</p><p>این فایل پیش‌نمایش است و اطلاعاتی را ذخیره نمی‌کند.</p>`}
   ];
-  function openSetupPreview(){
-    function render(){
-      const step=previewSetupSteps[previewSetupStep];
-      document.getElementById('modalTitle').textContent=step.title;
-      document.getElementById('modalBody').innerHTML=`<p>راه‌اندازی مرحله‌ای · گام ${previewSetupStep+1} از ${previewSetupSteps.length}</p><div class="modal-progress"><i style="width:${((previewSetupStep+1)/previewSetupSteps.length)*100}%"></i></div>${step.body}`;
-      const holder=document.getElementById('modalActions');holder.innerHTML='';
-      if(previewSetupStep>0){const back=document.createElement('button');back.className='btn';back.textContent='مرحلهٔ قبل';back.onclick=()=>{previewSetupStep--;render();};holder.appendChild(back);}
-      const next=document.createElement('button');next.className='btn primary';next.textContent=previewSetupStep===previewSetupSteps.length-1?'بستن':'مرحلهٔ بعد';
-      next.onclick=()=>{if(previewSetupStep===previewSetupSteps.length-1){backdrop.classList.remove('show');notify('پیش‌نمایش بسته شد؛ داده‌ای ذخیره نشد.');}else{previewSetupStep++;render();}};holder.appendChild(next);
-      backdrop.classList.add('show');closeMenus();
-    }
-    previewSetupStep=0;render();
-  }
+  function openSetup(){function render(){const step=setupSteps[setupStep];document.getElementById('modalTitle').textContent=step.title;document.getElementById('modalBody').innerHTML=`<p>راه‌اندازی مرحله‌ای · گام ${setupStep+1} از ${setupSteps.length}</p><div class="modal-progress"><i style="width:${((setupStep+1)/setupSteps.length)*100}%"></i></div>${step.body}`;const holder=document.getElementById('modalActions');holder.innerHTML='';if(setupStep>0){const back=document.createElement('button');back.className='btn';back.textContent='مرحلهٔ قبل';back.onclick=()=>{setupStep--;render();};holder.appendChild(back);}const next=document.createElement('button');next.className='btn primary';next.textContent=setupStep===setupSteps.length-1?'بستن':'مرحلهٔ بعد';next.onclick=()=>{if(setupStep===setupSteps.length-1){backdrop.classList.remove('show');notify('پیش‌نمایش بسته شد؛ هیچ اطلاعاتی ذخیره نشد.');}else{setupStep++;render();}};holder.appendChild(next);backdrop.classList.add('show');closeMenus();}setupStep=0;render();}
   document.getElementById('modalClose').addEventListener('click',()=>backdrop.classList.remove('show'));
   backdrop.addEventListener('click',e=>{if(e.target===backdrop)backdrop.classList.remove('show');});
-  document.addEventListener('click',e=>{
-    const item=e.target.closest('[data-action]');if(!item)return;
-    const action=item.dataset.action;
-    if(action==='refresh'){closeMenus();notify('همهٔ نماها تازه شدند؛ داده‌ها نمونه‌اند.');}
-    else if(action==='setup')openSetupPreview();
-    else if(action==='about')openModal('دربارهٔ K2',`<p><strong>مشاور هوشمند کنکور</strong> یک برنامهٔ دسکتاپ فارسی، راست‌چین و آفلاین‌محور برای برنامه‌ریزی واقع‌بینانهٔ مطالعه است.</p><p>این HTML یک پیش‌نمایش ظاهری و تعاملی با داده‌های نمونه است؛ موتور برنامه‌ریزی، SQLite و ذخیره‌سازی نسخهٔ EXE را اجرا نمی‌کند.</p><span class="pill">پیش‌نمایش رابط · آفلاین</span>`,[{label:'متوجه شدم',primary:true}]);
-    else if(action==='quit'){closeMenus();notify('در پیش‌نمایش HTML پنجره بسته نمی‌شود؛ در برنامهٔ اصلی Ctrl+Q برای خروج است.');}
-    else if(action==='plan')notify('برنامهٔ نمایشی بازسازی شد؛ منطق واقعی در فایل EXE اجرا می‌شود.');
-    else if(action==='minimal')notify('نمایش نمونهٔ «روز حداقلی»؛ در نسخهٔ اصلی برنامه حفظ خواب و تعهدها در اولویت است.');
-    else if(action==='add')openModal('افزودن مورد · پیش‌نمایش',`<p>فرم تعاملی این فایل نمونه‌ای است؛ برای ثبت واقعی فعالیت یا آزمون از برنامهٔ دسکتاپ استفاده کن.</p><label class="card-body">عنوان <input type="text" placeholder="مثلاً مرور فصل زیست" style="display:block;width:100%;margin-top:5px;padding:9px;border:1px solid var(--border);border-radius:8px"></label>`,[{label:'ذخیرهٔ نمونه',primary:true,action:'next'},{label:'انصراف'}]);
-    else if(action==='activity')notify('کنش انتخاب‌شده فقط در نسخهٔ نمایشی است و چیزی ذخیره نشد.');
-    else if(action==='export')notify('در نسخهٔ اصلی، گزارش‌ها به CSV خروجی گرفته می‌شوند.');
-    else if(action==='backup')notify('این HTML داده‌ای ذخیره نمی‌کند؛ پشتیبان‌گیری فقط در برنامهٔ دسکتاپ انجام می‌شود.');
-  });
+  document.addEventListener('click',e=>{const item=e.target.closest('[data-action]');if(!item)return;const action=item.dataset.action;if(action==='refresh')notify('نماها تازه شدند.');else if(action==='setup')openSetup();else if(action==='about')openModal('دربارهٔ K2',`<p><strong>مشاور هوشمند کنکور</strong> برنامه‌ای فارسی و آفلاین‌محور است.</p><p>این پیش‌نمایش از ابتدا خالی است: هیچ فعالیت، آزمون، کتاب، کلاس یا آمار نمونه‌ای در آن وجود ندارد.</p>`,[{label:'متوجه شدم',primary:true}]);else if(action==='quit')notify('در پیش‌نمایش HTML پنجره بسته نمی‌شود.');else if(action==='plan')notify('برای ساخت برنامه، ابتدا اطلاعات واقعی خود را وارد کنید.');else if(action==='minimal')notify('برای ساخت روز حداقلی، ابتدا فعالیت‌های خود را ثبت کنید.');else if(action==='add')openModal('افزودن اطلاعات',`<p>فرم ثبت واقعی در برنامهٔ دسکتاپ در دسترس است. این پیش‌نمایش چیزی ذخیره نمی‌کند.</p>`,[{label:'متوجه شدم',primary:true}]);else if(action==='activity')notify('هیچ فعالیتی ثبت نشده است.');else if(action==='export')notify('برای خروجی گزارش، ابتدا دادهٔ واقعی ثبت کنید.');else if(action==='backup')notify('در این پیش‌نمایش داده‌ای وجود ندارد که پشتیبان‌گیری شود.');});
 })();
 </script>
 </body>

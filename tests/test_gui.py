@@ -10,7 +10,7 @@ import pytest
 pytestmark = pytest.mark.gui
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QComboBox, QLineEdit
+from PySide6.QtWidgets import QComboBox, QLabel, QLineEdit
 
 from k2.service import AdvisorService
 from k2.ui.app import APP_TITLE, MainWindow
@@ -88,12 +88,29 @@ def test_persian_text_input_in_line_edit(qapp):
 
 def test_persian_text_in_dashboard(window: MainWindow):
     window.refresh_all()
-    text = window.dashboard.next_title.text()
-    assert isinstance(text, str)
+    assert window.dashboard.next_title.text() == "هنوز اطلاعاتی ثبت نشده است"
+    assert window.dashboard.tile_capacity.value_label.text() == "—"
+    assert not window.dashboard.btn_plan.isEnabled()
+    assert window.today.summary.text().startswith("هنوز فعالیت")
+    assert not window.today.btn_refresh.isEnabled()
+    assert window.reports.daily_text.text() == "هنوز فعالیت یا آزمونی ثبت نشده است."
+
+
+def test_new_install_settings_have_no_prefilled_personal_values(window: MainWindow):
+    assert window.settings.wake_edit.text() == ""
+    assert window.settings.sleep_edit.text() == ""
+    assert window.settings.exam_name_edit.text() == ""
+    assert window.settings.exam_date_edit.text() == ""
+    assert window.settings.exam_status_combo.currentData() is None
+    assert window.service.repo.list_fixed_events() == []
+    assert window.service.repo.list_routines() == []
 
 
 def test_pages_render_with_real_data(window: MainWindow):
-    window.service.import_sample_schedule()
+    from k2.domain.models import FixedEvent
+    window.service.create_fixed_event(FixedEvent(
+        title="کلاس واقعی", weekday=0, start_minute=600, end_minute=660
+    ))
     window.service.create_exam_profile(
         __import__("k2.domain.models", fromlist=["ExamProfile"]).ExamProfile(
             name="آزمون", target_date=_dt.date(2027, 7, 1)
@@ -153,25 +170,36 @@ def test_onboarding_wizard_saves_state(qapp, tmp_path: Path):
         wizard.state.set_value("exam_name", "کنکور سراسری")
         wizard.state.set_value("exam_date", "۱۴۰۶/۰۴/۲۰")
         wizard.state.set_value("exam_date_status", "تخمینی")
-        wizard.state.set_value("sunday_recorded", "شیمی")
-        wizard.state.complete_step("sunday_recorded")
         wizard._save_state()
 
         reloaded = service.onboarding_state()
         assert reloaded.values["student_name"] == "رضا"
-        assert "sunday_recorded" in reloaded.completed_steps
     finally:
         service.close()
 
 
-def test_onboarding_blocking_question_is_reported(qapp, tmp_path: Path):
+def test_onboarding_has_no_synthetic_blocking_question(qapp, tmp_path: Path):
     service = AdvisorService(tmp_path / "o2.db")
     try:
         state = service.onboarding_state()
-        assert any(
-            "شیمی" in question
-            for question in state.unresolved_blocking_questions()
-        )
+        assert state.unresolved_blocking_questions() == []
+        wizard = OnboardingWizard(service)
+        assert not wizard.conflict_box.isVisible()
+        steps = __import__("k2.onboarding", fromlist=["ONBOARDING_STEPS"]).ONBOARDING_STEPS
+        weekly_step = next(i for i, step in enumerate(steps) if step.key == "weekly_schedule")
+        group_step = next(i for i, step in enumerate(steps) if step.key == "exam_group")
+        assert wizard.stack.widget(weekly_step).findChild(
+            QLabel, "field_weekly_schedule"
+        ).text().startswith("فعلاً هیچ کلاس")
+        group_combo = wizard.stack.widget(group_step).findChild(QComboBox, "field_exam_group")
+        assert group_combo.currentData() == ""
+        wizard._collect()
+        assert wizard.state.values.get("exam_group", "") == ""
+        wizard._goto(weekly_step)
+        wizard._next()
+        assert wizard.state.current_index == weekly_step + 1
+        assert service.repo.list_fixed_events() == []
+        assert service.repo.list_routines() == []
     finally:
         service.close()
 

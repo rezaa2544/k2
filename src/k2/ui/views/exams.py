@@ -39,7 +39,8 @@ class RecordAttemptDialog(QDialog):
         self.setLayoutDirection(Qt.RightToLeft)
 
         form = QFormLayout(self)
-        self.name_edit = QLineEdit("آزمون جدید")
+        self.name_edit = QLineEdit()
+        self.name_edit.setPlaceholderText("نام آزمون")
         form.addRow("نام آزمون:", self.name_edit)
 
         self.kind_combo = QComboBox()
@@ -71,14 +72,13 @@ class RecordAttemptDialog(QDialog):
 
         self.duration_spin = QSpinBox()
         self.duration_spin.setRange(0, 600)
-        self.duration_spin.setValue(60)
         form.addRow("مدت (دقیقه):", self.duration_spin)
 
         self.error_combo = QComboBox()
         self.error_combo.addItem("— بدون خطای ثبت‌شده —", None)
         for code in ErrorCode:
             self.error_combo.addItem(f"{code.value} — {code.label}", code.value)
-        form.addRow("کد خطای نمونه (برای تحلیل):", self.error_combo)
+        form.addRow("کد خطا (اختیاری):", self.error_combo)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText("ثبت")
@@ -89,6 +89,11 @@ class RecordAttemptDialog(QDialog):
 
     def _accept(self) -> None:
         from ...domain.models import ExamQuestion
+
+        name = self.name_edit.text().strip()
+        if not name:
+            QMessageBox.warning(self, "ورودی ناقص", "نام آزمون را وارد کنید.")
+            return
 
         total = self.total_spin.value()
         correct = self.correct_spin.value()
@@ -116,7 +121,7 @@ class RecordAttemptDialog(QDialog):
             )
 
         self.service.record_attempt(
-            name=self.name_edit.text().strip() or "آزمون",
+            name=name,
             total=total,
             correct=correct,
             wrong=wrong,

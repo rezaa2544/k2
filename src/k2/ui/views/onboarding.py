@@ -128,8 +128,9 @@ class OnboardingWizard(QDialog):
 
         if step.kind == "choice":
             widget = QComboBox()
+            widget.addItem("انتخاب کنید", "")
             for option in step.options:
-                widget.addItem(option)
+                widget.addItem(option, option)
             widget.setObjectName(f"field_{step.key}")
             card.add(widget)
             if step.key == "exam_group":
@@ -204,19 +205,16 @@ class OnboardingWizard(QDialog):
             card.add(widget)
         elif step.kind == "number":
             widget = QComboBox()
+            widget.addItem("انتخاب کنید", "")
             for option in step.options:
-                widget.addItem(option)
+                widget.addItem(option, option)
             widget.setObjectName(f"field_{step.key}")
             card.add(widget)
         elif step.kind == "schedule":
-            widget = QLabel("—")
+            widget = QLabel(step.description)
             widget.setWordWrap(True)
             widget.setObjectName(f"field_{step.key}")
             card.add(widget)
-            btn = QPushButton("ورود برنامهٔ نمونهٔ ثبت‌شده")
-            btn.setObjectName(f"btn_{step.key}")
-            btn.clicked.connect(self._import_sample)
-            card.add(btn)
         elif step.kind == "confirm":
             widget = QLabel("—")
             widget.setWordWrap(True)
@@ -261,7 +259,11 @@ class OnboardingWizard(QDialog):
             elif isinstance(widget, QPlainTextEdit):
                 widget.setPlainText(value or "")
             elif isinstance(widget, QLabel):
-                widget.setText(value or "—")
+                # متون ذخیره‌شدهٔ نسخه‌های قدیمی (از جمله برنامهٔ نمایشی) را
+                # در مرحلهٔ اختیاری برنامهٔ هفتگی دوباره نمایش نده.
+                widget.setText(
+                    step.description if step.kind == "schedule" else (value or "—")
+                )
         self._loading_state = False
         self._refresh_subject_options()
         self._load_book_selections()
@@ -468,7 +470,7 @@ class OnboardingWizard(QDialog):
             if widget is None:
                 continue
             if isinstance(widget, QComboBox):
-                self.state.set_value(step.key, widget.currentText())
+                self.state.set_value(step.key, str(widget.currentData() or ""))
             elif isinstance(widget, QLineEdit):
                 self.state.set_value(step.key, widget.text().strip())
             elif isinstance(widget, QPlainTextEdit):
@@ -520,19 +522,14 @@ class OnboardingWizard(QDialog):
             except ValueError as exc:
                 QMessageBox.warning(self, "تاریخ نامعتبر", str(exc))
                 return
-        if step.key == "weekly_schedule" and not self.service.repo.list_fixed_events():
-            QMessageBox.warning(
-                self, "برنامهٔ هفتگی لازم است",
-                "ابتدا برنامهٔ نمونه را وارد کنید یا رویدادهای خود را در تنظیمات ثبت کنید.",
-            )
-            return
         if step.blocking_question:
             self.state.complete_step(step.key)
         else:
             self.state.complete_step(step.key)
         self._save_state()
         if self.state.current_index < len(ONBOARDING_STEPS) - 1:
-            self._goto(self.state.current_index + 1)
+            # complete_step خودش current_index را به گام بعد می‌برد.
+            self._goto(self.state.current_index)
         else:
             self._finish()
 
@@ -559,23 +556,6 @@ class OnboardingWizard(QDialog):
 
     # ---- کنش‌ها ----
 
-    def _import_sample(self) -> None:
-        events, routines = self.service.import_sample_schedule()
-        conflicts = self.service.schedule_conflicts()
-        text = f"{events} رویداد ثابت و {routines} بازهٔ ضروری وارد شد."
-        if conflicts:
-            text += "\n\nتعارض شناسایی‌شده:\n" + "\n".join(c.describe() for c in conflicts)
-        widget = self.stack.widget(
-            ONBOARDING_STEPS.index(
-                next(s for s in ONBOARDING_STEPS if s.key == "weekly_schedule")
-            )
-        ).findChild(QLabel, "field_weekly_schedule")
-        if widget is not None:
-            widget.setText(text)
-        self.state.set_value("weekly_schedule", text)
-        self.state.complete_step("weekly_schedule")
-        self._save_state()
-
     def _save_and_close(self) -> None:
         self._collect()
         self._save_state()
@@ -583,7 +563,6 @@ class OnboardingWizard(QDialog):
 
     def _finish(self) -> None:
         self._collect()
-        self._apply_sunday_recorded_choice()
         conflicts = self.service.schedule_conflicts()
         if conflicts:
             QMessageBox.warning(
@@ -616,20 +595,6 @@ class OnboardingWizard(QDialog):
         self.state.complete_step("confirm")
         self._save_state()
         self.accept()
-
-    def _apply_sunday_recorded_choice(self) -> None:
-        """تبدیل پاسخ یکشنبه به دادهٔ واقعی رویدادها؛ تعارض صرفاً متنی حل نمی‌شود."""
-        choice = self.state.values.get("sunday_recorded", "")
-        if choice not in {"شیمی", "دینی"}:
-            return
-        from ...domain.enums import FixedEventKind
-
-        for event in self.service.repo.list_fixed_events():
-            if event.weekday == 1 and choice in event.title:
-                event.is_recorded = True
-                event.kind = FixedEventKind.RECORDED_CLASS
-                self.service.repo.update_fixed_event(event)
-        self.service.commit()
 
     def _apply_to_profile(self) -> None:
         """داده‌های مصاحبه را در پروفایل و تنظیمات ذخیره می‌کند."""
@@ -725,8 +690,3 @@ class OnboardingWizard(QDialog):
         if sleep_pair:
             self.service.wake_minute = sleep_pair[0]
             self.service.sleep_minute = sleep_pair[1]
-
-        sunday = values.get("sunday_recorded", "")
-        if sunday and sunday not in {"—", ""}:
-            self.service.repo.set_setting("onboarding.sunday_recorded", sunday)
-            self.service.commit()

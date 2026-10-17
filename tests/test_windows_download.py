@@ -83,3 +83,13 @@ def test_html_preview_is_offline_and_contains_app_menus_and_navigation():
         assert label in preview
     assert "https://" not in preview
     assert "http://" not in preview
+    for old_seed in (
+        "پردازش اولیهٔ کلاس زیست",
+        "تعارض نمونهٔ یکشنبه",
+        "شنبه ۲۵ مهر ۱۴۰۵",
+        "۵ ساعت و ۴۰ دقیقه",
+        "آزمون نمونه",
+    ):
+        assert old_seed not in preview
+    assert "هیچ فعالیتی از پیش وارد نشده است" in preview
+    assert 'checked>' not in preview

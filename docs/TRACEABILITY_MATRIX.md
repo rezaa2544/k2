@@ -10,9 +10,9 @@
 
 | شناسه | اولویت | پیاده‌سازی | تست | وضعیت |
 |---|---|---|---|---|
-| ONB-01 | P0 | `onboarding.py` (OnboardingState، ۱۶ گام)، `ui/views/onboarding.py` | `test_onboarding.py::test_state_is_resumable`، `test_gui.py::test_onboarding_wizard_saves_state` | کامل |
+| ONB-01 | P0 | `onboarding.py` (OnboardingState، راه‌اندازی قابل‌ادامه)، `ui/views/onboarding.py` | `test_onboarding.py::test_onboarding_state_is_resumable`، `test_gui.py::test_onboarding_wizard_saves_state` | کامل |
 | ONB-02 | P0 | `domain/models.py::ExamProfile`، `service.py::create_exam_profile`، `onboarding.py::ONBOARDING_STEPS` | `test_onboarding.py::test_onboarding_steps_cover_required_areas`، `test_edge_cases.py::test_exam_date_change_is_reflected_in_review_cap` | کامل |
-| ONB-03 | P0 | `onboarding.py::build_sample_fixed_events/build_sample_routines/detect_sample_conflicts`، `capacity.py::collect_fixed_intervals` | `test_onboarding.py::test_sample_schedule_contains_all_week_days`، `test_sunday_conflict_is_detected_and_not_hidden`، `test_imported_schedule_affects_capacity` | کامل |
+| ONB-03 | P0 | `ui/views/onboarding.py` (برنامهٔ هفتگی خالی و اختیاری)، `onboarding.py::detect_event_conflicts`، `capacity.py::collect_fixed_intervals` | `test_onboarding.py::test_new_install_has_no_user_or_sample_data`، `test_weekly_schedule_is_optional_and_no_fake_sunday_step`، `test_legacy_onboarding_sample_text_is_removed_without_touching_user_records`، `test_untouched_legacy_seed_is_removed_but_real_records_are_preserved`، `test_modified_legacy_schedule_is_not_deleted`، `test_legacy_seed_with_an_extra_duplicate_is_preserved`، `test_legacy_seed_with_user_exception_is_preserved`، `test_real_event_conflicts_are_detected_without_preloaded_events`، `test_user_schedule_affects_capacity` | کامل |
 | ONB-04 | P0 | `advisor_engine.py::assess_mastery` (L0–L4 با اطمینان)، `ui/views/onboarding.py` | `test_advisor.py::test_mastery_from_diagnostic_evidence`، `test_mastery_without_evidence_is_l0_with_low_confidence` | کامل |
 | ONB-05 | P1 | `exam_analysis.py` + `ui/views/exams.py` (ورود نتیجهٔ آزمون قبلی) | `test_e2e_scenario.py::test_full_learning_cycle` | کامل |
 
@@ -22,7 +22,7 @@
 |---|---|---|---|---|
 | CAL-01 | P0 | `jdate.py` (تبدیل، هفتهٔ شنبه‌محور، سال کبیسه) | `test_jdate.py` (۱۰ تست شامل `test_leap_year`، `test_week_starts_on_saturday`، `test_roundtrip_over_many_dates`) | کامل |
 | CAL-02 | P0 | `ui/theme.py` (RTL، فونت وزیرمتن)، `ui/widgets.py`، `jdate.py::persian_digits` | `test_gui.py::test_application_layout_is_rtl`، `test_persian_font_is_loaded`، `test_jdate.py::test_persian_digits` | کامل |
-| CAL-03 | P0 | `domain/models.py::FixedEvent` (تکرارشونده/یک‌باره/ضبط‌شده)، `Routine` | `test_onboarding.py::test_sample_schedule_contains_recorded_geology_class`، `test_edge_cases.py::test_overlapping_classes_are_detected_but_not_silently_dropped` | کامل |
+| CAL-03 | P0 | `domain/models.py::FixedEvent` (تکرارشونده/یک‌باره/ضبط‌شده)، `Routine` | `test_onboarding.py::test_real_event_conflicts_are_detected_without_preloaded_events`، `test_edge_cases.py::test_overlapping_classes_are_detected_but_not_silently_dropped` | کامل |
 | DATA-01 | P0 | `storage/db.py`، `storage/repositories.py` (بدون هیچ مسیر شبکه) | `test_storage.py::test_database_works_offline_without_network`، `test_e2e_scenario.py::test_offline_operation_without_network` | کامل |
 | DATA-02 | P0 | `storage/backup.py` (پشتیبان آنلاین + فراداده + بازیابی مرحله‌ای)، `storage/schema.py` | `test_storage.py::test_backup_and_restore_roundtrip`، `test_backup_inspection_detects_healthy_file`، `test_restore_rejects_newer_schema` | کامل |
 | DATA-03 | P1 | `reporting.py::export_activities_csv/export_attempts_csv` | `test_reporting.py::test_export_activities_csv`، `test_export_attempts_csv` | **جزئی** — خروجی PDF پیاده نشده (L-8) |

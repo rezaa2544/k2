@@ -1,20 +1,12 @@
-"""راه‌اندازی مرحله‌ای و دادهٔ نمونهٔ برنامهٔ کاربر (ONB-01 تا ONB-05).
-
-برنامهٔ هفتگی ثبت‌شده **دادهٔ نمونه و قابل ویرایش** است، نه منطق ثابت در کد.
-تعارض واقعی یکشنبه (شیمی ۱۵:۰۰–۱۹:۰۰ و دینی ۱۵:۱۵–۲۰:۴۵) عمداً پنهان
-نمی‌شود: تا وقتی کاربر مشخص نکند کدام‌یک ضبط‌شده است، این تعارض باز
-می‌ماند و برنامهٔ قطعی تولید نمی‌شود.
-"""
+"""راه‌اندازی مرحله‌ای و مدیریت داده‌های ورودی کاربر."""
 
 from __future__ import annotations
 
-import datetime as _dt
 import json
 from dataclasses import dataclass, field
-from typing import Any, Optional, Sequence
+from typing import Optional, Sequence
 
-from .domain.enums import FixedEventKind, RoutineKind, RoutineScope
-from .domain.models import FixedEvent, Routine
+from .domain.models import FixedEvent
 
 #: نام روزها به ترتیب شنبه‌محور برای نگاشت.
 DAY_ORDER = ("شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه")
@@ -24,112 +16,9 @@ def _minutes(hour: int, minute: int = 0) -> int:
     return hour * 60 + minute
 
 
-@dataclass
-class SampleEvent:
-    """تعریف یک رویداد نمونه."""
-
-    title: str
-    weekday: int
-    start: str
-    end: str
-    kind: FixedEventKind = FixedEventKind.LIVE_CLASS
-    subject: str = ""
-    is_recorded: bool = False
-    notes: str = ""
-
-
-#: برنامهٔ هفتگی ثبت‌شدهٔ کاربر (سند USER_SCHEDULE_AND_ONBOARDING).
-SAMPLE_WEEKLY_EVENTS: tuple[SampleEvent, ...] = (
-    SampleEvent("زیست", 0, "15:00", "19:00", subject="زیست"),
-    SampleEvent("فیزیک", 0, "19:30", "22:45", subject="فیزیک"),
-    SampleEvent("شیمی", 1, "15:00", "19:00", subject="شیمی"),
-    SampleEvent(
-        "دینی",
-        1,
-        "15:15",
-        "20:45",
-        subject="دینی",
-        notes="هم‌پوشان با شیمی — باید در راه‌اندازی روشن شود کدام ضبط‌شده است.",
-    ),
-    SampleEvent("زبان انگلیسی", 1, "21:00", "23:00", subject="انگلیسی"),
-    SampleEvent("ریاضی", 2, "19:30", "23:00", subject="ریاضی"),
-    SampleEvent(
-        "زمین‌شناسی (ضبط‌شده)",
-        2,
-        "00:00",
-        "00:00",
-        kind=FixedEventKind.RECORDED_CLASS,
-        subject="زمین‌شناسی",
-        is_recorded=True,
-        notes="کلاس ضبط‌شده؛ زمان جداگانه لازم دارد و باید به‌صورت فعالیت قابل تقسیم ثبت شود.",
-    ),
-    SampleEvent("زیست", 3, "15:00", "19:00", subject="زیست"),
-    SampleEvent("عربی", 3, "19:15", "21:00", subject="عربی"),
-    SampleEvent("فیزیک", 4, "15:00", "19:30", subject="فیزیک"),
-    SampleEvent("شیمی", 4, "19:30", "22:45", subject="شیمی"),
-    SampleEvent("فارسی", 5, "13:15", "14:45", subject="فارسی"),
-    SampleEvent("هویت اجتماعی", 5, "15:00", "16:30", subject="هویت اجتماعی"),
-    SampleEvent("ریاضی", 6, "12:00", "15:00", subject="ریاضی"),
-)
-
-#: نمونهٔ بازه‌های ضروری روزانه (قابل تنظیم).
-SAMPLE_ROUTINES: tuple[tuple[str, RoutineKind, str, str, RoutineScope], ...] = (
-    ("خواب شب", RoutineKind.SLEEP, "23:00", "06:00", RoutineScope.DAILY),
-    ("خواب روز (چرت)", RoutineKind.SLEEP, "13:00", "13:30", RoutineScope.DAILY),
-    ("صبحانه", RoutineKind.MEAL, "07:00", "07:30", RoutineScope.DAILY),
-    ("ناهار", RoutineKind.MEAL, "12:30", "13:00", RoutineScope.DAILY),
-    ("شام", RoutineKind.MEAL, "20:00", "20:45", RoutineScope.DAILY),
-    ("استراحت", RoutineKind.REST, "16:30", "16:45", RoutineScope.DAILY),
-    ("حمام", RoutineKind.HYGIENE, "22:45", "23:00", RoutineScope.DAILY),
-)
-
-
 def _parse_clock(text: str) -> int:
     hour, _, minute = text.partition(":")
     return _minutes(int(hour), int(minute or 0))
-
-
-def build_sample_fixed_events() -> list[FixedEvent]:
-    """رویدادهای ثابت نمونه به‌صورت مدل دامنه."""
-    events: list[FixedEvent] = []
-    for sample in SAMPLE_WEEKLY_EVENTS:
-        if sample.start == sample.end:
-            # زمان‌نامعلوم (مثلاً کلاس ضبط‌شده) ⇒ مدت صفر؛ بعداً تعیین می‌شود.
-            start = end = 0
-        else:
-            start = _parse_clock(sample.start)
-            end = _parse_clock(sample.end)
-        events.append(
-            FixedEvent(
-                title=sample.title,
-                kind=sample.kind,
-                subject_name=sample.subject,
-                weekday=sample.weekday,
-                start_minute=start,
-                end_minute=end,
-                is_recorded=sample.is_recorded,
-                notes=sample.notes,
-            )
-        )
-    return events
-
-
-def build_sample_routines() -> list[Routine]:
-    """بازه‌های ضروری نمونه."""
-    routines: list[Routine] = []
-    for title, kind, start, end, scope in SAMPLE_ROUTINES:
-        routines.append(
-            Routine(
-                title=title,
-                kind=kind,
-                start_minute=_parse_clock(start),
-                end_minute=_parse_clock(end),
-                weekdays=frozenset(range(7)),
-                scope=scope,
-                counts_as_study=False,
-            )
-        )
-    return routines
 
 
 @dataclass
@@ -197,36 +86,6 @@ def detect_event_conflicts(events: Sequence[FixedEvent]) -> list[ScheduleConflic
     return result
 
 
-def detect_sample_conflicts() -> list[ScheduleConflict]:
-    """تعارض‌های برنامهٔ نمونه را پیدا می‌کند (ONB-03)."""
-    conflicts: list[ScheduleConflict] = []
-    by_day: dict[int, list[SampleEvent]] = {}
-    for sample in SAMPLE_WEEKLY_EVENTS:
-        if sample.start == sample.end:
-            continue
-        by_day.setdefault(sample.weekday, []).append(sample)
-
-    for weekday, samples in by_day.items():
-        samples = sorted(samples, key=lambda s: _parse_clock(s.start))
-        for index in range(len(samples) - 1):
-            first, second = samples[index], samples[index + 1]
-            if _parse_clock(second.start) < _parse_clock(first.end):
-                conflicts.append(
-                    ScheduleConflict(
-                        weekday=weekday,
-                        first_title=first.title,
-                        second_title=second.title,
-                        first_range=f"{first.start}–{first.end}",
-                        second_range=f"{second.start}–{second.end}",
-                        question=(
-                            "در یکشنبه کدام کلاس ضبط‌شده است: شیمی یا دینی؟ "
-                            "تا زمانی که این مشخص نشود، برنامهٔ قطعی تولید نمی‌شود."
-                        ),
-                    )
-                )
-    return conflicts
-
-
 # ---------------------------------------------------------------------------
 # مراحل راه‌اندازی
 # ---------------------------------------------------------------------------
@@ -283,7 +142,7 @@ ONBOARDING_STEPS: tuple[OnboardingStep, ...] = (
         key="exam_date",
         title="تاریخ آزمون هدف",
         description=(
-            "به‌صورت شمسی وارد کنید (مثل ۱۴۰۵/۰۷/۲۴). اگر تاریخ رسمی هنوز "
+            "به‌صورت شمسی و با قالب سال/ماه/روز وارد کنید. اگر تاریخ رسمی هنوز "
             "اعلام نشده، آن را تخمینی وارد کنید."
         ),
         kind="date",
@@ -333,24 +192,11 @@ ONBOARDING_STEPS: tuple[OnboardingStep, ...] = (
         key="weekly_schedule",
         title="برنامهٔ کلاس‌ها و تعهدات",
         description=(
-            "برنامهٔ هفتگی ثبت‌شدهٔ شما بارگذاری می‌شود. می‌توانید هر مورد را ویرایش کنید."
+            "فعلاً هیچ کلاس یا تعهد هفتگی ثبت نشده است. می‌توانید این مرحله را خالی بگذارید "
+            "و رویدادهای واقعی خود را بعداً از بخش تنظیمات اضافه کنید."
         ),
         kind="schedule",
-        required=True,
-    ),
-    OnboardingStep(
-        key="sunday_recorded",
-        title="کلاس ضبط‌شدهٔ یکشنبه",
-        description=(
-            "کلاس شیمی و دینی یکشنبه با هم هم‌پوشانی دارند. کدام‌یک ضبط‌شده/غیرهم‌زمان است؟"
-        ),
-        kind="choice",
-        options=("شیمی", "دینی", "هیچ‌کدام (برنامهٔ دیگری دارم)"),
-        required=True,
-        blocking_question=(
-            "در یکشنبه کدام کلاس ضبط‌شده است: شیمی یا دینی؟ تا حل تعارض، "
-            "برنامهٔ قطعی تولید نمی‌شود."
-        ),
+        required=False,
     ),
     OnboardingStep(
         key="energy_level",
@@ -420,10 +266,21 @@ class OnboardingState:
     @classmethod
     def from_json(cls, text: str) -> "OnboardingState":
         raw = json.loads(text)
+        values = dict(raw.get("values", {}))
+        # Remove only the retired UI's generated summary/answer, never user records.
+        values.pop("weekly_schedule", None)
+        values.pop("sunday_recorded", None)
+        completed_steps = set(raw.get("completed_steps", []))
+        completed_steps.discard("weekly_schedule")
+        completed_steps.discard("sunday_recorded")
+        current_index = int(raw.get("current_index", 0))
+        # The retired Sunday question was immediately after the schedule step.
+        if current_index > 11:
+            current_index -= 1
         return cls(
-            values=dict(raw.get("values", {})),
-            completed_steps=set(raw.get("completed_steps", [])),
-            current_index=int(raw.get("current_index", 0)),
+            values=values,
+            completed_steps=completed_steps,
+            current_index=current_index,
         )
 
     def set_value(self, key: str, value: str) -> None:
@@ -485,6 +342,5 @@ def summarize(state: OnboardingState) -> list[str]:
         f"تاریخ: {values.get('exam_date', '—')} ({values.get('exam_date_status', '—')})",
         f"دروس: {values.get('subjects', '—')}",
         f"خواب: {values.get('sleep_time', '—')}",
-        f"کلاس ضبط‌شدهٔ یکشنبه: {values.get('sunday_recorded', '—')}",
     ]
     return lines
