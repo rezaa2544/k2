@@ -29,8 +29,26 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _force_utf8_output() -> None:
+    """کنسول ویندوز به‌صورت پیش‌فرض cp1252 است و متن فارسی را نمی‌پذیرد.
+
+    بدون این تنظیم، اجرای ``--headless`` روی ویندوز با ``UnicodeEncodeError``
+    متوقف می‌شود. اگر خروجی قابل تنظیم نباشد (مثلاً build بدون کنسول)،
+    بی‌صدا رد می‌شویم.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):  # pragma: no cover - وابسته به ترمینال
+            pass
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     """اجرای برنامه."""
+    _force_utf8_output()
     args = _parse_args(argv)
 
     db_path = Path(args.db) if args.db else database_path()

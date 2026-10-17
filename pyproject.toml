@@ -11,7 +11,9 @@ requires-python = ">=3.10"
 license = { text = "Proprietary" }
 authors = [{ name = "K2 Team" }]
 dependencies = [
-    "PySide6>=6.5",
+    # ۶.۹.۱ آخرین نسخه‌ای است که Qt6Core.dll ویندوز به DLLهای ICU سیستمی
+    # (icuuc.dll) وابسته نیست — جزئیات در docs/RELEASE_AND_WINDOWS_PACKAGING.md
+    "PySide6==6.9.1",
     "jdatetime>=4.1",
 ]
 

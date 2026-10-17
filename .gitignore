@@ -33,6 +33,7 @@ backups/
 # --- خروجی بسته‌بندی ---
 packaging/output/
 packaging/work/
+release/
 *.exe
 *.spec.lock
 
