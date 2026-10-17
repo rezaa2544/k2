@@ -8,7 +8,7 @@
 
 | مورد | وضعیت | شواهد |
 |---|---|---|
-| ساخت EXE ویندوز ۶۴بیتی | ✅ **انجام شد** | `packaging/output/K2/K2.exe` — ۱٬۹۹۱٬۸۸۴ بایت (PySide6 6.9.1؛ بازسازی‌شده پس از بهبود UI/UX) |
+| ساخت EXE ویندوز ۶۴بیتی | ✅ **انجام شد** | `packaging/output/K2/K2.exe` — ۲٬۰۲۰٬۳۸۶ بایت (PySide6 6.9.1؛ بازسازی‌شده پس از بهبود UI/UX) |
 | اجرای واقعی EXE در حالت `--headless` | ✅ **انجام شد** (exit code صفر، پایگاه داده ساخته شد) | [Windows Actions موفق](https://github.com/rezaa2544/k2/actions/runs/39051925261) روی `windows-latest` |
 | اجرای GUI نسخهٔ تازهٔ منوها | ⚠️ **تأییدنشده روی Windows فیزیکی** | تست GUI و پیش‌نمایش Qt offscreen پاس شده؛ اسکرین‌شات `docs/images/k2-dashboard.png` مربوط به build قبلی است |
 | اجرا روی ویندوز فیزیکی ۱۰/۱۱ | ❌ **انجام‌نشده** | در این محیط دسترسی به ویندوز واقعی نبود |
@@ -26,7 +26,7 @@
 
 ```
 packaging/output/K2/
-├── K2.exe              ۱٬۹۹۱٬۸۸۴ بایت   (بوت‌لودر PyInstaller + آرشیو)
+├── K2.exe              ۲٬۰۲۰٬۳۸۶ بایت   (بوت‌لودر PyInstaller + آرشیو)
 └── _internal/          ~۱۱۰ مگابایت       (Qt6، shiboken6، پایتون، فونت‌ها)
     ├── PySide6/
     ├── k2/ui/assets/fonts/Vazirmatn-{Regular,Bold}.ttf
@@ -36,11 +36,11 @@ packaging/output/K2/
 SHA-256:
 
 ```
-b22463ada0d9e657c1a1f2d4a2b5bdaf4adf60884b42c131f50a718cf9684aa0  K2.exe
-9fb249987f22c99e798ab0a9ac5616512562a7d570c3f20bd95456b218df726f  K2-windows-x64.zip
+0e4943849e15e8e83c2e9d14c83020d928ffbb011c898ffaf2ec9c67ad403451  K2.exe
+3e5c73dc52e03ba9fdf2dbe3c5d4562f84ebb9d3810f6efa490a0a1e33b43179  K2-windows-x64.zip
 ```
 
-نسخهٔ ساخت محلی در `release/K2-windows-x64.zip` می‌ماند (خروجی در `.gitignore` است). برای درخواست دانلود مستقیم کاربر، همان بسته در `downloads/K2-windows-x64.zip` نیز در مخزن ثبت شده است (۴۹٬۶۹۷٬۸۷۴ بایت؛ حدود ۴۵ MiB). این آرشیو شامل `K2.exe` و `_internal/` است؛ فایل EXE به‌تنهایی اجراشدنی نیست.
+نسخهٔ ساخت محلی در `release/K2-windows-x64.zip` می‌ماند (خروجی در `.gitignore` است). برای درخواست دانلود مستقیم کاربر، همان بسته در `downloads/K2-windows-x64.zip` نیز در مخزن ثبت شده است (۴۹٬۷۲۶٬۷۶۲ بایت؛ حدود ۴۵ MiB). این آرشیو شامل `K2.exe` و `_internal/` است؛ فایل EXE به‌تنهایی اجراشدنی نیست.
 
 ---
 
