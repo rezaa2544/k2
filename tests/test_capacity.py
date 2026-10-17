@@ -165,3 +165,16 @@ def test_alternate_routine_applies_every_other_day():
     )
     assert first.fixed_minutes == 15
     assert second.fixed_minutes == 0
+
+
+def test_overnight_routine_blocks_both_sides_of_midnight():
+    routine = make_routine("خواب", "23:00", "06:00")
+    routine.kind = RoutineKind.SLEEP
+    routine.weekdays = frozenset(range(7))
+    # برای پنجره‌ای که از ۰۵:۰۰ آغاز می‌شود، نیمهٔ صبح هم باید مسدود باشد.
+    breakdown = compute_capacity(
+        SATURDAY, wake_minute=5 * 60, sleep_minute=23 * 60,
+        routines=[routine], settings=Settings(),
+    )
+    assert breakdown.fixed_minutes == 60  # فقط 05:00–06:00 داخل پنجرهٔ بیداری است
+    assert all(not (iv.start < 5 * 60 + 30 < iv.end) for iv in breakdown.free)

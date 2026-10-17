@@ -10,7 +10,7 @@ import pytest
 pytestmark = pytest.mark.gui
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLineEdit
+from PySide6.QtWidgets import QComboBox, QLineEdit
 
 from k2.service import AdvisorService
 from k2.ui.app import APP_TITLE, MainWindow
@@ -185,3 +185,135 @@ def test_stylesheet_defines_rtl_and_theme_colors():
     assert "QMenu {" in css
     assert "QMenu::item:selected" in css
     assert "QMenuBar#appMenuBar::item:selected" in css
+
+
+def test_first_run_onboarding_is_scheduled_only_until_final_confirmation(qapp, tmp_path: Path):
+    service = AdvisorService(tmp_path / "first-run.db")
+    try:
+        window = MainWindow(service)
+        called = []
+        window.run_onboarding = lambda: called.append("shown")  # type: ignore[method-assign]
+        assert window._onboarding_auto_pending is True
+        window.start_first_run_onboarding()
+        from PySide6.QtTest import QTest
+
+        QTest.qWait(20)
+        assert called == ["shown"]
+
+        state = service.onboarding_state()
+        state.complete_step("confirm")
+        service.save_onboarding_state(state)
+        next_window = MainWindow(service)
+        assert next_window._onboarding_auto_pending is False
+        next_window.start_first_run_onboarding()
+        QTest.qWait(20)
+        assert called == ["shown"]
+        window.close()
+        next_window.close()
+    finally:
+        service.close()
+
+
+def test_onboarding_subjects_and_user_books_are_persisted_without_official_weights(qapp, tmp_path: Path):
+    from k2.ui.views.onboarding import OnboardingWizard
+
+    service = AdvisorService(tmp_path / "profile-data.db")
+    try:
+        wizard = OnboardingWizard(service)
+        wizard.state.values.update({
+            "exam_name": "کنکور آزمایشی",
+            "exam_group": "علوم تجربی",
+            "exam_year": "۱۴۰۶",
+            "exam_date_status": "نامشخص",
+            "subject_selection_by_group": '{"علوم تجربی":["زیست‌شناسی"]}',
+            "books": '[{"subject":"زیست‌شناسی","title":"کتاب زیست ۱",'
+                     '"code":"110216","grade":"دهم","year":"1404",'
+                     '"source":"https://chap.sch.ir/","selected":true}]',
+        })
+        wizard._apply_to_profile()
+        profile = service.active_exam_profile()
+        assert profile is not None
+        assert profile.exam_year == 1406
+        subjects = service.repo.list_subjects(profile.id, include_unselected=True)
+        assert len(subjects) == 1 and subjects[0].name == "زیست‌شناسی"
+        assert subjects[0].is_selected is True
+        assert subjects[0].exam_coefficient is None
+        assert subjects[0].academic_coefficient is None
+        books = service.repo.list_textbooks(profile.id)
+        assert len(books) == 1
+        assert books[0].title == "کتاب زیست ۱"
+        assert books[0].source_status == "user_entered_unverified"
+        assert books[0].is_selected is True
+    finally:
+        service.close()
+
+
+def test_calendar_dialog_values_roundtrip_and_validate(qapp, tmp_path: Path):
+    from k2.domain.enums import FixedEventKind, RoutineKind
+    from k2.ui.views.settings import RoutineDialog, ScheduleEventDialog
+
+    service = AdvisorService(tmp_path / "dialogs.db")
+    try:
+        event_dialog = ScheduleEventDialog(service)
+        event_dialog.title_edit.setText("کلاس زیست")
+        event_dialog.kind_combo.setCurrentIndex(
+            event_dialog.kind_combo.findData(FixedEventKind.LIVE_CLASS.value)
+        )
+        event_dialog.weekday_combo.setCurrentIndex(2)
+        from PySide6.QtCore import QTime
+
+        event_dialog.start_edit.setTime(QTime(15, 0))
+        event_dialog.end_edit.setTime(QTime(17, 0))
+        event = event_dialog.value()
+        event_id = service.create_fixed_event(event)
+        assert service.repo.list_fixed_events()[0].id == event_id
+        assert service.repo.list_fixed_events()[0].start_minute == 900
+
+        routine_dialog = RoutineDialog()
+        routine_dialog.title_edit.setText("خواب")
+        routine_dialog.kind_combo.setCurrentIndex(
+            routine_dialog.kind_combo.findData(RoutineKind.SLEEP.value)
+        )
+        routine_dialog.start_edit.setTime(QTime(23, 0))
+        routine_dialog.end_edit.setTime(QTime(6, 0))
+        routine = routine_dialog.value()
+        routine_id = service.create_routine(routine)
+        assert service.repo.list_routines()[0].id == routine_id
+        assert service.repo.list_routines()[0].start_minute > service.repo.list_routines()[0].end_minute
+    finally:
+        service.close()
+
+
+def test_subject_picker_retains_each_track_and_book_checks(qapp, tmp_path: Path):
+    import json
+    from k2.ui.views.onboarding import OnboardingWizard
+
+    service = AdvisorService(tmp_path / "picker.db")
+    try:
+        wizard = OnboardingWizard(service)
+        group_combo = wizard.findChild(QComboBox, "field_exam_group")
+        assert group_combo is not None
+        group_combo.setCurrentText("علوم تجربی")
+        wizard._set_current_subjects(True)
+        group_combo.setCurrentText("علوم انسانی")
+        wizard._set_current_subjects(False)
+        group_combo.setCurrentText("علوم تجربی")
+        assert all(
+            wizard.subject_list.item(i).checkState() == Qt.Checked
+            for i in range(wizard.subject_list.count())
+        )
+        selections = json.loads(wizard.state.values["subject_selection_by_group"])
+        assert set(selections["علوم تجربی"]) == {"زیست‌شناسی", "شیمی", "فیزیک", "ریاضی", "زمین‌شناسی"}
+        assert "علوم انسانی" in selections
+
+        wizard.book_title_edit.setText("کتاب آزمایشی")
+        wizard.book_code_edit.setText("X-1")
+        wizard._add_book()
+        item = wizard.book_list.item(0)
+        item.setCheckState(Qt.Unchecked)
+        books = json.loads(wizard.state.values["books"])
+        assert books[0]["title"] == "کتاب آزمایشی"
+        assert books[0]["selected"] is False
+        assert "تأییدنشده" in item.text()
+    finally:
+        service.close()

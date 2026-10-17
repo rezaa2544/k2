@@ -12,11 +12,13 @@ from k2.onboarding import (
     build_sample_fixed_events,
     build_sample_routines,
     detect_sample_conflicts,
+    detect_event_conflicts,
     parse_clock_pair,
     parse_subjects,
     summarize,
 )
 from k2.service import AdvisorService
+from k2.domain.models import FixedEvent
 
 
 def test_sample_schedule_contains_all_week_days():
@@ -124,3 +126,28 @@ def test_onboarding_steps_cover_required_areas():
         "sunday_recorded",
     ):
         assert required in keys
+
+
+def test_dynamic_conflict_detection_checks_nested_overlaps_and_ignores_recorded():
+    events = [
+        FixedEvent(title="بلند", weekday=2, start_minute=10 * 60, end_minute=14 * 60),
+        FixedEvent(title="درونی", weekday=2, start_minute=11 * 60, end_minute=12 * 60),
+        FixedEvent(title="ضبطی", weekday=2, start_minute=11 * 60, end_minute=13 * 60, is_recorded=True),
+    ]
+    conflicts = detect_event_conflicts(events)
+    assert len(conflicts) == 1
+    assert conflicts[0].weekday == 2
+    assert {conflicts[0].first_title, conflicts[0].second_title} == {"بلند", "درونی"}
+
+
+def test_service_schedule_crud_is_persistent_and_detects_conflict(service: AdvisorService):
+    first = FixedEvent(title="کلاس الف", weekday=0, start_minute=600, end_minute=720)
+    second = FixedEvent(title="کلاس ب", weekday=0, start_minute=700, end_minute=800)
+    service.create_fixed_event(first)
+    service.create_fixed_event(second)
+    assert service.schedule_conflicts()
+    second.is_recorded = True
+    service.update_fixed_event(second)
+    assert not service.schedule_conflicts()
+    service.delete_fixed_event(second.id)
+    assert len(service.repo.list_fixed_events()) == 1

@@ -155,6 +155,48 @@ class ScheduleConflict:
         )
 
 
+def detect_event_conflicts(events: Sequence[FixedEvent]) -> list[ScheduleConflict]:
+    """تعارض‌های واقعی بین رویدادهای ذخیره‌شده را می‌یابد.
+
+    رویداد ضبط‌شده غیرهم‌زمان است و مانع برنامه‌ریزی در همان بازه نمی‌شود؛
+    اما دو تعهد هم‌زمانِ زنده/ثابت به‌عنوان تعارض مسدودکننده گزارش می‌شوند.
+    همهٔ جفت‌ها بررسی می‌شوند تا تعارض‌های تودرتو هم از قلم نیفتند.
+    """
+    result: list[ScheduleConflict] = []
+    by_day: dict[int, list[FixedEvent]] = {}
+    for event in events:
+        if event.end_minute > event.start_minute:
+            by_day.setdefault(event.weekday, []).append(event)
+    for weekday, day_events in by_day.items():
+        ordered = sorted(day_events, key=lambda item: (item.start_minute, item.end_minute))
+        for index, first in enumerate(ordered):
+            for second in ordered[index + 1:]:
+                if second.start_minute >= first.end_minute:
+                    break
+                if first.is_recorded or second.is_recorded:
+                    continue
+                result.append(
+                    ScheduleConflict(
+                        weekday=weekday,
+                        first_title=first.title,
+                        second_title=second.title,
+                        first_range=(
+                            f"{first.start_minute // 60:02d}:{first.start_minute % 60:02d}–"
+                            f"{first.end_minute // 60:02d}:{first.end_minute % 60:02d}"
+                        ),
+                        second_range=(
+                            f"{second.start_minute // 60:02d}:{second.start_minute % 60:02d}–"
+                            f"{second.end_minute // 60:02d}:{second.end_minute % 60:02d}"
+                        ),
+                        question=(
+                            "یکی از رویدادها را ضبط‌شده/غیرهم‌زمان علامت بزنید یا زمان را اصلاح کنید."
+                        ),
+                        blocking=True,
+                    )
+                )
+    return result
+
+
 def detect_sample_conflicts() -> list[ScheduleConflict]:
     """تعارض‌های برنامهٔ نمونه را پیدا می‌کند (ONB-03)."""
     conflicts: list[ScheduleConflict] = []
@@ -215,7 +257,19 @@ ONBOARDING_STEPS: tuple[OnboardingStep, ...] = (
         key="exam_group",
         title="گروه/رشتهٔ آزمایشی",
         description="گروه آزمایشی هدف و رشته یا دانشگاه موردنظر (اختیاری).",
-        kind="text",
+        kind="choice",
+        options=("علوم تجربی", "علوم ریاضی و فنی", "علوم انسانی", "سایر/تغییر رشته"),
+        required=True,
+    ),
+    OnboardingStep(
+        key="exam_year",
+        title="سال آزمون هدف",
+        description=(
+            "سال آزمون را انتخاب کنید. اگر دادهٔ رسمی آن سال در برنامه تأیید نشده باشد، "
+            "ضرایب خالی می‌مانند و برای اولویت‌بندی رسمی استفاده نمی‌شوند."
+        ),
+        kind="choice",
+        options=("۱۴۰۵", "۱۴۰۶", "سال دیگر / هنوز مشخص نیست"),
         required=True,
     ),
     OnboardingStep(
@@ -251,13 +305,22 @@ ONBOARDING_STEPS: tuple[OnboardingStep, ...] = (
     ),
     OnboardingStep(
         key="subjects",
-        title="دروس و ضرایب",
+        title="انتخاب درس‌ها",
         description=(
-            "نام درس و ضریب آن را به شکل «درس:ضریب» و با جداکنندهٔ ویرگول وارد کنید؛ "
-            "مثل «ریاضی:۳, فیزیک:۳, شیمی:۳, زیست:۲, زمین‌شناسی:۱»."
+            "درس‌های موردنیازتان را انتخاب کنید. انتخاب همه، هیچ‌کدام یا ترکیب دلخواه "
+            "ممکن است؛ تغییر رشته انتخاب‌های قبلی را حذف نمی‌کند."
         ),
-        kind="text",
+        kind="multiselect",
         required=True,
+    ),
+    OnboardingStep(
+        key="books",
+        title="کتاب‌ها و منابع هر درس",
+        description=(
+            "برای هر کتاب یک ردیف با قالب «درس | عنوان | کد | پایه | سال چاپ | پیوند منبع» "
+            "وارد کنید. موردهای واردشده تا زمان بازبینی پیوند، تأییدنشده می‌مانند."
+        ),
+        kind="books",
     ),
     OnboardingStep(
         key="sleep_time",
@@ -417,6 +480,7 @@ def summarize(state: OnboardingState) -> list[str]:
     lines = [
         f"نام: {values.get('student_name', '—')}",
         f"گروه/رشته: {values.get('exam_group', '—')}",
+        f"سال آزمون: {values.get('exam_year', '—')}",
         f"آزمون: {values.get('exam_name', '—')}",
         f"تاریخ: {values.get('exam_date', '—')} ({values.get('exam_date_status', '—')})",
         f"دروس: {values.get('subjects', '—')}",

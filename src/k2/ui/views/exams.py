@@ -49,7 +49,7 @@ class RecordAttemptDialog(QDialog):
 
         self.subject_combo = QComboBox()
         self.subject_combo.addItem("کل آزمون", None)
-        for subject in service.repo.list_subjects():
+        for subject in service.selected_subjects():
             self.subject_combo.addItem(subject.name, subject.id)
         form.addRow("درس:", self.subject_combo)
 

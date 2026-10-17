@@ -93,6 +93,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     service = AdvisorService(db_path)
     window = MainWindow(service)
     window.show()
+    window.start_first_run_onboarding()
     exit_code = app.exec()
     service.close()
     return exit_code

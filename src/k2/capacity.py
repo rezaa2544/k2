@@ -133,17 +133,20 @@ def awake_segments(wake_minute: int, sleep_minute: int) -> list[tuple[int, int]]
 # ---------------------------------------------------------------------------
 
 
-def _routine_applies(routine: Routine, date: _dt.date) -> bool:
-    from .jdate import weekday_index
-
-    weekday = weekday_index(date)
+def _routine_applies_weekday(routine: Routine, weekday: int) -> bool:
     if routine.scope == RoutineScope.ALTERNATE:
-        # یک‌روزدرمیان بر پایهٔ فاصله از مبدأ مشخص.
+        # یک‌روزدرمیان بر پایهٔ یکی از روزهای انتخاب‌شده به‌عنوان مبدأ.
         origin = routine.weekdays
         anchor = min(origin) if origin else 0
         distance = (weekday - anchor) % 7
         return distance % 2 == 0
     return weekday in routine.weekdays
+
+
+def _routine_applies(routine: Routine, date: _dt.date) -> bool:
+    from .jdate import weekday_index
+
+    return _routine_applies_weekday(routine, weekday_index(date))
 
 
 def collect_fixed_intervals(
@@ -164,7 +167,7 @@ def collect_fixed_intervals(
     intervals: list[Interval] = []
 
     for event in fixed_events:
-        if event.weekday != weekday:
+        if event.weekday != weekday or event.is_recorded:
             continue
         exc = exception_map.get(event.id)
         if exc is not None and exc.cancelled:
@@ -185,20 +188,36 @@ def collect_fixed_intervals(
         )
 
     for routine in routines:
-        if not _routine_applies(routine, date):
-            continue
-        if routine.end_minute <= routine.start_minute:
+        if routine.end_minute == routine.start_minute:
             continue
         kind = "essential"
-        intervals.append(
-            Interval(
-                start=routine.start_minute,
-                end=routine.end_minute,
-                label=routine.title,
-                kind=kind,
-                hard=True,
+        if routine.end_minute > routine.start_minute:
+            if _routine_applies(routine, date):
+                intervals.append(
+                    Interval(
+                        start=routine.start_minute, end=routine.end_minute,
+                        label=routine.title, kind=kind, hard=True,
+                    )
+                )
+            continue
+
+        # بازهٔ شبانه مثل خواب ۲۳:۰۰ تا ۰۶:۰۰ به دو نیمهٔ روز تقسیم می‌شود.
+        # نیمهٔ پس از نیمه‌شب از روزِ قبلی به ارث می‌رسد.
+        weekday = weekday_index(date)
+        if _routine_applies_weekday(routine, weekday):
+            intervals.append(
+                Interval(
+                    start=routine.start_minute, end=DAY_MINUTES,
+                    label=routine.title, kind=kind, hard=True,
+                )
             )
-        )
+        if _routine_applies_weekday(routine, (weekday - 1) % 7) and routine.end_minute > 0:
+            intervals.append(
+                Interval(
+                    start=0, end=routine.end_minute,
+                    label=routine.title, kind=kind, hard=True,
+                )
+            )
 
     return intervals
 

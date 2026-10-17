@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as _dt
 from typing import Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QFrame,
@@ -62,6 +62,7 @@ class MainWindow(QMainWindow):
         self._build()
         self._build_menu()
         self.refresh_all()
+        self._onboarding_auto_pending = not self.service.onboarding_completed()
 
     def _build(self) -> None:
         central = QWidget()
@@ -249,6 +250,17 @@ class MainWindow(QMainWindow):
         self.status_label.setText(
             f"اطلاعات محلی ذخیره شد · {self.service.db_path}"
         )
+
+    def start_first_run_onboarding(self) -> None:
+        """پس از نمایش پنجره، راه‌اندازی ناقص را خودکار آغاز/ادامه می‌کند."""
+        if self._onboarding_auto_pending:
+            QTimer.singleShot(0, self._run_first_onboarding)
+
+    def _run_first_onboarding(self) -> None:
+        if not self._onboarding_auto_pending or self.service.onboarding_completed():
+            return
+        self._onboarding_auto_pending = False
+        self.run_onboarding()
 
     def run_onboarding(self) -> None:
         wizard = OnboardingWizard(self.service, self)

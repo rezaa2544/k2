@@ -41,6 +41,7 @@ from ..domain.models import (
     Routine,
     Subject,
     Topic,
+    Textbook,
 )
 from ..domain.state_machine import validate_transition
 
@@ -97,8 +98,8 @@ class Repository:
             """
             INSERT INTO exam_profile
                 (name, group_name, target_date, date_status, source_note,
-                 negative_marking_ratio, percentage_formula, regulation_version, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 negative_marking_ratio, percentage_formula, regulation_version, exam_year, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 profile.name,
@@ -109,6 +110,7 @@ class Repository:
                 profile.negative_marking_ratio,
                 profile.percentage_formula,
                 profile.regulation_version,
+                profile.exam_year,
                 _datetime_str(profile.created_at or _now()),
             ),
         )
@@ -121,7 +123,7 @@ class Repository:
             UPDATE exam_profile
                SET name = ?, group_name = ?, target_date = ?, date_status = ?,
                    source_note = ?, negative_marking_ratio = ?, percentage_formula = ?,
-                   regulation_version = ?
+                   regulation_version = ?, exam_year = ?
              WHERE id = ?
             """,
             (
@@ -133,6 +135,7 @@ class Repository:
                 profile.negative_marking_ratio,
                 profile.percentage_formula,
                 profile.regulation_version,
+                profile.exam_year,
                 profile.id,
             ),
         )
@@ -160,6 +163,7 @@ class Repository:
             negative_marking_ratio=row["negative_marking_ratio"],
             percentage_formula=row["percentage_formula"],
             regulation_version=row["regulation_version"],
+            exam_year=row["exam_year"],
             created_at=_parse_datetime(row["created_at"]),
         )
 
@@ -167,26 +171,64 @@ class Repository:
 
     def create_subject(self, subject: Subject) -> int:
         cursor = self.conn.execute(
-            "INSERT INTO subject (exam_profile_id, name, coefficient, topic_weight) "
-            "VALUES (?, ?, ?, ?)",
+            """INSERT INTO subject
+                (exam_profile_id, name, coefficient, topic_weight, is_selected,
+                 exam_coefficient, exam_coefficient_status, exam_coefficient_source,
+                 academic_coefficient, academic_coefficient_status, academic_coefficient_source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 subject.exam_profile_id,
                 subject.name,
                 subject.coefficient,
                 subject.topic_weight,
+                1 if subject.is_selected else 0,
+                subject.exam_coefficient,
+                subject.exam_coefficient_status,
+                subject.exam_coefficient_source,
+                subject.academic_coefficient,
+                subject.academic_coefficient_status,
+                subject.academic_coefficient_source,
             ),
         )
         subject.id = cursor.lastrowid
         return subject.id
 
-    def list_subjects(self, exam_profile_id: Optional[int] = None) -> list[Subject]:
-        if exam_profile_id is None:
-            rows = self.conn.execute("SELECT * FROM subject ORDER BY id").fetchall()
-        else:
-            rows = self.conn.execute(
-                "SELECT * FROM subject WHERE exam_profile_id = ? ORDER BY id",
-                (exam_profile_id,),
-            ).fetchall()
+    def update_subject(self, subject: Subject) -> None:
+        self.conn.execute(
+            """UPDATE subject SET name = ?, coefficient = ?, topic_weight = ?,
+                 is_selected = ?, exam_coefficient = ?, exam_coefficient_status = ?,
+                 exam_coefficient_source = ?, academic_coefficient = ?,
+                 academic_coefficient_status = ?, academic_coefficient_source = ?
+               WHERE id = ?""",
+            (
+                subject.name,
+                subject.coefficient,
+                subject.topic_weight,
+                1 if subject.is_selected else 0,
+                subject.exam_coefficient,
+                subject.exam_coefficient_status,
+                subject.exam_coefficient_source,
+                subject.academic_coefficient,
+                subject.academic_coefficient_status,
+                subject.academic_coefficient_source,
+                subject.id,
+            ),
+        )
+
+    def list_subjects(
+        self, exam_profile_id: Optional[int] = None, *, include_unselected: bool = True
+    ) -> list[Subject]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if exam_profile_id is not None:
+            clauses.append("exam_profile_id = ?")
+            params.append(exam_profile_id)
+        if not include_unselected:
+            clauses.append("is_selected = 1")
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        rows = self.conn.execute(
+            f"SELECT * FROM subject{where} ORDER BY id", params
+        ).fetchall()
         return [
             Subject(
                 id=row["id"],
@@ -194,9 +236,90 @@ class Repository:
                 name=row["name"],
                 coefficient=row["coefficient"],
                 topic_weight=row["topic_weight"],
+                is_selected=bool(row["is_selected"]),
+                exam_coefficient=row["exam_coefficient"],
+                exam_coefficient_status=row["exam_coefficient_status"],
+                exam_coefficient_source=row["exam_coefficient_source"],
+                academic_coefficient=row["academic_coefficient"],
+                academic_coefficient_status=row["academic_coefficient_status"],
+                academic_coefficient_source=row["academic_coefficient_source"],
             )
             for row in rows
         ]
+
+    def create_textbook(self, book: Textbook) -> int:
+        cursor = self.conn.execute(
+            """INSERT INTO textbook
+                (exam_profile_id, subject_id, title, book_code, grade, edition_year,
+                 source_url, source_status, is_selected)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                book.exam_profile_id, book.subject_id, book.title, book.book_code,
+                book.grade, book.edition_year, book.source_url, book.source_status,
+                1 if book.is_selected else 0,
+            ),
+        )
+        book.id = cursor.lastrowid
+        return book.id
+
+    def save_textbook_selection(self, book: Textbook) -> int:
+        row = self.conn.execute(
+            """SELECT id FROM textbook WHERE exam_profile_id = ?
+               AND IFNULL(subject_id, -1) = IFNULL(?, -1)
+               AND title = ? AND book_code = ? ORDER BY id LIMIT 1""",
+            (book.exam_profile_id, book.subject_id, book.title, book.book_code),
+        ).fetchone()
+        if row:
+            book.id = row["id"]
+            self.conn.execute(
+                """UPDATE textbook SET grade = ?, edition_year = ?, source_url = ?,
+                     source_status = ?, is_selected = ? WHERE id = ?""",
+                (
+                    book.grade, book.edition_year, book.source_url, book.source_status,
+                    1 if book.is_selected else 0, book.id,
+                ),
+            )
+            return book.id
+        return self.create_textbook(book)
+
+    def list_textbooks(
+        self, exam_profile_id: int, *, subject_id: Optional[int] = None,
+        include_unselected: bool = True,
+    ) -> list[Textbook]:
+        clauses = ["exam_profile_id = ?"]
+        params: list[Any] = [exam_profile_id]
+        if subject_id is not None:
+            clauses.append("subject_id = ?")
+            params.append(subject_id)
+        if not include_unselected:
+            clauses.append("is_selected = 1")
+        rows = self.conn.execute(
+            "SELECT * FROM textbook WHERE " + " AND ".join(clauses) + " ORDER BY id",
+            params,
+        ).fetchall()
+        return [
+            Textbook(
+                id=row["id"], exam_profile_id=row["exam_profile_id"],
+                subject_id=row["subject_id"], title=row["title"],
+                book_code=row["book_code"], grade=row["grade"],
+                edition_year=row["edition_year"], source_url=row["source_url"],
+                source_status=row["source_status"],
+                is_selected=bool(row["is_selected"]),
+            )
+            for row in rows
+        ]
+
+    def set_subject_selected(self, subject_id: int, selected: bool) -> None:
+        self.conn.execute(
+            "UPDATE subject SET is_selected = ? WHERE id = ?",
+            (1 if selected else 0, subject_id),
+        )
+
+    def set_textbook_selected(self, textbook_id: int, selected: bool) -> None:
+        self.conn.execute(
+            "UPDATE textbook SET is_selected = ? WHERE id = ?",
+            (1 if selected else 0, textbook_id),
+        )
 
     def create_topic(self, topic: Topic) -> int:
         cursor = self.conn.execute(
@@ -282,6 +405,17 @@ class Repository:
             for row in rows
         ]
 
+    def update_fixed_event(self, event: FixedEvent) -> None:
+        self.conn.execute(
+            """UPDATE fixed_event SET title = ?, kind = ?, subject_id = ?, weekday = ?,
+                 start_minute = ?, end_minute = ?, is_recorded = ?, notes = ? WHERE id = ?""",
+            (
+                event.title, event.kind.value, event.subject_id, event.weekday,
+                event.start_minute, event.end_minute, 1 if event.is_recorded else 0,
+                event.notes, event.id,
+            ),
+        )
+
     def delete_fixed_event(self, event_id: int) -> None:
         self.conn.execute("DELETE FROM fixed_event WHERE id = ?", (event_id,))
 
@@ -303,6 +437,20 @@ class Repository:
         )
         routine.id = cursor.lastrowid
         return routine.id
+
+    def update_routine(self, routine: Routine) -> None:
+        self.conn.execute(
+            """UPDATE routine SET title = ?, kind = ?, start_minute = ?, end_minute = ?,
+                 weekdays = ?, scope = ?, counts_as_study = ? WHERE id = ?""",
+            (
+                routine.title, routine.kind.value, routine.start_minute,
+                routine.end_minute, json.dumps(sorted(routine.weekdays)),
+                routine.scope.value, 1 if routine.counts_as_study else 0, routine.id,
+            ),
+        )
+
+    def delete_routine(self, routine_id: int) -> None:
+        self.conn.execute("DELETE FROM routine WHERE id = ?", (routine_id,))
 
     def list_routines(self) -> list[Routine]:
         rows = self.conn.execute("SELECT * FROM routine ORDER BY id").fetchall()

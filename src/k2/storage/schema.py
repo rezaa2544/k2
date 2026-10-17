@@ -7,7 +7,7 @@ migration انجام نمی‌شود.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 #: اسکریپت نسخهٔ ۱ — اسکیمای اولیه.
 MIGRATION_1 = """
@@ -229,8 +229,40 @@ CREATE INDEX IF NOT EXISTS idx_review_item_due ON review_item(due_date);
 CREATE INDEX IF NOT EXISTS idx_exam_attempt_taken ON exam_attempt(taken_at);
 """
 
+#: نسخهٔ ۳ — سال هدف، وضعیت انتخاب درس و منشأ ضرایب به‌صورت تفکیک‌شده.
+#: ضریب برنامه‌ریزیِ قدیمی حفظ می‌شود؛ ضرایب آزمون و سوابق تحصیلی ستون‌های جدا دارند.
+MIGRATION_3 = """
+ALTER TABLE exam_profile ADD COLUMN exam_year INTEGER;
+ALTER TABLE subject ADD COLUMN is_selected INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE subject ADD COLUMN exam_coefficient REAL;
+ALTER TABLE subject ADD COLUMN exam_coefficient_status TEXT NOT NULL DEFAULT 'unknown';
+ALTER TABLE subject ADD COLUMN exam_coefficient_source TEXT NOT NULL DEFAULT '';
+ALTER TABLE subject ADD COLUMN academic_coefficient REAL;
+ALTER TABLE subject ADD COLUMN academic_coefficient_status TEXT NOT NULL DEFAULT 'unknown';
+ALTER TABLE subject ADD COLUMN academic_coefficient_source TEXT NOT NULL DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS textbook (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    exam_profile_id INTEGER NOT NULL REFERENCES exam_profile(id) ON DELETE CASCADE,
+    subject_id      INTEGER REFERENCES subject(id) ON DELETE SET NULL,
+    title           TEXT NOT NULL,
+    book_code       TEXT NOT NULL DEFAULT '',
+    grade           TEXT NOT NULL DEFAULT '',
+    edition_year    INTEGER,
+    source_url      TEXT NOT NULL DEFAULT '',
+    source_status   TEXT NOT NULL DEFAULT 'user_entered',
+    is_selected     INTEGER NOT NULL DEFAULT 1,
+    UNIQUE(exam_profile_id, subject_id, title, book_code)
+);
+CREATE INDEX IF NOT EXISTS idx_subject_profile_selected
+    ON subject(exam_profile_id, is_selected);
+CREATE INDEX IF NOT EXISTS idx_textbook_profile_subject
+    ON textbook(exam_profile_id, subject_id, is_selected);
+"""
+
 #: فهرست مهاجرت‌ها به ترتیب نسخه.
 MIGRATIONS: list[tuple[int, str]] = [
     (1, MIGRATION_1),
     (2, MIGRATION_2),
+    (3, MIGRATION_3),
 ]

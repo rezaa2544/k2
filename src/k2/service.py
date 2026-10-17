@@ -149,6 +149,13 @@ class AdvisorService:
         profiles = self.repo.list_exam_profiles()
         return profiles[0] if profiles else None
 
+    def selected_subjects(self) -> list[Subject]:
+        """درس‌های فعال پروفایل جاری؛ درس‌های غیرفعال از تاریخچه حذف نمی‌شوند."""
+        profile = self.active_exam_profile()
+        return self.repo.list_subjects(
+            profile.id if profile else None, include_unselected=False
+        )
+
     def create_exam_profile(self, profile: ExamProfile) -> int:
         profile_id = self.repo.create_exam_profile(profile)
         self.conn.commit()
@@ -176,18 +183,62 @@ class AdvisorService:
     # تقویم
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _validate_event_time(event) -> None:
+        if not event.title.strip():
+            raise ValueError("عنوان رویداد نمی‌تواند خالی باشد.")
+        if not 0 <= event.weekday <= 6:
+            raise ValueError("روز هفته باید بین شنبه تا جمعه باشد.")
+        if not (0 <= event.start_minute < event.end_minute <= 1440):
+            raise ValueError("بازهٔ رویداد باید در همان روز و با پایان بعد از شروع باشد.")
+
+    @staticmethod
+    def _validate_routine_time(routine) -> None:
+        if not routine.title.strip():
+            raise ValueError("عنوان بازهٔ ضروری نمی‌تواند خالی باشد.")
+        if not (0 <= routine.start_minute <= 1439 and 0 <= routine.end_minute <= 1440):
+            raise ValueError("ساعت بازه باید در محدودهٔ یک شبانه‌روز باشد.")
+        if routine.start_minute == routine.end_minute:
+            raise ValueError("شروع و پایان بازه نمی‌توانند یکسان باشند.")
+        if not routine.weekdays or any(day not in range(7) for day in routine.weekdays):
+            raise ValueError("حداقل یک روز معتبر برای تکرار انتخاب کنید.")
+
     def create_fixed_event(self, event) -> int:
+        self._validate_event_time(event)
         event_id = self.repo.create_fixed_event(event)
         self.conn.commit()
         return event_id
 
+    def update_fixed_event(self, event) -> None:
+        self._validate_event_time(event)
+        self.repo.update_fixed_event(event)
+        self.conn.commit()
+
+    def delete_fixed_event(self, event_id: int) -> None:
+        self.repo.delete_fixed_event(event_id)
+        self.conn.commit()
+
     def create_routine(self, routine) -> int:
+        self._validate_routine_time(routine)
         routine_id = self.repo.create_routine(routine)
         self.conn.commit()
         return routine_id
 
+    def update_routine(self, routine) -> None:
+        self._validate_routine_time(routine)
+        self.repo.update_routine(routine)
+        self.conn.commit()
+
+    def delete_routine(self, routine_id: int) -> None:
+        self.repo.delete_routine(routine_id)
+        self.conn.commit()
+
     def import_sample_schedule(self) -> tuple[int, int]:
-        """ورود برنامهٔ نمونهٔ کاربر (دادهٔ اولیه، نه منطق ثابت)."""
+        """ورود یک‌بارهٔ برنامهٔ نمونه؛ ورود تکراری یا روی برنامهٔ موجود ممنوع است."""
+        if self.repo.get_setting("schedule.sample_imported") == "1":
+            return 0, 0
+        if self.repo.list_fixed_events() or self.repo.list_routines():
+            return 0, 0
         event_count = 0
         for event in onboarding.build_sample_fixed_events():
             self.repo.create_fixed_event(event)
@@ -196,12 +247,13 @@ class AdvisorService:
         for routine in onboarding.build_sample_routines():
             self.repo.create_routine(routine)
             routine_count += 1
+        self.repo.set_setting("schedule.sample_imported", "1")
         self.conn.commit()
         return event_count, routine_count
 
     def schedule_conflicts(self) -> list[onboarding.ScheduleConflict]:
-        """تعارض‌های برنامهٔ نمونه (یکشنبه)."""
-        return onboarding.detect_sample_conflicts()
+        """تعارض‌های رویدادهای واقعی ثبت‌شده، نه فقط برنامهٔ نمونه."""
+        return onboarding.detect_event_conflicts(self.repo.list_fixed_events())
 
     # ------------------------------------------------------------------
     # برنامه‌ریزی
@@ -275,15 +327,24 @@ class AdvisorService:
         today = _dt.date.today()
         weakness = self._topic_weakness()
 
+        active_profile = self.active_exam_profile()
+        profile_subjects = self.repo.list_subjects(
+            active_profile.id if active_profile else None, include_unselected=True
+        )
+        subject_by_id = {subject.id: subject for subject in profile_subjects}
+
         for activity in activities:
             activity.blocked_dependents = blocked_counts.get(activity.id or -1, 0)
             if activity.topic_id is not None:
                 activity.topic_weakness = weakness.get(activity.topic_id, 0.0)
-                subject = next(
-                    (s for s in self.repo.list_subjects() if s.id == activity.subject_id),
-                    None,
-                )
-                activity.topic_weight = subject.effective_weight if subject else 1.0
+                subject = subject_by_id.get(activity.subject_id)
+                if subject:
+                    # درس از فهرست فعال خارج شده اما فعالیت قدیمی پنهان نمی‌شود؛
+                    # وزن اهمیتش در اولویت خودکار کاهش می‌یابد تا انتخاب جاری اثر داشته باشد.
+                    selection_factor = 1.0 if subject.is_selected else 0.25
+                    activity.topic_weight = subject.effective_weight * selection_factor
+                else:
+                    activity.topic_weight = 1.0
             overdue_days = 0.0
             for item in review_items:
                 if item.topic_id == activity.topic_id and item.due_date:
@@ -726,6 +787,10 @@ class AdvisorService:
     def save_onboarding_state(self, state: onboarding.OnboardingState) -> None:
         self.repo.set_setting("onboarding.state", state.to_json())
         self.conn.commit()
+
+    def onboarding_completed(self) -> bool:
+        """فقط پس از تأیید نهایی، اجرای خودکار راه‌انداز متوقف می‌شود."""
+        return self.onboarding_state().is_finished
 
 
 def _app_version() -> str:

@@ -54,7 +54,7 @@ class AddActivityDialog(QDialog):
         form.addRow("نوع:", self.type_combo)
 
         self.subject_combo = QComboBox()
-        for subject in service.repo.list_subjects():
+        for subject in service.selected_subjects():
             self.subject_combo.addItem(subject.name, subject.id)
         form.addRow("درس:", self.subject_combo)
 

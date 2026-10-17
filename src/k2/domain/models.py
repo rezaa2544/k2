@@ -53,6 +53,7 @@ class ExamProfile:
     #: فرمول درصد: ``"raw"`` (درصد خام) یا ``"negative"`` (با نمرهٔ منفی).
     percentage_formula: str = "raw"
     regulation_version: str = ""
+    exam_year: Optional[int] = None
     created_at: Optional[_dt.datetime] = None
 
     @property
@@ -74,13 +75,37 @@ class Subject:
     id: Optional[int] = None
     name: str = ""
     exam_profile_id: Optional[int] = None
+    #: وزن برنامه‌ریزی فردی؛ مستقل از ضرایب رسمی آزمون/سوابق.
     coefficient: float = 1.0
-    #: وزن مبحث در محاسبهٔ «ضعف × اهمیت»؛ از ضریب یا مقدار دستی.
+    #: وزن مبحث در محاسبهٔ «ضعف × اهمیت»؛ مقدار دستی بر وزن فردی اولویت دارد.
     topic_weight: Optional[float] = None
+    is_selected: bool = True
+    exam_coefficient: Optional[float] = None
+    exam_coefficient_status: str = "unknown"
+    exam_coefficient_source: str = ""
+    academic_coefficient: Optional[float] = None
+    academic_coefficient_status: str = "unknown"
+    academic_coefficient_source: str = ""
 
     @property
     def effective_weight(self) -> float:
         return self.topic_weight if self.topic_weight is not None else self.coefficient
+
+
+@dataclass
+class Textbook:
+    """کتاب درسی/منبع انتخاب‌شده برای یک درس و پروفایل آزمون."""
+
+    id: Optional[int] = None
+    exam_profile_id: Optional[int] = None
+    subject_id: Optional[int] = None
+    title: str = ""
+    book_code: str = ""
+    grade: str = ""
+    edition_year: Optional[int] = None
+    source_url: str = ""
+    source_status: str = "user_entered"
+    is_selected: bool = True
 
 
 @dataclass

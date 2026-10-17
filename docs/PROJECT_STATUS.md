@@ -1,13 +1,13 @@
 # وضعیت پروژه — K2
 
-تاریخ گزارش: ۱۴۰۵/۰۷/۲۴ (2026-10-17)
+تاریخ گزارش: ۱۴۰۵/۰۷/۲۵ (2026-10-17)
 شاخه: `main` — مخزن محلی: `/home/user/k2`
 
 ---
 
 ## ۱. خلاصهٔ اجرایی
 
-پیاده‌سازی دامنه، موتورهای تصمیم‌گیری و ذخیره‌سازی کامل شده است. منوهای «برنامه» و «راهنما» با استایل خوانا و میانبرهای صفحه‌کلید به‌روزرسانی شده‌اند؛ **۱۷۵ تست** در محیط لینوکس پاس شده و گردش‌کار Windows نیز در [GitHub Actions](https://github.com/rezaa2544/k2/actions/runs/39051925261) تست‌ها، ساخت PyInstaller و اجرای headless EXE را با موفقیت گذرانده است. ZIP کامل one-folder شامل `_internal` و checksum تازه در مخزن ثبت شده و به‌صورت خودکار پس از هر build موفق Windows به‌روز می‌شود. تصویر داشبورد `docs/images/k2-dashboard.png` مربوط به build قبلی است و اسکرین‌شات GUI ویندوزی از build جدید نداریم. راهنمای توکن‌ها و اصول طراحی در `docs/UI_UX_GUIDE.md` آمده است.
+در این بازبینی، راه‌اندازی ذخیره‌شونده، انتخاب رشته/درس/کتاب، CRUD برنامهٔ هفتگی و روال‌ها، تشخیص تعارض و اثر انتخاب درس به هستهٔ برنامه افزوده شد؛ فایل HTML پیش‌نمایش نیز همگام شد. `compileall` و `git diff --check` موفق‌اند و کل suite محلی در 2026-10-17 با **186 تست موفق** اجرا شد. اجرای این تغییرهای جاری در Windows CI، ساخت EXE تازه، به‌روزرسانی ZIP و push هنوز در این گزارش انجام نشده است. [Windows Actions run قبلی](https://github.com/rezaa2544/k2/actions/runs/39051925261) مربوط به commit/build قبلی است و شاهد build این تغییرها نیست. اجرای GUI روی Windows فیزیکی همچنان تأییدنشده است.
 
 آنچه هنوز **تأیید نشده**: نمایش گرافیکی build جدید روی ویندوز فیزیکی، تست نصب تمیز، امضای دیجیتال و آزمون میدانی کاربران.
 
@@ -18,13 +18,13 @@
 | دروازه | موضوع | وضعیت | شواهد |
 |---|---|---|---|
 | Gate 0 | شناخت مخزن، ثبت وضعیت، مستندات اولیه | ✅ | `docs/PROJECT_GROUND_TRUTH.md` و تاریخچهٔ commit در Git |
-| Gate 1 | مدل داده و هستهٔ آفلاین | ✅ | `storage/` + `test_storage.py` (۱۱ تست) |
-| Gate 2 | راه‌اندازی و تقویم ثابت | ✅ | `onboarding.py` + `test_onboarding.py` (۱۲ تست) |
+| Gate 1 | مدل داده و هستهٔ آفلاین | ✅ | `storage/` + `test_storage.py` (۱۳ تست) |
+| Gate 2 | راه‌اندازی و تقویم ثابت | ✅ | `onboarding.py` + `test_onboarding.py` (۱۴ تست) |
 | Gate 3 | ظرفیت و زمان‌بند | ✅ | `capacity.py`، `scheduler.py` + تست‌ها |
 | Gate 4 | چرخهٔ فعالیت و عقب‌افتادگی | ✅ | `activity_lifecycle.py`، `backlog.py` |
 | Gate 5 | چرخهٔ یادگیری و مرور | ✅ | `review_engine.py` + ۱۷ تست |
 | Gate 6 | آزمون، بانک خطا و موتور مشاور | ✅ | `exam_analysis.py`، `advisor_engine.py` + ۲۶ تست |
-| Gate 7 | گزارش‌ها و UX | ✅ | `reporting.py`، ۸ صفحهٔ UI + ۱۴ تست GUI |
+| Gate 7 | گزارش‌ها و UX | ✅ | `reporting.py`، ۸ صفحهٔ UI + ۱۸ تست GUI |
 | Gate 8 | بسته‌بندی و اعتبارسنجی | ✅ **ساخت و headless verify در CI** | [Windows Actions موفق](https://github.com/rezaa2544/k2/actions/runs/39051925261)، ZIP کامل ثبت شد؛ GUI روی ویندوز فیزیکی و نصب تمیز هنوز تأیید نشده |
 
 ---
@@ -39,30 +39,31 @@ python3 -m pytest tests -q
 ```
 
 ```
-175 passed
+186 passed
 ```
 
 | فایل | تعداد |
 |---|---|
 | `tests/test_jdate.py` | 10 |
-| `tests/test_capacity.py` | 12 |
+| `tests/test_capacity.py` | 13 |
 | `tests/test_scheduler.py` | 15 |
 | `tests/test_activity_lifecycle.py` | 13 |
 | `tests/test_review_engine.py` | 17 |
 | `tests/test_exam_analysis.py` | 10 |
-| `tests/test_storage.py` | 11 |
+| `tests/test_storage.py` | 13 |
 | `tests/test_invariants.py` | 10 |
 | `tests/test_edge_cases.py` | 16 |
-| `tests/test_onboarding.py` | 12 |
+| `tests/test_onboarding.py` | 14 |
 | `tests/test_advisor.py` | 16 |
 | `tests/test_reporting.py` | 10 |
-| `tests/test_gui.py` | 14 |
+| `tests/test_gui.py` | 18 |
 | `tests/test_app.py` | 2 |
 | `tests/test_windows_download.py` | 3 |
 | `tests/test_e2e_scenario.py` | 4 |
-| **مجموع** | **175** |
+| `tests/test_subject_selection.py` | 2 |
+| **مجموع** | **186** |
 
-محیط اجرا: تست محلی در Debian 13 / Python 3.13 / PySide6 6.9.1؛ build و smoke test ویندوز در GitHub Actions / `windows-latest` / Python 3.12.
+محیط اجرای تست تازه: Debian 13 / Python 3.13 / PySide6 6.9.1. شواهد Windows Actions ذکرشده در بخش ۴ به build قبلی تعلق دارد، نه تغییرهای فعلی.
 
 ---
 
@@ -91,9 +92,9 @@ python3 -m pytest tests -q
 
 ## ۶. وضعیت Git
 
-* مخزن محلی `/home/user/k2` روی شاخهٔ `main` به مخزن عمومی `rezaa2544/k2` push شده است.
-* آخرین بستهٔ کامل در `downloads/K2-windows-x64.zip` است؛ build و checksum آن در GitHub Actions ساخته و به همان شاخه push شد.
-* تاریخچه با push عادی حفظ شده است؛ force-push یا حذف فایل GitHub انجام نشده است.
+* وضعیت مخزن در آغاز این بازبینی: `main` برابر `origin/main` بود؛ تغییرهای این گزارش هنوز commit/push نشده‌اند.
+* بستهٔ ثبت‌شده در `downloads/K2-windows-x64.zip` پیش از این تغییرها ساخته شده و با build جاری همگام نیست؛ build جدید هنوز انجام نشده است.
+* در این بازبینی هنوز push انجام نشده؛ هیچ force-push یا حذف فایل GitHub انجام نشده است.
 
 ---
 
