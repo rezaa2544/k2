@@ -104,13 +104,22 @@ if (-not (Test-Path $Exe)) { throw "EXE ساخته نشد: $Exe" }
 Write-Ok "EXE ساخته شد: $Exe"
 
 Write-Step "اجرای واقعی EXE (حالت headless)"
-# build موفق به‌معنی اجرای موفق نیست؛ این مرحله باید یک کد خروج صفر بدهد.
+# خروجی PyInstaller این پروژه windowed است؛ Start-Process کد خروج را
+# مستقل از نوع GUI/console فایل EXE به‌درستی برمی‌گرداند.
 $SmokeDb = Join-Path $WorkDir 'smoke.db'
-$smokeLog = & $Exe --db $SmokeDb --headless 2>&1
-$smokeExit = $LASTEXITCODE
-$smokeLog | ForEach-Object { Write-Host "    $_" }
+$SmokeStdout = Join-Path $WorkDir 'smoke.stdout.txt'
+$SmokeStderr = Join-Path $WorkDir 'smoke.stderr.txt'
+Remove-Item $SmokeDb, $SmokeStdout, $SmokeStderr -Force -ErrorAction SilentlyContinue
+$SmokeArguments = "--db `"$SmokeDb`" --headless"
+$SmokeProcess = Start-Process -FilePath $Exe -ArgumentList $SmokeArguments -PassThru -Wait `
+    -RedirectStandardOutput $SmokeStdout -RedirectStandardError $SmokeStderr
+$smokeExit = $SmokeProcess.ExitCode
+foreach ($LogFile in @($SmokeStdout, $SmokeStderr)) {
+    if (Test-Path $LogFile) { Get-Content $LogFile | ForEach-Object { Write-Host "    $_" } }
+}
 if ($smokeExit -ne 0) { throw "اجرای EXE با exit=$smokeExit شکست خورد." }
-Write-Ok "EXE اجرا شد و کد خروج صفر داد."
+if (-not (Test-Path $SmokeDb)) { throw "EXE پایگاه دادهٔ smoke test را نساخت." }
+Write-Ok "EXE اجرا شد، پایگاه داده ساخت و کد خروج صفر داد."
 
 Write-Step "خلاصه"
 Write-Host "خروجی : $OutputDir"

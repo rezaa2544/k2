@@ -9,8 +9,8 @@
 | مورد | وضعیت | شواهد |
 |---|---|---|
 | ساخت EXE ویندوز ۶۴بیتی | ✅ **انجام شد** | `packaging/output/K2/K2.exe` — ۱٬۹۹۱٬۸۸۴ بایت (PySide6 6.9.1؛ بازسازی‌شده پس از بهبود UI/UX) |
-| اجرای واقعی EXE در حالت `--headless` | ✅ **انجام شد** (کد خروج ۰، پایگاه داده ساخته شد) | زیر Wine 10.0 با پایتون ۳.۱۲.۷ ویندوز |
-| اجرای واقعی EXE در حالت گرافیکی | ✅ **انجام شد** (پنجره باز ماند، اسکرین‌شات گرفته شد) | زیر Wine + Xvfb |
+| اجرای واقعی EXE در حالت `--headless` | ✅ **انجام شد** (exit code صفر، پایگاه داده ساخته شد) | [Windows Actions موفق](https://github.com/rezaa2544/k2/actions/runs/39051925261) روی `windows-latest` |
+| اجرای GUI نسخهٔ تازهٔ منوها | ⚠️ **تأییدنشده روی Windows فیزیکی** | تست GUI و پیش‌نمایش Qt offscreen پاس شده؛ اسکرین‌شات `docs/images/k2-dashboard.png` مربوط به build قبلی است |
 | اجرا روی ویندوز فیزیکی ۱۰/۱۱ | ❌ **انجام‌نشده** | در این محیط دسترسی به ویندوز واقعی نبود |
 | تست روی ویندوز تمیز بدون پایتون | ❌ **انجام‌نشده** | نیازمند دسترسی به ماشین/ماشین‌مجاز ویندوز |
 | امضای دیجیتال | ❌ انجام‌نشده | نیازمند گواهی Code Signing |
@@ -86,7 +86,7 @@ python packaging/inspect_wheel_dll.py 6.6.1    # → بدون icuuc.dll
 
 * مزیت: اجرایی روی ویندوزهای گسترده‌تر، بدون وابستگی به DLL سیستمی ICU، و قابل‌اجرا و قابل‌آزمایش در محیط Wine.
 * هزینه: از ویژگی‌های تازهٔ Qt 6.10+ محروم می‌شویم — اما محصول ما از آن‌ها استفاده نمی‌کند.
-* تأیید: هر ۱۷۰ تست روی لینوکس با ۶.۹.۱ پاس شد و EXE بازسازی‌شده هم در حالت headless و هم گرافیکی اجرا شد.
+* تأیید: ۱۷۴ تست محلی با ۶.۹.۱ پاس شد؛ Windows Actions نیز تست‌ها، build و smoke test headless نسخهٔ تازه را موفق انجام داد. اجرای GUI نسخهٔ منوهای جدید روی Windows فیزیکی هنوز بررسی نشده است.
 
 > اگر در آینده به ۶.۱۰+ مهاجرت کردیم، باید «کپی چهار مورد ICU از System32 ویندوز ۱۱» را به فرایند build اضافه کنیم یا از CI روی `windows-latest` (که ویندوز ۲۰۲۲ دارد) بسته‌بندی کنیم.
 
@@ -106,7 +106,7 @@ powershell -ExecutionPolicy Bypass -File .\packaging\build_windows.ps1
 2. نصب `requirements.txt` + `requirements-dev.txt` + `pyinstaller`
 3. **اجرای کل تست‌ها** (`pytest tests -q`) — در صورت شکست، build انجام نمی‌شود
 4. ساخت با `k2.spec`
-5. **اجرای واقعی EXE** با `--headless` و بررسی کد خروج
+5. **اجرای واقعی EXE** با `Start-Process -Wait` و بررسی exit code + ساخته‌شدن پایگاه داده؛ این روش برای فایل GUI-subsystem هم قابل‌اعتماد است
 6. چاپ خلاصهٔ خروجی
 
 خروجی: `packaging/output/K2/K2.exe`
@@ -118,16 +118,10 @@ powershell -ExecutionPolicy Bypass -File .\packaging\build_windows.ps1
 `.github/workflows/build-windows.yml` روی `windows-latest`:
 
 ```
-checkout → setup-python 3.12 → install → pytest → pyinstaller → verify(execute) → upload artifact
+checkout → setup-python 3.12 → install → pytest → pyinstaller → verify(execute) → rebuild ZIP + checksum → push package → upload artifact
 ```
 
-مرحلهٔ `verify` حیاتی است:
-
-```powershell
-& $exe --db "$env:RUNNER_TEMP\k2-smoke.db" --headless
-if ($LASTEXITCODE -ne 0) { throw "EXE exited with $LASTEXITCODE" }
-if (-not (Test-Path $db)) { throw "EXE did not create the database" }
-```
+مرحلهٔ `verify` از `Start-Process -Wait -PassThru` استفاده می‌کند تا exit code واقعی فایل EXE (حتی با `console=False`) را دریافت کند و ساخته‌شدن پایگاه داده را نیز بررسی کند. تنها پس از موفقیت verify، ZIP کامل و checksumها به `main` push می‌شوند.
 
 بدون این مرحله، یک build «موفق» ولی غیرقابل‌اجرا می‌تواند منتشر شود — همان چیزی که در همین پروژه رخ داد (D-013).
 
