@@ -1,0 +1,44 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+*.spec.bak
+
+# --- محیط‌های مجازی ---
+.venv/
+venv/
+env/
+
+# --- تست و کش ---
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# --- داده کاربر (هرگز commit نشود) ---
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+backups/
+*.k2backup
+*.k2backup.zip
+
+# --- خروجی بسته‌بندی ---
+packaging/output/
+packaging/work/
+*.exe
+*.spec.lock
+
+# --- سیستم‌عامل و ویرایشگر ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

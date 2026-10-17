@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "k2-konkur-advisor"
+version = "1.0.0"
+description = "مشاور هوشمند کنکور — نرم‌افزار دسکتاپ فارسی، راست‌چین و آفلاین‌محور"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+authors = [{ name = "K2 Team" }]
+dependencies = [
+    "PySide6>=6.5",
+    "jdatetime>=4.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "pytest-qt>=4.2"]
+packaging = ["pyinstaller>=6.0"]
+
+[project.scripts]
+k2 = "k2.app:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.package-data]
+"k2.ui" = ["assets/fonts/*.ttf", "assets/fonts/*.txt"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]
+markers = [
+    "gui: تست‌های رابط کاربری (نیازمند QT_QPA_PLATFORM=offscreen)",
+    "slow: تست‌های کند",
+]
