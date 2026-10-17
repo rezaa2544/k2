@@ -10,7 +10,7 @@
 
 | شناسه | اولویت | پیاده‌سازی | تست | وضعیت |
 |---|---|---|---|---|
-| ONB-01 | P0 | `onboarding.py` (OnboardingState، ۱۲ گام)، `ui/views/onboarding.py` | `test_onboarding.py::test_state_is_resumable`، `test_gui.py::test_onboarding_wizard_saves_state` | کامل |
+| ONB-01 | P0 | `onboarding.py` (OnboardingState، ۱۶ گام)، `ui/views/onboarding.py` | `test_onboarding.py::test_state_is_resumable`، `test_gui.py::test_onboarding_wizard_saves_state` | کامل |
 | ONB-02 | P0 | `domain/models.py::ExamProfile`، `service.py::create_exam_profile`، `onboarding.py::ONBOARDING_STEPS` | `test_onboarding.py::test_onboarding_steps_cover_required_areas`، `test_edge_cases.py::test_exam_date_change_is_reflected_in_review_cap` | کامل |
 | ONB-03 | P0 | `onboarding.py::build_sample_fixed_events/build_sample_routines/detect_sample_conflicts`، `capacity.py::collect_fixed_intervals` | `test_onboarding.py::test_sample_schedule_contains_all_week_days`، `test_sunday_conflict_is_detected_and_not_hidden`، `test_imported_schedule_affects_capacity` | کامل |
 | ONB-04 | P0 | `advisor_engine.py::assess_mastery` (L0–L4 با اطمینان)، `ui/views/onboarding.py` | `test_advisor.py::test_mastery_from_diagnostic_evidence`، `test_mastery_without_evidence_is_l0_with_low_confidence` | کامل |
@@ -102,7 +102,7 @@
 
 | شناسه | اولویت | پیاده‌سازی | تست | وضعیت |
 |---|---|---|---|---|
-| QA-01 | P0 | ۱۶ فایل تست، ۱۷۵ تست | پوشش واحد/یکپارچگی/end-to-end، GUI، headless، بسته‌بندی ZIP و HTML preview | کامل |
+| QA-01 | P0 | ۱۸ فایل تست، ۱۸۹ تست | پوشش واحد/یکپارچگی/end-to-end، GUI، headless، بسته‌بندی ZIP و HTML preview | کامل |
 | QA-02 | P0 | `tests/test_e2e_scenario.py::test_full_learning_cycle` | همان تست | کامل |
 | QA-03 | P0 | `tests/test_invariants.py`، `tests/test_edge_cases.py` | `test_invariants_hold_for_random_schedules` (۵ seed)، `test_capacity_never_exceeded_over_a_week`، `test_no_activity_is_scheduled_in_the_past` | کامل |
 | QA-04 | P0 | `tests/test_storage.py` | `test_backup_and_restore_roundtrip`، `test_migration_from_v1_preserves_data` | کامل |

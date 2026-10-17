@@ -7,7 +7,7 @@
 
 ## ۱. خلاصهٔ اجرایی
 
-در این بازبینی، راه‌اندازی ذخیره‌شونده، انتخاب رشته/درس/کتاب، CRUD برنامهٔ هفتگی و روال‌ها، تشخیص تعارض و اثر انتخاب درس به هستهٔ برنامه افزوده شد؛ فایل HTML پیش‌نمایش نیز همگام شد. `compileall` و `git diff --check` موفق‌اند و کل suite محلی در 2026-10-17 با **189 تست موفق** اجرا شد. اجرای این تغییرهای جاری در Windows CI، ساخت EXE تازه، به‌روزرسانی ZIP و push هنوز در این گزارش انجام نشده است. [Windows Actions run قبلی](https://github.com/rezaa2544/k2/actions/runs/39051925261) مربوط به commit/build قبلی است و شاهد build این تغییرها نیست. اجرای GUI روی Windows فیزیکی همچنان تأییدنشده است.
+در این بازبینی، راه‌اندازی ذخیره‌شونده، انتخاب رشته/درس/کتاب، CRUD برنامهٔ هفتگی و روال‌ها، تشخیص تعارض، اعتبارسنجی دقیق دامنهٔ منبع رسمی و اثر انتخاب درس پیاده و پیش‌نمایش HTML همگام شد. `compileall`، `git diff --check` و suite محلی موفق‌اند (**189 تست**). GitHub Actions برای همین نسخه نیز تست‌های Linux/Windows را با موفقیت گذراند؛ PyInstaller روی `windows-latest` ساخت، EXE با `--headless` اجرا شد و پایگاه داده ساخت؛ ZIP کامل در commit `b5419f5` به `main` push شد. اجرای GUI build تازه روی Windows فیزیکی و تست نصب تمیز هنوز تأیید نشده است.
 
 آنچه هنوز **تأیید نشده**: نمایش گرافیکی build جدید روی ویندوز فیزیکی، تست نصب تمیز، امضای دیجیتال و آزمون میدانی کاربران.
 
@@ -25,7 +25,7 @@
 | Gate 5 | چرخهٔ یادگیری و مرور | ✅ | `review_engine.py` + ۱۷ تست |
 | Gate 6 | آزمون، بانک خطا و موتور مشاور | ✅ | `exam_analysis.py`، `advisor_engine.py` + ۲۶ تست |
 | Gate 7 | گزارش‌ها و UX | ✅ | `reporting.py`، ۸ صفحهٔ UI + ۱۸ تست GUI |
-| Gate 8 | بسته‌بندی و اعتبارسنجی | ✅ **ساخت و headless verify در CI** | [Windows Actions موفق](https://github.com/rezaa2544/k2/actions/runs/39051925261)، ZIP کامل ثبت شد؛ GUI روی ویندوز فیزیکی و نصب تمیز هنوز تأیید نشده |
+| Gate 8 | بسته‌بندی و اعتبارسنجی | ✅ **ساخت و headless verify در CI** | [Windows Actions موفق](https://github.com/rezaa2544/k2/actions/runs/39058074025)، EXE تازه headless اجرا شد و ZIP کامل در `b5419f5` ثبت شد؛ GUI روی ویندوز فیزیکی و نصب تمیز هنوز تأیید نشده |
 
 ---
 
@@ -64,7 +64,7 @@ python3 -m pytest tests -q
 | `tests/test_konkur_catalog.py` | 3 |
 | **مجموع** | **189** |
 
-محیط اجرای تست تازه: Debian 13 / Python 3.13 / PySide6 6.9.1. شواهد Windows Actions ذکرشده در بخش ۴ به build قبلی تعلق دارد، نه تغییرهای فعلی.
+محیط‌های تست: Debian 13 / Python 3.13 / PySide6 6.9.1 محلی، به‌علاوهٔ GitHub Actions روی ubuntu-latest و windows-latest برای همان تغییرهای جاری.
 
 ---
 
@@ -72,7 +72,7 @@ python3 -m pytest tests -q
 
 | گام | نتیجه |
 |---|---|
-| ساخت با PyInstaller 6.22.3 روی `windows-latest` | ✅ موفق؛ [run 39051925261](https://github.com/rezaa2544/k2/actions/runs/39051925261) |
+| ساخت با PyInstaller 6.22.3 روی `windows-latest` | ✅ موفق؛ [run 39058074025](https://github.com/rezaa2544/k2/actions/runs/39058074025) |
 | اجرای واقعی `K2.exe --headless` | ✅ موفق؛ process exit code صفر و پایگاه داده ساخته شد |
 | ZIP توزیع one-folder | ✅ ثبت در `downloads/K2-windows-x64.zip`؛ `K2.exe` و `_internal` هر دو حاضرند |
 | وضوح منوها | ✅ تست GUI و پیش‌نمایش Qt offscreen؛ GUI build تازه روی ویندوز فیزیکی **هنوز دیده نشده** |
@@ -93,9 +93,9 @@ python3 -m pytest tests -q
 
 ## ۶. وضعیت Git
 
-* وضعیت مخزن در آغاز این بازبینی: `main` برابر `origin/main` بود؛ تغییرهای این گزارش هنوز commit/push نشده‌اند.
-* بستهٔ ثبت‌شده در `downloads/K2-windows-x64.zip` پیش از این تغییرها ساخته شده و با build جاری همگام نیست؛ build جدید هنوز انجام نشده است.
-* در این بازبینی هنوز push انجام نشده؛ هیچ force-push یا حذف فایل GitHub انجام نشده است.
+* شاخهٔ `main` شامل کد جاری و ZIP کامل ویندوز است؛ همهٔ تغییرهای این گزارش با push عادی و حفظ تاریخچه ارسال شدند. هیچ force-push یا حذف فایل GitHub انجام نشده است.
+* بستهٔ کامل `downloads/K2-windows-x64.zip` پس از build Windows جاری ساخته و در همان مخزن push شده است؛ شامل `K2.exe` و `_internal` است.
+* اجرای GUI در Windows فیزیکی، تست نصب تمیز، امضای دیجیتال و آزمون میدانی هنوز انجام نشده‌اند.
 
 ---
 
