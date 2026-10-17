@@ -46,6 +46,21 @@ def _force_utf8_output() -> None:
             pass
 
 
+def _print_headless_report(db_path: Path, plan: object) -> None:
+    """چاپ گزارش سلامت، اگر build خروجی متنی (کنسول) داشته باشد.
+
+    در build گرافیکی PyInstaller، ``sys.stdout`` برابر ``None`` است. خودِ
+    بررسی headless باید همچنان بتواند اجرا و کد خروج معتبر برگرداند.
+    """
+    if sys.stdout is None:
+        return
+    print(f"پایگاه داده: {db_path}")
+    print(f"ظرفیت امروز: {plan.capacity_minutes} دقیقه")
+    print(f"برنامهٔ امروز: {plan.planned_minutes} دقیقه در {len(plan.placements)} بلوک")
+    for note in plan.notes:
+        print(f"  یادداشت: {note}")
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     """اجرای برنامه."""
     _force_utf8_output()
@@ -59,11 +74,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
         service = AdvisorService(db_path)
         plan = service.plan_day()
-        print(f"پایگاه داده: {db_path}")
-        print(f"ظرفیت امروز: {plan.capacity_minutes} دقیقه")
-        print(f"برنامهٔ امروز: {plan.planned_minutes} دقیقه در {len(plan.placements)} بلوک")
-        for note in plan.notes:
-            print(f"  یادداشت: {note}")
+        _print_headless_report(db_path, plan)
         service.close()
         return 0
 

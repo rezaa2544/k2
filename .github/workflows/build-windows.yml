@@ -66,8 +66,10 @@ jobs:
           $exe = "packaging\output\K2\K2.exe"
           if (-not (Test-Path $exe)) { throw "EXE not found: $exe" }
           $db = "$env:RUNNER_TEMP\k2-smoke.db"
-          & $exe --db $db --headless
-          if ($LASTEXITCODE -ne 0) { throw "EXE exited with $LASTEXITCODE" }
+          $smokeOutput = & $exe --db $db --headless 2>&1
+          $smokeExitCode = $LASTEXITCODE
+          if ($smokeOutput) { $smokeOutput | ForEach-Object { Write-Host $_ } }
+          if ($smokeExitCode -ne 0) { throw "EXE exited with $smokeExitCode" }
           if (-not (Test-Path $db)) { throw "EXE did not create the database" }
           Write-Host "EXE ran successfully and created $db"
 
