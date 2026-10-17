@@ -188,21 +188,41 @@ class MainWindow(QMainWindow):
         self.nav.setCurrentRow(0)
 
     def _build_menu(self) -> None:
-        menu = self.menuBar().addMenu("برنامه")
-        action_setup = QAction("راه‌اندازی / ادامهٔ مصاحبه", self)
-        action_setup.triggered.connect(self.run_onboarding)
-        menu.addAction(action_setup)
-        action_refresh = QAction("بازسازی همهٔ نماها", self)
-        action_refresh.triggered.connect(self.refresh_all)
-        menu.addAction(action_refresh)
-        menu.addSeparator()
-        action_quit = QAction("خروج", self)
-        action_quit.triggered.connect(self.close)
-        menu.addAction(action_quit)
-        help_menu = self.menuBar().addMenu("راهنما")
-        action_about = QAction("دربارهٔ برنامه", self)
-        action_about.triggered.connect(self.show_about)
-        help_menu.addAction(action_about)
+        # استفاده از نوار منوی Qt به‌جای منوی بومی سیستم‌عامل، برای نمایش
+        # یکنواخت و خوانای آیتم‌ها در Windows و Linux.
+        self.menuBar().setNativeMenuBar(False)
+        self.menuBar().setObjectName("appMenuBar")
+        self.menu_program = self.menuBar().addMenu("برنامه")
+        self.menu_program.setObjectName("programMenu")
+        self.menu_program.setToolTipsVisible(True)
+
+        self.action_setup = QAction("راه‌اندازی / ادامهٔ مصاحبه", self)
+        self.action_setup.setStatusTip("ادامه یا آغاز راه‌اندازی مرحله‌ای برنامه")
+        self.action_setup.setToolTip(self.action_setup.statusTip())
+        self.action_setup.triggered.connect(self.run_onboarding)
+        self.menu_program.addAction(self.action_setup)
+
+        self.action_refresh = QAction("تازه‌سازی همهٔ نماها", self)
+        self.action_refresh.setShortcut("F5")
+        self.action_refresh.setStatusTip("به‌روزرسانی اطلاعات صفحه‌های برنامه")
+        self.action_refresh.setToolTip("F5 — " + self.action_refresh.statusTip())
+        self.action_refresh.triggered.connect(self.refresh_all)
+        self.menu_program.addAction(self.action_refresh)
+
+        self.menu_program.addSeparator()
+        self.action_quit = QAction("خروج از برنامه", self)
+        self.action_quit.setShortcut("Ctrl+Q")
+        self.action_quit.setStatusTip("بستن مشاور هوشمند کنکور")
+        self.action_quit.triggered.connect(self.close)
+        self.menu_program.addAction(self.action_quit)
+
+        self.menu_help = self.menuBar().addMenu("راهنما")
+        self.menu_help.setObjectName("helpMenu")
+        self.menu_help.setToolTipsVisible(True)
+        self.action_about = QAction("دربارهٔ K2", self)
+        self.action_about.setStatusTip("نسخه و توضیحات برنامه")
+        self.action_about.triggered.connect(self.show_about)
+        self.menu_help.addAction(self.action_about)
 
     def _on_nav(self, row: int) -> None:
         if row < 0 or not hasattr(self, "stack"):

@@ -154,6 +154,29 @@ def stylesheet() -> str:
     QScrollBar::handle:vertical {{ background: #cbd8d5; border-radius: 5px; min-height: 28px; }}
     QScrollBar::handle:vertical:hover {{ background: #a9bfba; }}
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+    QMenuBar#appMenuBar {{
+        background: {c['surface']}; color: {c['text']};
+        border-bottom: 1px solid {c['border']}; padding: 4px 10px; spacing: 4px;
+    }}
+    QMenuBar#appMenuBar::item {{
+        background: transparent; color: {c['text']}; padding: 7px 15px;
+        margin: 2px 3px; border-radius: 8px; min-height: 20px; font-weight: 600;
+    }}
+    QMenuBar#appMenuBar::item:selected, QMenuBar#appMenuBar::item:pressed {{
+        background: {c['accent_soft']}; color: {c['accent']};
+    }}
+    QMenu {{
+        background-color: {c['surface']}; color: {c['text']};
+        border: 1px solid {c['border']}; border-radius: 12px;
+        padding: 7px; min-width: 245px;
+    }}
+    QMenu::item {{
+        background: transparent; color: {c['text']}; padding: 10px 18px;
+        margin: 2px 1px; min-height: 22px; border-radius: 7px;
+    }}
+    QMenu::item:selected {{ background: {c['accent_soft']}; color: {c['accent']}; font-weight: 700; }}
+    QMenu::item:disabled {{ color: {c['muted']}; }}
+    QMenu::separator {{ height: 1px; margin: 5px 9px; background: {c['border']}; }}
     QStatusBar {{ background: {c['surface']}; color: {c['muted']}; border-top: 1px solid {c['border']}; }}
     QToolTip {{ background: {c['text']}; color: {c['white']}; border: none; padding: 6px 9px; border-radius: 5px; }}
     QMessageBox {{ background: {c['surface']}; }}

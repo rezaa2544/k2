@@ -65,6 +65,12 @@ def test_navigation_and_dashboard_have_clear_visual_hierarchy(window: MainWindow
     assert window.dashboard.next_title.text()
     assert window.dashboard.btn_plan.objectName() == "primary"
     assert window.dashboard.btn_minimal.toolTip()
+    assert window.menuBar().objectName() == "appMenuBar"
+    assert window.menu_program.title() == "برنامه"
+    assert window.menu_help.title() == "راهنما"
+    assert all(action.isVisible() for action in window.menu_program.actions())
+    assert window.action_refresh.shortcut().toString() == "F5"
+    assert window.action_about.text() == "دربارهٔ K2"
 
 
 def test_navigation_switches_pages(window: MainWindow):
@@ -176,3 +182,6 @@ def test_stylesheet_defines_rtl_and_theme_colors():
     css = stylesheet()
     assert COLORS["accent"] in css
     assert "QPushButton" in css
+    assert "QMenu {" in css
+    assert "QMenu::item:selected" in css
+    assert "QMenuBar#appMenuBar::item:selected" in css
