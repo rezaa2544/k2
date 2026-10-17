@@ -1,4 +1,4 @@
-"""ابزارک‌های مشترک رابط کاربری."""
+"""ابزارک‌های مشترک با فاصله‌گذاری و خوانایی یکدست."""
 
 from __future__ import annotations
 
@@ -18,14 +18,14 @@ from .theme import COLORS
 
 
 class Card(QFrame):
-    """کارت با عنوان."""
+    """کارت سفید با تیتر اختیاری و فضای تنفس مناسب."""
 
     def __init__(self, title: str = "", parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.setObjectName("card")
         self._layout = QVBoxLayout(self)
-        self._layout.setContentsMargins(14, 12, 14, 12)
-        self._layout.setSpacing(8)
+        self._layout.setContentsMargins(17, 15, 17, 15)
+        self._layout.setSpacing(10)
         if title:
             label = QLabel(title)
             label.setObjectName("cardTitle")
@@ -43,7 +43,7 @@ class Card(QFrame):
 
 
 class StatTile(Card):
-    """کاشی آمار با عدد بزرگ و توضیح."""
+    """کاشی آماری با یک نکتهٔ کوتاه و نشانهٔ رنگیِ کم‌تنش."""
 
     def __init__(
         self,
@@ -54,21 +54,21 @@ class StatTile(Card):
         parent: Optional[QWidget] = None,
     ):
         super().__init__(title, parent)
-        self.value_label = QLabel(value)
-        self.value_label.setObjectName("bigNumber")
         color = {
-            "accent": COLORS["accent"],
-            "info": COLORS["info"],
-            "warn": COLORS["warn"],
-            "danger": COLORS["danger"],
+            "accent": COLORS["accent"], "info": COLORS["info"],
+            "warn": COLORS["warn"], "danger": COLORS["danger"],
             "muted": COLORS["muted"],
         }.get(tone, COLORS["accent"])
+        self.setStyleSheet(f"QFrame#card {{ border-right: 3px solid {color}; }}")
+        self.value_label = QLabel(value)
+        self.value_label.setObjectName("bigNumber")
         self.value_label.setStyleSheet(f"color: {color};")
+        self.value_label.setAccessibleName(title)
         self.add(self.value_label)
-
         self.hint_label = QLabel(hint)
         self.hint_label.setObjectName("muted")
         self.hint_label.setWordWrap(True)
+        self.hint_label.setMinimumHeight(30)
         self.add(self.hint_label)
 
     def set_value(self, value: str, hint: str = "") -> None:
@@ -97,34 +97,31 @@ class Badge(QLabel):
         bg, fg = self.TONES.get(tone, self.TONES["muted"])
         self.setStyleSheet(
             f"background-color: {COLORS[bg]}; color: {COLORS[fg]};"
-            "border-radius: 9px; padding: 2px 10px; font-size: 12px;"
+            "border-radius: 10px; padding: 4px 10px; font-size: 11px; font-weight: 700;"
         )
 
 
 def info_box(parent: Optional[QWidget] = None) -> QLabel:
-    """کادر توضیح خنثی."""
-    label = QLabel()
+    label = QLabel(parent=parent)
     label.setWordWrap(True)
     label.setStyleSheet(
         f"background-color: {COLORS['info_soft']}; color: {COLORS['info']};"
-        f"border: 1px solid {COLORS['border']}; border-radius: 8px; padding: 8px;"
+        f"border: 1px solid #dce7f0; border-radius: 10px; padding: 12px 14px;"
     )
     return label
 
 
 def warn_box(parent: Optional[QWidget] = None) -> QLabel:
-    """کادر هشدار (بدون رنگ تهدیدآمیز)."""
-    label = QLabel()
+    label = QLabel(parent=parent)
     label.setWordWrap(True)
     label.setStyleSheet(
         f"background-color: {COLORS['warn_soft']}; color: {COLORS['warn']};"
-        f"border: 1px solid {COLORS['border']}; border-radius: 8px; padding: 8px;"
+        f"border: 1px solid #f0e5c8; border-radius: 10px; padding: 12px 14px;"
     )
     return label
 
 
 def confirm(parent: Optional[QWidget], title: str, text: str) -> bool:
-    """پرسش تأیید از کاربر (برای حذف/تعویق)."""
     box = QMessageBox(parent)
     box.setWindowTitle(title)
     box.setText(text)
@@ -135,7 +132,6 @@ def confirm(parent: Optional[QWidget], title: str, text: str) -> bool:
 
 
 def notify(parent: Optional[QWidget], title: str, text: str) -> None:
-    """پیام اطلاع‌رسانی."""
     box = QMessageBox(parent)
     box.setWindowTitle(title)
     box.setText(text)
@@ -144,7 +140,6 @@ def notify(parent: Optional[QWidget], title: str, text: str) -> None:
 
 
 def row(*widgets: QWidget, spacing: int = 8) -> QHBoxLayout:
-    """چیدمان افقی راست‌به‌چپ."""
     layout = QHBoxLayout()
     layout.setSpacing(spacing)
     for widget in widgets:

@@ -56,6 +56,17 @@ def test_window_has_reasonable_default_size(window: MainWindow):
     assert height >= 600
 
 
+def test_navigation_and_dashboard_have_clear_visual_hierarchy(window: MainWindow):
+    assert window.nav.objectName() == "navigation"
+    assert window.nav.item(0).toolTip()
+    assert window.nav.item(0).data(Qt.AccessibleTextRole) == "داشبورد؛ نمای کلی روز و ظرفیت"
+    assert window.page_title.text() == "داشبورد"
+    assert window.dashboard.hero.objectName() == "heroCard"
+    assert window.dashboard.next_title.text()
+    assert window.dashboard.btn_plan.objectName() == "primary"
+    assert window.dashboard.btn_minimal.toolTip()
+
+
 def test_navigation_switches_pages(window: MainWindow):
     for index in range(window.stack.count()):
         window.nav.setCurrentRow(index)

@@ -10,7 +10,7 @@
 
 | ادعا | روش تأیید |
 |---|---|
-| ۱۶۹ تست خودکار پاس | `python3 -m pytest tests -q` → `169 passed` (لینوکس، PySide6 6.9.1) |
+| ۱۷۰ تست خودکار پاس | `python3 -m pytest tests -q` → `170 passed` (لینوکس، PySide6 6.9.1) |
 | کد بدون خطای نحوی | `python3 -m compileall -q src/k2` → بدون خطا |
 | هستهٔ برنامه بدون نمایشگر کار می‌کند | `python3 -m k2 --db … --headless` → کد خروج ۰ |
 | رابط گرافیکی بدون نمایشگر ساخته می‌شود | `QT_QPA_PLATFORM=offscreen` + `MainWindow()` + `refresh_all()` |

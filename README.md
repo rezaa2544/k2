@@ -81,7 +81,7 @@ src/k2/
 └── service.py       لایهٔ کاربردی (چسب ذخیره‌سازی و موتورها)
 ```
 
-جزئیات: [معماری](docs/ARCHITECTURE.md) · [نقشهٔ نیازمندی](docs/TRACEABILITY_MATRIX.md)
+جزئیات: [معماری](docs/ARCHITECTURE.md) · [راهنمای طراحی UI/UX](docs/UI_UX_GUIDE.md) · [نقشهٔ نیازمندی](docs/TRACEABILITY_MATRIX.md)
 
 ---
 
