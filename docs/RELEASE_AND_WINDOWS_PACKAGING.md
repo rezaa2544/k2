@@ -38,7 +38,7 @@ bc9715155952bdf4a9b31418b72ad1ee3fc7f75767c7d3a4d80ca0a836bfa5af  K2.exe
 b5ed432bf4c067cd13ace0282d98c4af5b62275fa8a3c9dd2963c5b5c1947cfe  K2-windows-x64.zip
 ```
 
-بستهٔ فشرده: `release/K2-windows-x64.zip` (۴۷ مگابایت) — این پوشه در `.gitignore` است و در مخزن commit نمی‌شود (فایل باینری نباید در تاریخچهٔ گیت باشد).
+نسخهٔ ساخت محلی در `release/K2-windows-x64.zip` می‌ماند (خروجی در `.gitignore` است). برای درخواست دانلود مستقیم کاربر، همان بسته در `downloads/K2-windows-x64.zip` نیز در مخزن ثبت شده است (۴۷٬۰۹۷٬۸۹۷ بایت؛ حدود ۴۵ MiB). این آرشیو شامل `K2.exe` و `_internal/` است؛ فایل EXE به‌تنهایی اجراشدنی نیست.
 
 ---
 
