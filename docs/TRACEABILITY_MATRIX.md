@@ -99,6 +99,7 @@
 | STR-02 | P0 | `streams.py::catchup_plan` (جبران قدم‌به‌قدم، بدون حذف بی‌صدا) | `test_streams.py`، `test_consolidation_service.py::test_catchup_plan_*` | کامل |
 | STR-03 | P0 | `streams.py::assess_feasibility` (امکان‌سنجی + گزینه‌های تصمیم) | `test_streams.py`، `test_consolidation_service.py::test_feasibility_*` | کامل |
 | CONS-04 | P0 | `learning_science.py` (۲۰ شواهد با شناسه) + `consolidation.py::consolidation_advice` (پیوند شواهد به توصیه) | `test_learning_science.py` | کامل |
+| CONS-05 | P0 | `service.py::ensure_consolidation_activities` + `plan_day` | `test_consolidation_service.py::test_ensure_consolidation_activities_is_idempotent`، `test_completed_ladder_creates_no_activity` | کامل |
 | CAT-01 | P1 | `konkur_catalog.py::TOPICS_BY_COURSE`، `topics_for_course` + `service.py::seed_topics_from_catalog` | `test_konkur_catalog.py`، `test_consolidation_service.py::test_catalog_*` | کامل |
 | UI-03 | P1 | `ui/views/consolidation.py` (نمای تثبیت: مسیرها، امکان‌سنجی، نردبان، صف جبران) | `test_gui.py::test_consolidation_page_renders_three_streams_and_ladder` | کامل |
 | BEH-01 | P0 | `backlog.py::minimal_day`، `recovery_after_break` | `test_edge_cases.py::test_minimal_day_is_small_and_contains_no_heavy_new_work`، `test_return_after_break_reduces_load` | کامل |

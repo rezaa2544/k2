@@ -287,6 +287,85 @@ def test_feasibility_without_exam_date_reports_unknown():
     assert verdict.notes
 
 
+# --- ۴.۵ فعالیت خودکار تثبیت در برنامهٔ روز ---
+
+
+def test_ensure_consolidation_activities_is_idempotent(service, profile):
+    """پلهٔ سررسیدشده یک فعالیت واقعی می‌سازد و تکرار چیزی اضافه نمی‌کند."""
+    subject = _subject(service, profile, "شیمی")
+    topic = int(
+        service.create_topic(Topic(subject_id=subject, name="استوکیومتری"))
+    )
+    service.record_learning_evidence(
+        LearningEvidence(
+            topic_id=topic, observed_on=_dt.date(2026, 10, 10), source="study", score=1.0
+        )
+    )
+    today = _dt.date(2026, 10, 18)
+    created = service.ensure_consolidation_activities(today)
+    assert len(created) == 1
+    activity = created[0]
+    assert activity.state_reason.startswith("consolidation:first_retrieval")
+    assert activity.topic_id == topic
+    assert activity.deadline_at is not None
+    assert service.ensure_consolidation_activities(today) == []
+    # برنامهٔ روز باید همین کار را جای‌گذاری کند
+    plan = service.plan_day(today)
+    assert any(p.activity_id == activity.id for p in plan.placements)
+    # اگر انجام نشود، در صف بدهی می‌ماند (حذف بی‌صدا نیست)
+    backlog = service.backlog(today)
+    assert any(item.activity_id == activity.id for item in backlog.items)
+
+
+def test_consolidation_activity_not_created_before_due(service, profile):
+    """پله‌ای که موعدش نرسیده، فعالیت نمی‌سازد."""
+    subject = _subject(service, profile, "شیمی")
+    topic = int(service.create_topic(Topic(subject_id=subject, name="حلال‌ها")))
+    service.record_learning_evidence(
+        LearningEvidence(
+            topic_id=topic, observed_on=_dt.date(2026, 10, 17), source="study", score=1.0
+        )
+    )
+    # ۱۷ مهر studied → S1 due ۱۸ مهر؛ در ۱۸ مهر ساخته می‌شود
+    assert len(service.ensure_consolidation_activities(_dt.date(2026, 10, 18))) == 1
+
+
+def test_completed_ladder_creates_no_activity(service, profile):
+    """مبحث تثبیت‌شده کار تازه نمی‌سازد."""
+    subject = _subject(service, profile, "زیست‌شناسی")
+    topic = int(service.create_topic(Topic(subject_id=subject, name="ژنتیک")))
+    base = _dt.date(2026, 8, 1)
+    for offset, source, score in (
+        (0, "study", 1.0), (1, "review", 0.92), (6, "review", 0.88),
+        (20, "delayed", 0.8), (40, "transfer", 0.75), (60, "review", 0.72),
+    ):
+        service.record_learning_evidence(
+            LearningEvidence(
+                topic_id=topic,
+                observed_on=base + _dt.timedelta(days=offset),
+                source=source,
+                score=score,
+            )
+        )
+    assert service.ensure_consolidation_activities(base + _dt.timedelta(days=65)) == []
+
+
+def test_streams_separate_consolidation_from_new_material(service, profile):
+    """فعالیت تثبیت نباید در مسیر «مطلب جدید» شمرده شود."""
+    subject = _subject(service, profile, "ریاضی")
+    topic = int(service.create_topic(Topic(subject_id=subject, name="حد و پیوستگی")))
+    service.record_learning_evidence(
+        LearningEvidence(
+            topic_id=topic, observed_on=_dt.date(2026, 10, 10), source="study", score=1.0
+        )
+    )
+    today = _dt.date(2026, 10, 18)
+    service.ensure_consolidation_activities(today)
+    allocation = service.consolidation_overview(today)["allocation"]
+    assert allocation.new_minutes == 0
+    assert allocation.consolidation_minutes > 0
+
+
 # --- ۵. ماندگاری مدل ---
 
 

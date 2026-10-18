@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 
 from ... import consolidation, streams
 from ...jdate import format_jalali, format_minutes, format_number
+from ...domain.enums import ActivityState as _ActivityState
 from ...service import AdvisorService
 from ..widgets import Card, info_box, notify
 
@@ -75,6 +76,13 @@ class ConsolidationPage(QWidget):
         )
         btn_seed.clicked.connect(self._seed_topics)
         header.addWidget(btn_seed)
+        btn_materialize = QPushButton("ساخت کارهای تثبیتِ سررسیدشده")
+        btn_materialize.setToolTip(
+            "پله‌های تثبیتی که موعدشان رسیده را به فعالیت واقعی با مهلت نرم تبدیل "
+            "می‌کند تا در برنامهٔ روز دیده شوند. با ساخت برنامهٔ امروز هم خودکار انجام می‌شود."
+        )
+        btn_materialize.clicked.connect(self._materialize)
+        header.addWidget(btn_materialize)
         root.addLayout(header)
 
         # --- توزیع بار امروز ---
@@ -237,6 +245,23 @@ class ConsolidationPage(QWidget):
 
     def _refresh_catchup(self, overview: dict) -> None:
         """صف جبران: هر روز چه سهمی از کدام کار عقب‌افتاده پیش می‌رود."""
+        active_consolidation = [
+            activity
+            for activity in self.service.list_activities()
+            if (activity.state_reason or "").startswith("consolidation:")
+            and activity.state
+            not in {
+                _ActivityState.DONE,
+                _ActivityState.DROPPED,
+                _ActivityState.EXPIRED,
+            }
+        ]
+        if active_consolidation:
+            self.catchup_summary.setText(
+                f"{len(active_consolidation)} کار تثبیت فعال در فهرست فعالیت‌ها "
+                f"(خودکار از نردبان ساخته شده‌اند) — همین‌ها در برنامهٔ روز جای می‌گیرند."
+            )
+            return
         backlog = overview.get("backlog")
         plan: list[streams.CatchupQuota] = overview.get("catchup") or []
         if backlog is None or not backlog.items:
@@ -314,6 +339,24 @@ class ConsolidationPage(QWidget):
             self.table.setItem(row, 6, advice_item)
 
     # ---- کنش‌ها ----
+
+    def _materialize(self) -> None:
+        """پله‌های سررسیدشده را به فعالیت واقعی تبدیل می‌کند."""
+        created = self.service.ensure_consolidation_activities()
+        if created:
+            notify(
+                self,
+                "کارهای تثبیت ساخته شد",
+                f"{len(created)} کار تثبیت ساخته شد؛ در «فعالیت‌ها» و "
+                "«برنامهٔ امروز» دیده می‌شوند و اگر انجام نشوند در صف بدهی می‌مانند.",
+            )
+        else:
+            notify(
+                self,
+                "کار تازه‌ای لازم نیست",
+                "پلهٔ سررسیدشده‌ای بدون کار فعال وجود ندارد.",
+            )
+        self.refresh()
 
     def _seed_topics(self) -> None:
         from ..widgets import confirm

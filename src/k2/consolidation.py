@@ -207,6 +207,37 @@ STAGE_EVIDENCE_SOURCES: dict[str, frozenset[str]] = {
     ConsolidationStage.MAINTENANCE: frozenset({"review", "mixed_exam"}),
 }
 
+#: برآورد دقیقهٔ هر پلهٔ تثبیت [H] — برای ساخت فعالیت خودکار تثبیت.
+STAGE_MINUTES: dict[str, int] = {
+    ConsolidationStage.FIRST_RETRIEVAL: 10,
+    ConsolidationStage.SPACED: 15,
+    ConsolidationStage.DELAYED: 20,
+    ConsolidationStage.TRANSFER: 25,
+    ConsolidationStage.MAINTENANCE: 10,
+}
+
+#: نوع فعالیت متناسب با هر پله [H] — انتقالی با سؤال تازه/ترکیبی سنجیده می‌شود.
+STAGE_ACTIVITY_TYPES: dict[str, str] = {
+    ConsolidationStage.FIRST_RETRIEVAL: "review",
+    ConsolidationStage.SPACED: "review",
+    ConsolidationStage.DELAYED: "timed_test",
+    ConsolidationStage.TRANSFER: "mixed_practice",
+    ConsolidationStage.MAINTENANCE: "review",
+}
+
+#: پیشوند نشانگر پله در state_reason فعالیت‌های خودکار تثبیت.
+CONSOLIDATION_MARKER = "consolidation:"
+
+
+def stage_minutes(stage: str) -> int:
+    """دقیقهٔ برآوردی یک پله [H]."""
+    return STAGE_MINUTES.get(stage, 15)
+
+
+def stage_activity_type(stage: str) -> str:
+    """نوع فعالیت متناسب با یک پله [H]."""
+    return STAGE_ACTIVITY_TYPES.get(stage, "consolidation")
+
 
 @dataclass(frozen=True)
 class ConsolidationSettingsView:
@@ -729,6 +760,7 @@ __all__ = [
     "StageEvidence",
     "StageProgress",
     "STAGE_LABELS",
+    "STAGE_MINUTES",
     "STAGE_ORDER",
     "TopicConsolidation",
     "apply_review_to_memory",
@@ -742,6 +774,8 @@ __all__ = [
     "initial_stability",
     "next_interval_days",
     "retrievability",
+    "stage_activity_type",
+    "stage_minutes",
     "stability_after_lapse",
     "stability_after_success",
 ]
