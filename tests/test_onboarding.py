@@ -135,8 +135,11 @@ def test_weekly_schedule_is_optional_and_no_fake_sunday_step():
 
 
     steps = {step.key: step for step in ONBOARDING_STEPS}
-    assert steps["weekly_schedule"].kind == "schedule"
+    assert steps["weekly_schedule"].kind == "events"
     assert not steps["weekly_schedule"].required
+    assert steps["class_attendance"].options == ("بله", "خیر")
+    assert steps["classes"].kind == "events"
+    assert steps["routines"].kind == "routines"
     assert "sunday_recorded" not in steps
     assert "تعارض" not in steps["weekly_schedule"].description
 
@@ -159,7 +162,7 @@ def test_legacy_onboarding_sample_text_is_removed_without_touching_user_records(
     )
     assert legacy.values == {"student_name": "کاربر"}
     assert legacy.completed_steps == set()
-    assert legacy.current_index == 11
+    assert legacy.current_index == next(i for i, step in enumerate(ONBOARDING_STEPS) if step.key == "energy_level")
 
 
 def test_parse_clock_pair():

@@ -56,6 +56,15 @@ DEFAULT_SUBJECT_CONTENT_TYPES: dict[str, ContentType] = {
     "اقتصاد": ContentType.CALCULATIONAL,
     "فلسفه": ContentType.CONCEPTUAL,
     "روان‌شناسی": ContentType.CONCEPTUAL,
+    "درک عمومی هنر": ContentType.DIAGRAM,
+    "درک عمومی ریاضی و فیزیک": ContentType.CALCULATIONAL,
+    "خلاقیت تصویری و تجسمی": ContentType.PRACTICAL,
+    "زبان تخصصی (زبان انتخابی داوطلب)": ContentType.VOCABULARY,
+    "زبان تخصصی": ContentType.VOCABULARY,
+    "علوم و فنون ادبی": ContentType.TEXTUAL,
+    "تاریخ و جغرافیا": ContentType.MEMORIZATION,
+    "علوم اجتماعی": ContentType.CONCEPTUAL,
+    "فلسفه و منطق": ContentType.CONCEPTUAL,
 }
 
 #: روش‌های آموزشی پیشنهادی برای هر نوع محتوا (SUB-01).
@@ -97,6 +106,40 @@ CONTENT_TYPE_METHODS: dict[ContentType, tuple[str, ...]] = {
         "توصیف نمودار با زبان خودت",
         "تمرین تفسیر داده",
     ),
+    ContentType.PRACTICAL: (
+        "تمرین مهارتی کوتاه با خروجی قابل مشاهده",
+        "بازخورد بر اساس معیارهای روشن، سپس یک تلاش اصلاح‌شده",
+        "تکرار مهارت در چند نوبت جدا از هم",
+        "تمرین زمان‌دار فقط پس از آشنایی اولیه با مهارت",
+    ),
+}
+
+#: نگاشت‌های تخصصی‌تر برای زیرگروه‌های کنکور. این‌ها الگوی شروع محصول‌اند؛
+#: دامنهٔ آزمون، نمونه‌سؤال و عملکرد داوطلب باید آن‌ها را تأیید/اصلاح کند.
+SUBJECT_METHODS: dict[str, tuple[str, ...]] = {
+    "درک عمومی هنر": (
+        "نمونهٔ تصویری را بدون برچسب ببین و از حافظه ویژگی/سبک/نشانه‌هایش را بازیابی کن",
+        "نمونه‌های نزدیک را جفت‌جفت مقایسه کن و دلیل تمایز را با شواهد دیداری بگو",
+        "پس از یادگیری اولیه، اثر یا نمونهٔ تازه را تشخیص بده تا انتقال سنجیده شود",
+        "نکته‌های تصویری را در نوبت‌های فاصله‌دار دوباره بازیابی کن",
+    ),
+    "درک عمومی ریاضی و فیزیک": (
+        "برای مبحث نو از مثال درست و مرحله‌به‌مرحله شروع کن",
+        "در مثال نیمه‌حل‌شده گام بعدی را پیش‌بینی کن و سپس مستقل حل کن",
+        "پس از تمرین پایه، سؤال‌های نزدیک را درهم‌آمیخته کن تا انتخاب روش سنجیده شود",
+    ),
+    "خلاقیت تصویری و تجسمی": (
+        "مهارت را با تمرین تولیدی کوچک و خروجی قابل مشاهده تمرین کن",
+        "هر خروجی را با rubric شخصی/رسمی یا معیارهای از پیش روشن بازبینی کن",
+        "یک اصلاح مشخص را در تلاش بعدی اجرا کن و تغییر را ثبت کن",
+        "تمرین زمان‌دار را تدریجی و فقط در صورت هم‌راستایی با آزمون هدف اضافه کن",
+    ),
+    "زبان تخصصی": (
+        "واژگان را از راه بازیابی در هر دو جهت و در جمله تمرین کن",
+        "گرامر/ساختار را در متن به کار ببر، نه فقط با بازخوانی قاعده",
+        "درک مطلب را با متن تازه و سپس بازخورد واژگانی/استنباطی بسنج",
+        "سرعت را جدا از دقت و پس از تثبیت پایه اندازه‌گیری کن",
+    ),
 }
 
 
@@ -114,9 +157,26 @@ def subject_default_content_type(subject_name: str) -> ContentType:
     return ContentType.CONCEPTUAL
 
 
-def recommended_methods(content_type: ContentType) -> tuple[str, ...]:
-    """روش‌های آموزشی پیشنهادی برای یک نوع محتوا."""
-    return CONTENT_TYPE_METHODS.get(content_type, CONTENT_TYPE_METHODS[ContentType.CONCEPTUAL])
+def recommended_methods(
+    content_type: ContentType, subject_name: str = ""
+) -> tuple[str, ...]:
+    """روش‌های آغازین بر اساس نوع محتوا و در صورت وجود، نام درس.
+
+    نگاشت درس به‌تنهایی نسخهٔ قطعی نیست؛ نوع مبحثِ ثبت‌شده بر پیش‌فرض درس
+    اولویت دارد. خروجی باید همراه نتیجهٔ عملکرد و انتخاب کاربر بازبینی شود.
+    """
+    generic = CONTENT_TYPE_METHODS.get(
+        content_type, CONTENT_TYPE_METHODS[ContentType.CONCEPTUAL]
+    )
+    key = subject_name.strip()
+    specific = next(
+        (methods for subject, methods in SUBJECT_METHODS.items() if subject in key),
+        (),
+    )
+    if not specific:
+        return generic
+    # چند روش تخصصی و چند روش پایه حفظ می‌شوند تا پیشنهادها قابل اجرا بمانند.
+    return tuple(dict.fromkeys((*specific, *generic[:2])))
 
 
 # ---------------------------------------------------------------------------

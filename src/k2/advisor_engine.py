@@ -92,13 +92,17 @@ class MasteryEvidence:
 
 @dataclass
 class MasteryAssessment:
-    """نتیجهٔ سنجش تسلط یک مبحث (MAST-01)."""
+    """نتیجهٔ عملکردی/موقت برای یک مبحث؛ نه تضمین تثبیت ذهنی."""
 
     topic_id: Optional[int]
     topic_name: str
     level: MasteryLevel
     confidence: float
     reasons: tuple[str, ...] = ()
+    performance_events: int = 0
+    distinct_sessions: int = 0
+    delayed_confirmed: bool = False
+    transfer_confirmed: bool = False
 
     @property
     def label(self) -> str:
@@ -113,41 +117,51 @@ def assess_mastery(
     self_assessed: Optional[int] = None,
     settings: Optional[Settings] = None,
 ) -> MasteryAssessment:
-    """تسلط را از **عملکرد** استنباط می‌کند، نه از حس دانش‌آموز.
+    """سطح عملکردی مبحث را از شواهد بسازد؛ نه از حسِ «بلدم».
 
-    خودسنجی تنها در صورتی وارد محاسبه می‌شود که شاهد عملکردی وجود نداشته
-    باشد و آن‌وقت با وزن کمتر (سند ۱، اصل ۵؛ سند ۴، بخش ۱.۲).
+    L4 یک معیار عملیاتی قابل‌تنظیم است: عملکرد کافی در چند روزِ جدا، دست‌کم
+    یک بازیابی تأخیری و یک سنجش انتقالی. این معیار احتمال نگهداشت را بهتر
+    می‌کند اما حافظه یا نتیجهٔ آزمون را تضمین نمی‌کند.
     """
     settings = settings or Settings()
     a = settings.advisor
     reasons: list[str] = []
-
     performance = [e for e in evidence if e.source != "self_report"]
+    if any(not 0.0 <= float(e.score) <= 1.0 for e in performance):
+        raise ValueError("نمرهٔ شاهد عملکرد باید بین صفر و یک باشد.")
+
+    distinct_dates = sorted({e.at for e in performance})
+    distinct_sessions = len(distinct_dates)
+    delayed_sources = {"delayed", "review", "delayed_exam"}
+    transfer_sources = {"transfer", "mixed_exam", "novel_item"}
+    delayed_events = [e for e in performance if e.source in delayed_sources]
+    transfer_events = [e for e in performance if e.source in transfer_sources]
+    threshold = max(0.0, min(1.0, a.mastery_confirming_score))
+    delayed_confirmed = any(e.score >= threshold for e in delayed_events)
+    transfer_confirmed = any(e.score >= threshold for e in transfer_events)
+
     if performance:
-        # شواهد جدیدتر وزن بیشتری دارند.
+        # نمره‌های تازه‌تر وزن بیشتری دارند؛ تکرار همان روز به‌عنوان جلسهٔ جدا حساب نمی‌شود.
         ordered = sorted(performance, key=lambda e: e.at)
-        weights = [1.0 + 0.5 * index for index in range(len(ordered))]
-        total_weight = sum(weights)
-        score = sum(e.score * w for e, w in zip(ordered, weights)) / total_weight
-        confidence = min(1.0, 0.4 + 0.15 * len(performance))
+        weights = [1.0 + 0.35 * index for index in range(len(ordered))]
+        score = sum(e.score * w for e, w in zip(ordered, weights)) / sum(weights)
+        confidence = min(0.95, 0.25 + 0.18 * distinct_sessions)
         sources = {e.source for e in performance}
-        if "transfer" in sources:
-            reasons.append("شاهد انتقال به سؤال جدید وجود دارد.")
-        if "review" in sources:
-            reasons.append("شاهد بازیابی فعال وجود دارد.")
-        if "exam" in sources:
-            reasons.append("شاهد آزمون وجود دارد.")
         if "diagnostic" in sources:
             reasons.append("شاهد آزمون تشخیصی وجود دارد.")
+        if delayed_confirmed:
+            reasons.append("بازیابی تأخیریِ بالاتر از آستانه ثبت شده است.")
+        if transfer_confirmed:
+            reasons.append("شاهد انتقال/سؤال تازهٔ بالاتر از آستانه ثبت شده است.")
         if "self_report" in {e.source for e in evidence}:
-            reasons.append("خودسنجی ثبت شده اما وزن کمتری دارد.")
+            reasons.append("خودسنجی ثبت شده، اما سطح بر پایهٔ شواهد عملکردی محاسبه شد.")
     elif self_assessed is not None:
         score = max(0.0, min(1.0, self_assessed / 4.0))
-        confidence = 0.25
-        reasons.append("فقط خودسنجی در دسترس است؛ اطمینان پایین است.")
+        confidence = 0.20
+        reasons.append("فقط خودسنجی در دسترس است؛ اطمینان پایین است و L4 از آن صادر نمی‌شود.")
     else:
         score = 0.0
-        confidence = 0.1
+        confidence = 0.10
         reasons.append("شاهدی برای این مبحث ثبت نشده است.")
 
     if score <= a.mastery_l1_max:
@@ -159,15 +173,39 @@ def assess_mastery(
     else:
         level = MasteryLevel.L4
 
-    if level == MasteryLevel.L0:
-        reasons.append("عملکرد ثبت‌شده‌ای وجود ندارد؛ مبحث «ندیده» فرض شد.")
+    if not performance and level.value > MasteryLevel.L2.value:
+        level = MasteryLevel.L2
+    if level == MasteryLevel.L4:
+        span = (distinct_dates[-1] - distinct_dates[0]).days if distinct_sessions >= 2 else 0
+        enough_sessions = distinct_sessions >= max(2, a.mastery_min_spaced_days)
+        enough_spacing = span >= max(1, a.mastery_min_spacing_days)
+        if not (enough_sessions and enough_spacing and delayed_confirmed and transfer_confirmed):
+            level = MasteryLevel.L3
+            missing = []
+            if not enough_sessions or not enough_spacing:
+                missing.append("بازیابی در جلسه‌های جدا با فاصلهٔ کافی")
+            if not delayed_confirmed:
+                missing.append("آزمون بازیابی تأخیریِ موفق")
+            if not transfer_confirmed:
+                missing.append("سنجش انتقالی/ترکیبیِ موفق")
+            reasons.append("برای L4 موقتاً لازم است: " + "، ".join(missing) + ".")
+        else:
+            reasons.append(
+                "L4 عملکردی ثبت شد؛ این وضعیت فقط شواهد فعلی را خلاصه می‌کند و تضمین ماندگاری نیست."
+            )
 
+    if level == MasteryLevel.L0:
+        reasons.append("عملکرد ثبت‌شده‌ای وجود ندارد؛ مبحث «ندیده/نیازمند تشخیص» است.")
     return MasteryAssessment(
         topic_id=topic_id,
         topic_name=topic_name,
         level=level,
         confidence=confidence,
         reasons=tuple(reasons),
+        performance_events=len(performance),
+        distinct_sessions=distinct_sessions,
+        delayed_confirmed=delayed_confirmed,
+        transfer_confirmed=transfer_confirmed,
     )
 
 
@@ -320,7 +358,7 @@ def prescribe_for_topic(
     settings = settings or Settings()
     templates = prescription_matrix(phase, level)
     content_type = topic.content_type or subject_default_content_type(subject_name)
-    methods = recommended_methods(content_type)
+    methods = recommended_methods(content_type, subject_name)
 
     activities: list[Activity] = []
     for template in templates:

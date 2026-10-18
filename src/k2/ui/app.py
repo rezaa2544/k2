@@ -33,6 +33,7 @@ from .views import (
     ReviewPage,
     SettingsPage,
     TodayPlanPage,
+    TopicsPage,
 )
 
 APP_TITLE = "مشاور هوشمند کنکور"
@@ -40,6 +41,7 @@ NAV_ITEMS = [
     ("⌂   داشبورد", "داشبورد", "نمای کلی روز و ظرفیت"),
     ("◷   برنامهٔ امروز", "برنامهٔ امروز", "کارهای امروز و زمان‌بندی"),
     ("▦   فعالیت‌ها", "فعالیت‌ها", "ثبت و پیگیری مطالعه"),
+    ("◇   مباحث و تسلط", "مباحث و تسلط", "سنجش تأخیری، روش یادگیری و مسیر مبحث"),
     ("◎   آزمون و تحلیل", "آزمون و تحلیل", "نتیجه و تحلیل سؤال‌ها"),
     ("↻   مرور تطبیقی", "مرور تطبیقی", "مرور بر اساس یادگیری"),
     ("▤   گزارش‌ها", "گزارش‌ها", "گزارش روزانه و هفتگی"),
@@ -175,12 +177,13 @@ class MainWindow(QMainWindow):
         self.dashboard = DashboardPage(self.service)
         self.today = TodayPlanPage(self.service)
         self.activities = ActivitiesPage(self.service)
+        self.topics = TopicsPage(self.service)
         self.exams = ExamsPage(self.service)
         self.review = ReviewPage(self.service)
         self.reports = ReportsPage(self.service)
         self.settings = SettingsPage(self.service)
         for page in (
-            self.dashboard, self.today, self.activities, self.exams,
+            self.dashboard, self.today, self.activities, self.topics, self.exams,
             self.review, self.reports, self.settings,
         ):
             self.stack.addWidget(page)

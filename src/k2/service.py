@@ -34,6 +34,7 @@ from .domain.models import (
     ExamAttempt,
     ExamProfile,
     ExamQuestion,
+    LearningEvidence,
     ReviewItem,
     ReviewLog,
     Subject,
@@ -252,8 +253,85 @@ class AdvisorService:
         return topic_id
 
     def update_topic_mastery(self, topic_id: int, level: MasteryLevel) -> None:
+        """تغییر دستی فقط با برچسب خودکار/کاربر در لایهٔ UI ثبت می‌شود."""
         self.repo.update_topic_mastery(topic_id, level)
         self.conn.commit()
+
+    def list_topics(self, subject_id: Optional[int] = None) -> list[Topic]:
+        return self.repo.list_topics(subject_id)
+
+    def list_learning_evidence(self, topic_id: Optional[int] = None) -> list[LearningEvidence]:
+        return self.repo.list_learning_evidence(topic_id)
+
+    def assess_topic(self, topic_id: int) -> advisor_engine.MasteryAssessment:
+        topic = next((t for t in self.repo.list_topics() if t.id == topic_id), None)
+        if topic is None:
+            raise ValueError("مبحث یافت نشد.")
+        evidence = [
+            advisor_engine.MasteryEvidence(
+                at=item.observed_on or _dt.date.today(), source=item.source,
+                score=item.score, note=item.note,
+            )
+            for item in self.repo.list_learning_evidence(topic_id)
+        ]
+        return advisor_engine.assess_mastery(
+            topic_id=topic.id, topic_name=topic.name, evidence=evidence,
+            self_assessed=topic.self_assessed, settings=self.settings,
+        )
+
+    def record_learning_evidence(self, evidence: LearningEvidence) -> advisor_engine.MasteryAssessment:
+        if evidence.observed_on is None:
+            evidence.observed_on = _dt.date.today()
+        if evidence.observed_on > _dt.date.today():
+            raise ValueError("تاریخ سنجش نمی‌تواند در آینده باشد.")
+        if not 0 <= evidence.score <= 1:
+            raise ValueError("درصد پاسخ درست باید بین صفر و یک باشد.")
+        if evidence.source not in {"diagnostic", "delayed", "transfer", "mixed_exam", "review"}:
+            raise ValueError("نوع شاهد سنجش معتبر نیست.")
+        if evidence.item_count < 0 or evidence.confidence not in {1, 2, 3, 4}:
+            raise ValueError("تعداد آیتم یا میزان اطمینان نامعتبر است.")
+        if evidence.duration_seconds is not None and evidence.duration_seconds < 0:
+            raise ValueError("زمان پاسخ‌گویی نمی‌تواند منفی باشد.")
+        self.repo.create_learning_evidence(evidence)
+        assessment = self.assess_topic(int(evidence.topic_id))
+        self.repo.update_topic_mastery(int(evidence.topic_id), assessment.level)
+        self.conn.commit()
+        return assessment
+
+    def recommend_topic(self, topic_id: int) -> tuple[advisor_engine.MasteryAssessment, advisor_engine.Prescription]:
+        topic = next((t for t in self.repo.list_topics() if t.id == topic_id), None)
+        if topic is None:
+            raise ValueError("مبحث یافت نشد.")
+        assessment = self.assess_topic(topic_id)
+        profile = self.active_exam_profile()
+        deadline = (
+            _dt.datetime.combine(profile.target_date, _dt.time(23, 59))
+            if profile and profile.target_date else None
+        )
+        prescription = advisor_engine.prescribe_for_topic(
+            topic=topic, subject_name=topic.subject_name,
+            phase=self.study_phase(), level=assessment.level,
+            deadline=deadline, settings=self.settings,
+        )
+        return assessment, prescription
+
+    def generate_topic_pathway(self, topic_id: int) -> list[Activity]:
+        """پیشنهاد درس‌محور را به فعالیت‌های واقعی تبدیل کند، بدون تکرار بازها."""
+        _assessment, prescription = self.recommend_topic(topic_id)
+        existing = [a for a in self.repo.list_activities() if a.topic_id == topic_id]
+        open_titles = {
+            a.title for a in existing
+            if a.state not in {ActivityState.DONE, ActivityState.DROPPED, ActivityState.EXPIRED}
+        }
+        completed_titles = {a.title for a in existing if a.state == ActivityState.DONE}
+        created: list[Activity] = []
+        for activity in prescription.activities:
+            if activity.title in open_titles or activity.title in completed_titles:
+                continue
+            self.repo.create_activity(activity)
+            created.append(activity)
+        self.conn.commit()
+        return created
 
     # ------------------------------------------------------------------
     # تقویم
@@ -390,6 +468,15 @@ class AdvisorService:
             active_profile.id if active_profile else None, include_unselected=True
         )
         subject_by_id = {subject.id: subject for subject in profile_subjects}
+        exam_priority_enabled = self.repo.get_setting("priority.use_exam_coefficients") != "0"
+        comparable_coefficients = [
+            float(subject.exam_coefficient)
+            for subject in profile_subjects
+            if subject.exam_coefficient is not None
+            and subject.exam_coefficient_status == "official_notice_republished"
+            and float(subject.exam_coefficient) > 0
+        ]
+        max_exam_coefficient = max(comparable_coefficients, default=0.0)
 
         for activity in activities:
             activity.blocked_dependents = blocked_counts.get(activity.id or -1, 0)
@@ -400,7 +487,18 @@ class AdvisorService:
                     # درس از فهرست فعال خارج شده اما فعالیت قدیمی پنهان نمی‌شود؛
                     # وزن اهمیتش در اولویت خودکار کاهش می‌یابد تا انتخاب جاری اثر داشته باشد.
                     selection_factor = 1.0 if subject.is_selected else 0.25
-                    activity.topic_weight = subject.effective_weight * selection_factor
+                    # ضریب آزمون فقط یک تعدیل‌گرِ اولویت خودکار است؛ هرگز در
+                    # ضریب شخصی/وزن مبحث ذخیره یا بازنویسی نمی‌شود.
+                    exam_factor = 1.0
+                    if (
+                        exam_priority_enabled
+                        and max_exam_coefficient > 0
+                        and subject.exam_coefficient is not None
+                        and subject.exam_coefficient_status == "official_notice_republished"
+                    ):
+                        # بازهٔ ضریب ۰٫۵ تا ۱٫۵؛ انتخاب شخصی و ضعف مبحث جدا می‌مانند.
+                        exam_factor = 0.5 + float(subject.exam_coefficient) / max_exam_coefficient
+                    activity.topic_weight = subject.effective_weight * selection_factor * exam_factor
                 else:
                     activity.topic_weight = 1.0
             overdue_days = 0.0
@@ -638,6 +736,21 @@ class AdvisorService:
                 seconds=seconds,
             )
         )
+        if item.topic_id is not None:
+            self.repo.create_learning_evidence(
+                LearningEvidence(
+                    topic_id=item.topic_id,
+                    observed_on=today,
+                    source="review",
+                    score=1.0 if correct else 0.0,
+                    item_count=1,
+                    confidence=confidence,
+                    duration_seconds=seconds,
+                    note=f"مرور فعال: {item.label}",
+                )
+            )
+            assessment = self.assess_topic(item.topic_id)
+            self.repo.update_topic_mastery(item.topic_id, assessment.level)
         self.conn.commit()
         return update
 

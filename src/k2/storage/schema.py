@@ -7,7 +7,7 @@ migration انجام نمی‌شود.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 #: اسکریپت نسخهٔ ۱ — اسکیمای اولیه.
 MIGRATION_1 = """
@@ -261,8 +261,26 @@ CREATE INDEX IF NOT EXISTS idx_textbook_profile_subject
 """
 
 #: فهرست مهاجرت‌ها به ترتیب نسخه.
+#: نسخهٔ ۴ — ثبت تاریخچهٔ سنجش عملکردی برای ارزیابی تطبیقی تسلط.
+MIGRATION_4 = """
+CREATE TABLE IF NOT EXISTS learning_evidence (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic_id         INTEGER NOT NULL REFERENCES topic(id) ON DELETE CASCADE,
+    observed_on      TEXT NOT NULL,
+    source           TEXT NOT NULL DEFAULT 'diagnostic',
+    score            REAL NOT NULL CHECK(score >= 0 AND score <= 1),
+    item_count       INTEGER NOT NULL DEFAULT 0 CHECK(item_count >= 0),
+    confidence       INTEGER NOT NULL DEFAULT 2 CHECK(confidence BETWEEN 1 AND 4),
+    duration_seconds INTEGER CHECK(duration_seconds IS NULL OR duration_seconds >= 0),
+    note             TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_learning_evidence_topic_date
+    ON learning_evidence(topic_id, observed_on, id);
+"""
+
 MIGRATIONS: list[tuple[int, str]] = [
     (1, MIGRATION_1),
     (2, MIGRATION_2),
     (3, MIGRATION_3),
+    (4, MIGRATION_4),
 ]

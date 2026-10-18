@@ -79,6 +79,7 @@ class ContentType(StrEnum):
     TEXTUAL = ("textual", "متنی")
     VOCABULARY = ("vocabulary", "واژگانی")
     DIAGRAM = ("diagram", "نموداری/شکلی")
+    PRACTICAL = ("practical", "عملی/مهارتی")
 
 
 class ErrorCode(StrEnum):

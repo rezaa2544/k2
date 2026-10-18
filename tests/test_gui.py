@@ -10,7 +10,7 @@ import pytest
 pytestmark = pytest.mark.gui
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QComboBox, QLabel, QLineEdit
+from PySide6.QtWidgets import QComboBox, QLabel, QLineEdit, QWidget
 
 from k2.service import AdvisorService
 from k2.ui.app import APP_TITLE, MainWindow
@@ -44,8 +44,8 @@ def test_persian_font_is_loaded(qapp):
 
 
 def test_main_window_has_all_navigation_pages(window: MainWindow):
-    assert window.nav.count() == 7
-    assert window.stack.count() == 7
+    assert window.nav.count() == 8
+    assert window.stack.count() == 8
     assert window.windowTitle() == APP_TITLE
 
 
@@ -102,6 +102,10 @@ def test_new_install_settings_have_no_prefilled_personal_values(window: MainWind
     assert window.settings.exam_name_edit.text() == ""
     assert window.settings.exam_date_edit.text() == ""
     assert window.settings.exam_status_combo.currentData() is None
+    assert window.settings.mastery_sessions_spin.value() == 2
+    assert window.settings.mastery_spacing_spin.value() == 3
+    assert window.settings.mastery_score_spin.value() == 0.8
+    assert window.review
     assert window.service.repo.list_fixed_events() == []
     assert window.service.repo.list_routines() == []
 
@@ -189,8 +193,9 @@ def test_onboarding_has_no_synthetic_blocking_question(qapp, tmp_path: Path):
         weekly_step = next(i for i, step in enumerate(steps) if step.key == "weekly_schedule")
         group_step = next(i for i, step in enumerate(steps) if step.key == "exam_group")
         assert wizard.stack.widget(weekly_step).findChild(
-            QLabel, "field_weekly_schedule"
-        ).text().startswith("فعلاً هیچ کلاس")
+            QWidget, "field_weekly_schedule"
+        ) is not None
+        assert wizard._event_editors["weekly_schedule"]["rows"].count() == 0
         group_combo = wizard.stack.widget(group_step).findChild(QComboBox, "field_exam_group")
         assert group_combo.currentData() == ""
         wizard._collect()
@@ -265,13 +270,64 @@ def test_onboarding_subjects_and_user_books_are_persisted_without_official_weigh
         subjects = service.repo.list_subjects(profile.id, include_unselected=True)
         assert len(subjects) == 1 and subjects[0].name == "زیست‌شناسی"
         assert subjects[0].is_selected is True
-        assert subjects[0].exam_coefficient is None
+        assert subjects[0].exam_coefficient == 12
+        assert subjects[0].exam_coefficient_status == "official_notice_republished"
         assert subjects[0].academic_coefficient is None
         books = service.repo.list_textbooks(profile.id)
         assert len(books) == 1
         assert books[0].title == "کتاب زیست ۱"
         assert books[0].source_status == "user_entered_unverified"
         assert books[0].is_selected is True
+    finally:
+        service.close()
+
+
+def test_onboarding_persists_classes_commitments_sleep_and_custom_routines(qapp, tmp_path: Path):
+    from PySide6.QtCore import QTime
+    from k2.domain.enums import FixedEventKind, RoutineKind
+
+    service = AdvisorService(tmp_path / "onboarding-calendar.db")
+    try:
+        wizard = OnboardingWizard(service)
+        wizard.state.values.update({
+            "exam_name": "کنکور هدف", "exam_group": "علوم تجربی",
+            "exam_year": "۱۴۰۶", "exam_date_status": "نامشخص",
+            "class_attendance": "بله", "sleep_time": "۲۳:۰۰ تا ۰۶:۳۰",
+            "subject_selection_by_group": '{"علوم تجربی":["زیست‌شناسی"]}',
+        })
+        class_editor = wizard._event_editors["classes"]
+        class_editor["title"].setText("کلاس زیست مؤسسه")
+        class_editor["subject"].setCurrentText("زیست‌شناسی")
+        class_editor["weekday"].setCurrentIndex(1)
+        class_editor["start"].setTime(QTime(15, 0))
+        class_editor["end"].setTime(QTime(17, 0))
+        wizard._add_event_row("classes")
+
+        event_editor = wizard._event_editors["weekly_schedule"]
+        event_editor["title"].setText("آزمون آزمایشی")
+        event_editor["kind"].setCurrentIndex(event_editor["kind"].findData(FixedEventKind.EXAM.value))
+        event_editor["weekday"].setCurrentIndex(5)
+        event_editor["start"].setTime(QTime(8, 0))
+        event_editor["end"].setTime(QTime(12, 0))
+        wizard._add_event_row("weekly_schedule")
+
+        routine_editor = wizard._routine_editors["routines"]
+        routine_editor["title"].setText("استراحت بعدازظهر")
+        routine_editor["kind"].setCurrentIndex(routine_editor["kind"].findData(RoutineKind.REST.value))
+        routine_editor["start"].setTime(QTime(16, 0))
+        routine_editor["end"].setTime(QTime(16, 30))
+        wizard._add_routine_row("routines")
+        wizard._apply_to_profile()
+
+        events = service.repo.list_fixed_events()
+        assert {(e.title, e.kind.value, e.weekday) for e in events} == {
+            ("کلاس زیست مؤسسه", "live_class", 1), ("آزمون آزمایشی", "exam", 5)
+        }
+        routines = service.repo.list_routines()
+        sleep = next(r for r in routines if r.title == "خواب شب")
+        assert sleep.start_minute == 23 * 60 and sleep.end_minute == 6 * 60 + 30
+        assert (service.wake_minute, service.sleep_minute) == (390, 1380)
+        assert any(r.title == "استراحت بعدازظهر" and r.kind == RoutineKind.REST for r in routines)
     finally:
         service.close()
 
@@ -331,17 +387,21 @@ def test_subject_picker_retains_each_track_and_book_checks(qapp, tmp_path: Path)
             for i in range(wizard.subject_list.count())
         )
         selections = json.loads(wizard.state.values["subject_selection_by_group"])
-        assert set(selections["علوم تجربی"]) == {"زیست‌شناسی", "شیمی", "فیزیک", "ریاضی", "زمین‌شناسی"}
+        from k2.konkur_catalog import SUBJECTS_BY_GROUP
+        assert set(selections["علوم تجربی"]) == set(SUBJECTS_BY_GROUP["علوم تجربی"])
         assert "علوم انسانی" in selections
 
         wizard.book_title_edit.setText("کتاب آزمایشی")
         wizard.book_code_edit.setText("X-1")
         wizard._add_book()
-        item = wizard.book_list.item(0)
+        item = next(
+            wizard.book_list.item(i) for i in range(wizard.book_list.count())
+            if "— کتاب آزمایشی" in wizard.book_list.item(i).text()
+        )
         item.setCheckState(Qt.Unchecked)
         books = json.loads(wizard.state.values["books"])
-        assert books[0]["title"] == "کتاب آزمایشی"
-        assert books[0]["selected"] is False
-        assert "تأییدنشده" in item.text()
+        manual = next(row for row in books if row["title"] == "کتاب آزمایشی")
+        assert manual["selected"] is False
+        assert "واردشده/تأییدنشده" in item.text()
     finally:
         service.close()

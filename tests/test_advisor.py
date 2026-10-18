@@ -46,7 +46,7 @@ def test_phase_boundaries_are_configurable():
     assert determine_phase(10, settings) == StudyPhase.FINAL_DAYS
 
 
-def test_mastery_from_diagnostic_evidence():
+def test_single_diagnostic_does_not_claim_mastery():
     assessment = assess_mastery(
         topic_id=1,
         topic_name="تابع",
@@ -55,9 +55,27 @@ def test_mastery_from_diagnostic_evidence():
         ],
         settings=Settings(),
     )
-    assert assessment.level == MasteryLevel.L4
-    assert assessment.confidence > 0.4
+    assert assessment.level == MasteryLevel.L3
+    assert assessment.confidence < 0.5
     assert any("تشخیصی" in reason for reason in assessment.reasons)
+    assert any("تأخیری" in reason for reason in assessment.reasons)
+
+
+def test_l4_requires_spaced_delayed_and_transfer_evidence():
+    assessment = assess_mastery(
+        topic_id=1,
+        topic_name="تابع",
+        evidence=[
+            MasteryEvidence(at=_dt.date(2026, 10, 1), source="diagnostic", score=0.92),
+            MasteryEvidence(at=_dt.date(2026, 10, 6), source="delayed", score=0.88),
+            MasteryEvidence(at=_dt.date(2026, 10, 10), source="transfer", score=0.86),
+        ],
+        settings=Settings(),
+    )
+    assert assessment.level == MasteryLevel.L4
+    assert assessment.distinct_sessions == 3
+    assert assessment.delayed_confirmed and assessment.transfer_confirmed
+    assert any("تضمین" in reason for reason in assessment.reasons)
 
 
 def test_mastery_low_score_is_l1():
@@ -192,6 +210,20 @@ def test_prescription_creates_activities_with_criteria():
         assert "تابع" in activity.title
     assert prescription.methods
     assert any("مثال حل‌شده" in method for method in prescription.methods)
+
+
+def test_subject_specific_methods_cover_art_and_foreign_language():
+    from k2.domain.learning import recommended_methods, subject_default_content_type
+
+    art_type = subject_default_content_type("خلاقیت تصویری و تجسمی")
+    assert art_type == ContentType.PRACTICAL
+    art_methods = recommended_methods(art_type, "خلاقیت تصویری و تجسمی")
+    assert any("خروجی قابل مشاهده" in method for method in art_methods)
+    language_methods = recommended_methods(
+        subject_default_content_type("زبان تخصصی (زبان انتخابی داوطلب)"),
+        "زبان تخصصی (زبان انتخابی داوطلب)",
+    )
+    assert any("متن تازه" in method for method in language_methods)
 
 
 def test_next_action_has_a_reason():

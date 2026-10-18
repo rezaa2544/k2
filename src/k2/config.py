@@ -145,6 +145,11 @@ class AdvisorSettings:
     mastery_l1_max: float = 0.40
     mastery_l2_max: float = 0.70
     mastery_l3_max: float = 0.85
+    #: معیار عملیاتی L4: چند روز جداگانه و چه فاصله‌ای [H]؛ تضمین حافظه نیست.
+    mastery_min_spaced_days: int = 2
+    mastery_min_spacing_days: int = 3
+    #: حداقل دقت هر شاهد تأخیری/انتقالی برای تأیید L4 [H].
+    mastery_confirming_score: float = 0.80
     #: حداقل نمونهٔ لازم برای کالیبراسیون تخمین زمان (EST-02).
     calibration_min_samples: int = 5
     #: ضریب تخمین وقتی داده کافی نیست [H].

@@ -107,125 +107,93 @@ class OnboardingStep:
 
 ONBOARDING_STEPS: tuple[OnboardingStep, ...] = (
     OnboardingStep(
-        key="student_name",
-        title="نام داوطلب",
-        description="نامی که در گزارش‌ها استفاده می‌شود.",
-        kind="text",
+        key="student_name", title="نام داوطلب",
+        description="نامی که در گزارش‌ها استفاده می‌شود.", kind="text",
     ),
     OnboardingStep(
-        key="exam_group",
-        title="گروه/رشتهٔ آزمایشی",
-        description="گروه آزمایشی هدف و رشته یا دانشگاه موردنظر (اختیاری).",
-        kind="choice",
-        options=("علوم تجربی", "علوم ریاضی و فنی", "علوم انسانی", "سایر/تغییر رشته"),
-        required=True,
+        key="exam_group", title="رشتهٔ آزمایشی",
+        description="یکی از سه گروه اصلی را انتخاب کنید؛ انتخاب‌های قبلی با تغییر رشته حذف نمی‌شوند.",
+        kind="choice", options=("علوم تجربی", "علوم ریاضی و فنی", "علوم انسانی"), required=True,
     ),
     OnboardingStep(
-        key="exam_year",
-        title="سال آزمون هدف",
-        description=(
-            "سال آزمون را انتخاب کنید. اگر دادهٔ رسمی آن سال در برنامه تأیید نشده باشد، "
-            "ضرایب خالی می‌مانند و برای اولویت‌بندی رسمی استفاده نمی‌شوند."
-        ),
-        kind="choice",
-        options=("۱۴۰۵", "۱۴۰۶", "سال دیگر / هنوز مشخص نیست"),
-        required=True,
+        key="exam_year", title="سال آزمون هدف",
+        description="مواد و ضرایب هر سال جدا هستند؛ دادهٔ سال قبل خودکار به سال دیگر منتقل نمی‌شود.",
+        kind="choice", options=("۱۴۰۵", "۱۴۰۶", "سال دیگر / هنوز مشخص نیست"), required=True,
     ),
     OnboardingStep(
-        key="exam_name",
-        title="نام آزمون هدف",
-        description="مثلاً «کنکور سراسری». اطلاعات تاریخ و ضرایب جداگانه وارد می‌شود.",
-        kind="text",
-        required=True,
+        key="exam_name", title="نام آزمون هدف",
+        description="مثلاً «کنکور سراسری».", kind="text", required=True,
     ),
     OnboardingStep(
-        key="exam_date",
-        title="تاریخ آزمون هدف",
-        description=(
-            "به‌صورت شمسی و با قالب سال/ماه/روز وارد کنید. اگر تاریخ رسمی هنوز "
-            "اعلام نشده، آن را تخمینی وارد کنید."
-        ),
-        kind="date",
-        required=True,
+        key="exam_date", title="تاریخ آزمون هدف",
+        description="تاریخ شمسی اختیاری است؛ اگر هنوز اعلام نشده، خالی بگذارید.", kind="date",
     ),
     OnboardingStep(
-        key="exam_date_status",
-        title="وضعیت تاریخ آزمون",
-        description="آیا تاریخ از منبع رسمی گرفته شده است؟",
-        kind="choice",
-        options=("رسمی (منبع ثبت‌شده)", "تخمینی", "نامشخص"),
-        required=True,
+        key="exam_date_status", title="وضعیت تاریخ آزمون",
+        description="رسمی، تخمینی یا نامشخص.", kind="choice",
+        options=("رسمی (منبع ثبت‌شده)", "تخمینی", "نامشخص"), required=True,
     ),
     OnboardingStep(
-        key="exam_source",
-        title="منبع تاریخ و مقررات",
-        description="عنوان و محل اطلاعیه یا دفترچهٔ رسمی (اختیاری ولی مهم).",
-        kind="text",
+        key="exam_source", title="منبع تاریخ و مقررات",
+        description="عنوان یا پیوند اطلاعیه را ثبت کنید؛ منبع ضریب درس جداگانه در کاتالوگ نمایش داده می‌شود.", kind="text",
     ),
     OnboardingStep(
-        key="subjects",
-        title="انتخاب درس‌ها",
-        description=(
-            "درس‌های موردنیازتان را انتخاب کنید. انتخاب همه، هیچ‌کدام یا ترکیب دلخواه "
-            "ممکن است؛ تغییر رشته انتخاب‌های قبلی را حذف نمی‌کند."
-        ),
-        kind="multiselect",
-        required=True,
+        key="subjects", title="درس‌های آزمون و سوابق",
+        description="مواد آزمون تخصصی و درس‌های سوابق تحصیلی جدا برچسب می‌خورند. انتخاب همه یا گزینشی ممکن است.",
+        kind="multiselect", required=True,
     ),
     OnboardingStep(
-        key="books",
-        title="کتاب‌ها و منابع هر درس",
-        description=(
-            "برای هر کتاب یک ردیف با قالب «درس | عنوان | کد | پایه | سال چاپ | پیوند منبع» "
-            "وارد کنید. موردهای واردشده تا زمان بازبینی پیوند، تأییدنشده می‌مانند."
-        ),
+        key="books", title="کتاب‌های هر درس",
+        description="کاتالوگ کتاب‌ها با پایه، کد و پیوند رسمی کتاب درسی پیش‌پر می‌شود؛ انتخاب/لغو انتخاب شما ذخیره می‌شود.",
         kind="books",
     ),
     OnboardingStep(
-        key="sleep_time",
-        title="ساعت خواب و بیداری",
-        description="مثل «۲۳:۰۰ تا ۰۶:۰۰». خواب محدودیت سخت است.",
-        kind="text",
-        required=True,
+        key="class_attendance", title="کلاس کنکوری مؤسسه",
+        description="آیا کلاس زنده/حضوری یا آنلاینِ مؤسسه دارید؟ اگر بله، درس، روز و زمان هر جلسه را ثبت کنید.",
+        kind="choice", options=("بله", "خیر"), required=True,
     ),
     OnboardingStep(
-        key="weekly_schedule",
-        title="برنامهٔ کلاس‌ها و تعهدات",
-        description=(
-            "فعلاً هیچ کلاس یا تعهد هفتگی ثبت نشده است. می‌توانید این مرحله را خالی بگذارید "
-            "و رویدادهای واقعی خود را بعداً از بخش تنظیمات اضافه کنید."
-        ),
-        kind="schedule",
-        required=False,
+        key="classes", title="زمان کلاس‌های مؤسسه",
+        description="هر جلسه را با درس، روز هفته و ساعت شروع/پایان اضافه کنید. جلسهٔ ضبط‌شده را هم می‌توانید جداگانه علامت بزنید.",
+        kind="events",
     ),
     OnboardingStep(
-        key="energy_level",
-        title="سطح انرژی معمول",
-        description="خودگزارشی: ۱ کم، ۲ متوسط، ۳ خوب.",
-        kind="number",
-        options=("۱", "۲", "۳"),
+        key="weekly_schedule", title="آزمون‌ها و تعهدهای ثابت",
+        description="آزمون آزمایشی، رفت‌وآمد و دیگر تعهدهای ثابت هفتگی را ثبت کنید؛ هیچ رویدادی از پیش ساخته نشده است.",
+        kind="events",
     ),
     OnboardingStep(
-        key="peak_hours",
-        title="ساعت‌های پربازده",
-        description="مثل «۱۶:۰۰–۱۸:۰۰, ۲۰:۰۰–۲۲:۰۰» (اختیاری).",
-        kind="text",
+        key="sleep_time", title="ساعت خواب و بیداری",
+        description="بازهٔ معمول خواب را وارد کنید؛ نمونهٔ قالب: ۲۳:۰۰ تا ۰۶:۰۰. این مقدار فقط زمانی ذخیره می‌شود که خودتان وارد کنید.",
+        kind="text", required=True,
     ),
     OnboardingStep(
-        key="previous_results",
-        title="نتایج آزمون قبلی",
-        description="اختیاری. بعداً هم قابل ثبت است.",
-        kind="text",
+        key="routines", title="خواب، غذا، استراحت و کارهای ثابت",
+        description="وعده‌ها، استراحت، بهداشت و هر کار دلخواه را با بازه و روزهای تکرار اضافه کنید. خواب شب را در مرحلهٔ قبل وارد کنید.",
+        kind="routines",
     ),
     OnboardingStep(
-        key="confirm",
-        title="تأیید نهایی",
-        description="خلاصهٔ داده‌های واردشده را ببینید و تأیید کنید.",
-        kind="confirm",
-        required=True,
+        key="priority_mode", title="روش اولویت‌بندی خودکار",
+        description="ضریب رسمی آزمون با وزن شخصی یکی نیست. حالت خودکار فقط ضریب آزمون را به‌صورت یک تعدیل‌گرِ شفاف در اولویت فعالیت‌ها لحاظ می‌کند؛ وزن شخصی شما تغییر نمی‌کند.",
+        kind="choice", options=("خودکار با توجه به ضریب آزمون", "فقط وزن شخصی من"), required=True,
+    ),
+    OnboardingStep(
+        key="energy_level", title="سطح انرژی معمول",
+        description="خودگزارشی: ۱ کم، ۲ متوسط، ۳ خوب.", kind="number", options=("۱", "۲", "۳"),
+    ),
+    OnboardingStep(
+        key="peak_hours", title="ساعت‌های پربازده",
+        description="مثل «۱۶:۰۰–۱۸:۰۰, ۲۰:۰۰–۲۲:۰۰» (اختیاری).", kind="text",
+    ),
+    OnboardingStep(
+        key="previous_results", title="نتایج آزمون قبلی",
+        description="اختیاری؛ بعداً هم قابل ثبت است.", kind="text",
+    ),
+    OnboardingStep(
+        key="confirm", title="تأیید نهایی",
+        description="خلاصهٔ داده‌های واردشده را ببینید و تأیید کنید.", kind="confirm", required=True,
     ),
 )
-
 
 @dataclass
 class OnboardingState:
@@ -259,6 +227,11 @@ class OnboardingState:
                 "values": self.values,
                 "completed_steps": sorted(self.completed_steps),
                 "current_index": self.current_index,
+                "current_step_key": (
+                    ONBOARDING_STEPS[self.current_index].key
+                    if 0 <= self.current_index < len(ONBOARDING_STEPS) else ""
+                ),
+                "flow_version": 2,
             },
             ensure_ascii=False,
         )
@@ -267,16 +240,35 @@ class OnboardingState:
     def from_json(cls, text: str) -> "OnboardingState":
         raw = json.loads(text)
         values = dict(raw.get("values", {}))
-        # Remove only the retired UI's generated summary/answer, never user records.
-        values.pop("weekly_schedule", None)
+        # Remove only the retired UI's generated summary/answer, never JSON
+        # event data or real calendar records supplied by the user.
+        old_schedule = values.get("weekly_schedule")
+        legacy_summary = isinstance(old_schedule, str) and not old_schedule.lstrip().startswith("[")
+        if legacy_summary:
+            values.pop("weekly_schedule", None)
         values.pop("sunday_recorded", None)
         completed_steps = set(raw.get("completed_steps", []))
-        completed_steps.discard("weekly_schedule")
+        if legacy_summary:
+            completed_steps.discard("weekly_schedule")
         completed_steps.discard("sunday_recorded")
         current_index = int(raw.get("current_index", 0))
-        # The retired Sunday question was immediately after the schedule step.
-        if current_index > 11:
-            current_index -= 1
+        saved_key = str(raw.get("current_step_key", ""))
+        keys = [step.key for step in ONBOARDING_STEPS]
+        if saved_key in keys:
+            current_index = keys.index(saved_key)
+        elif int(raw.get("flow_version", 1)) < 2:
+            # Migrate the former flow by step identity, not by assuming that
+            # the user's saved interview has the same number/order of screens.
+            if legacy_summary and current_index > 11:
+                current_index -= 1
+            old_keys = (
+                "student_name", "exam_group", "exam_year", "exam_name", "exam_date",
+                "exam_date_status", "exam_source", "subjects", "books", "sleep_time",
+                "weekly_schedule", "energy_level", "peak_hours", "previous_results", "confirm",
+            )
+            if 0 <= current_index < len(old_keys) and old_keys[current_index] in keys:
+                current_index = keys.index(old_keys[current_index])
+        current_index = max(0, min(current_index, len(ONBOARDING_STEPS) - 1))
         return cls(
             values=values,
             completed_steps=completed_steps,
@@ -332,15 +324,37 @@ def parse_subjects(text: str) -> list[tuple[str, float]]:
 
 
 def summarize(state: OnboardingState) -> list[str]:
-    """خلاصهٔ داده‌های راه‌اندازی برای نمایش."""
+    """خلاصهٔ ورودی واقعی برای پیش‌نمایشِ تأیید."""
     values = state.values
-    lines = [
-        f"نام: {values.get('student_name', '—')}",
-        f"گروه/رشته: {values.get('exam_group', '—')}",
-        f"سال آزمون: {values.get('exam_year', '—')}",
-        f"آزمون: {values.get('exam_name', '—')}",
-        f"تاریخ: {values.get('exam_date', '—')} ({values.get('exam_date_status', '—')})",
-        f"دروس: {values.get('subjects', '—')}",
-        f"خواب: {values.get('sleep_time', '—')}",
+
+    def count_rows(key: str) -> int:
+        try:
+            result = json.loads(values.get(key, "[]"))
+            return len(result) if isinstance(result, list) else 0
+        except (ValueError, TypeError):
+            return 0
+
+    try:
+        selected = json.loads(values.get("subjects", "[]"))
+        selected_text = "، ".join(map(str, selected)) if isinstance(selected, list) else str(selected)
+    except (ValueError, TypeError):
+        selected_text = values.get("subjects", "")
+    books = []
+    try:
+        books = json.loads(values.get("books", "[]"))
+    except (ValueError, TypeError):
+        pass
+    selected_books = sum(1 for row in books if isinstance(row, dict) and row.get("selected")) if isinstance(books, list) else 0
+    return [
+        f"نام: {values.get('student_name') or '—'}",
+        f"گروه/رشته: {values.get('exam_group') or '—'}",
+        f"سال آزمون: {values.get('exam_year') or '—'}",
+        f"آزمون: {values.get('exam_name') or '—'}",
+        f"تاریخ: {values.get('exam_date') or 'ثبت‌نشده'} ({values.get('exam_date_status') or 'نامشخص'})",
+        f"درس‌ها/دسته‌های انتخابی: {selected_text or '—'}",
+        f"کتاب‌های انتخابی: {selected_books}",
+        f"حضور در کلاس مؤسسه: {values.get('class_attendance') or '—'}؛ جلسه‌های واردشده: {count_rows('classes')}",
+        f"آزمون‌ها/تعهدهای هفتگی: {count_rows('weekly_schedule')}",
+        f"روال‌های ثابت: {count_rows('routines')}؛ بازهٔ خواب: {values.get('sleep_time') or '—'}",
+        f"اولویت‌بندی: {values.get('priority_mode') or '—'}",
     ]
-    return lines

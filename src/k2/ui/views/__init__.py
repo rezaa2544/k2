@@ -10,6 +10,7 @@ from .reports import ReportsPage
 from .review import ReviewPage
 from .settings import SettingsPage
 from .today import TodayPlanPage
+from .topics import TopicsPage
 
 __all__ = [
     "ActivitiesPage",
@@ -22,4 +23,5 @@ __all__ = [
     "ReviewPage",
     "SettingsPage",
     "TodayPlanPage",
+    "TopicsPage",
 ]

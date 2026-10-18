@@ -36,6 +36,7 @@ from ..domain.models import (
     ExamProfile,
     ExamQuestion,
     FixedEvent,
+    LearningEvidence,
     ReviewItem,
     ReviewLog,
     Routine,
@@ -365,6 +366,51 @@ class Repository:
         self.conn.execute(
             "UPDATE topic SET mastery = ? WHERE id = ?", (level.name, topic_id)
         )
+
+    def create_learning_evidence(self, evidence: LearningEvidence) -> int:
+        if evidence.topic_id is None or evidence.observed_on is None:
+            raise ValueError("شاهد عملکرد باید به مبحث و تاریخ مشخص وصل باشد.")
+        if not 0.0 <= float(evidence.score) <= 1.0:
+            raise ValueError("نمرهٔ عملکرد باید بین صفر و یک باشد.")
+        if not 1 <= int(evidence.confidence) <= 4:
+            raise ValueError("اطمینان باید بین ۱ تا ۴ باشد.")
+        cursor = self.conn.execute(
+            "INSERT INTO learning_evidence (topic_id, observed_on, source, score, "
+            "item_count, confidence, duration_seconds, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                evidence.topic_id,
+                evidence.observed_on.isoformat(),
+                evidence.source,
+                float(evidence.score),
+                max(0, int(evidence.item_count)),
+                int(evidence.confidence),
+                evidence.duration_seconds,
+                evidence.note,
+            ),
+        )
+        evidence.id = cursor.lastrowid
+        return evidence.id
+
+    def list_learning_evidence(self, topic_id: Optional[int] = None) -> list[LearningEvidence]:
+        if topic_id is None:
+            rows = self.conn.execute(
+                "SELECT * FROM learning_evidence ORDER BY observed_on, id"
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM learning_evidence WHERE topic_id = ? "
+                "ORDER BY observed_on, id", (topic_id,)
+            ).fetchall()
+        return [
+            LearningEvidence(
+                id=row["id"], topic_id=row["topic_id"],
+                observed_on=_parse_date(row["observed_on"]), source=row["source"],
+                score=float(row["score"]), item_count=int(row["item_count"]),
+                confidence=int(row["confidence"]), duration_seconds=row["duration_seconds"],
+                note=row["note"],
+            )
+            for row in rows
+        ]
 
     # ---- رویداد ثابت ----
 

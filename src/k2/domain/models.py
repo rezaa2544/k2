@@ -123,6 +123,21 @@ class Topic:
     notes: str = ""
 
 
+@dataclass
+class LearningEvidence:
+    """یک سنجش عملکردی مبحث؛ score در بازهٔ ۰..۱ ذخیره می‌شود."""
+
+    id: Optional[int] = None
+    topic_id: Optional[int] = None
+    observed_on: Optional[_dt.date] = None
+    source: str = "diagnostic"  # diagnostic / delayed / transfer / mixed_exam / review
+    score: float = 0.0
+    item_count: int = 0
+    confidence: int = 2  # 1..4; خودگزارشی و جدا از صحت
+    duration_seconds: Optional[int] = None
+    note: str = ""
+
+
 # ---------------------------------------------------------------------------
 # تقویم
 # ---------------------------------------------------------------------------

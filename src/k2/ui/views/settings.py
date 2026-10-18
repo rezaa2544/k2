@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 
 from ...domain.enums import DateStatus, FixedEventKind, RoutineKind, RoutineScope
 from ...domain.models import ExamProfile, FixedEvent, Routine
+from ...konkur_catalog import EXAM_WEIGHT_BY_GROUP
 from ...jdate import format_jalali_long
 from ...service import AdvisorService
 from ..widgets import Card, confirm, info_box, notify
@@ -92,6 +93,34 @@ class SettingsPage(QWidget):
         daily_card.add_layout(form)
         root.addWidget(daily_card)
 
+        mastery_card = Card("معیارهای تطبیقیِ تسلط · فرضیهٔ قابل تنظیم")
+        mastery_form = QFormLayout()
+        self.mastery_sessions_spin = QSpinBox()
+        self.mastery_sessions_spin.setRange(2, 6)
+        mastery_form.addRow("حداقل جلسهٔ جدا:", self.mastery_sessions_spin)
+        self.mastery_spacing_spin = QSpinBox()
+        self.mastery_spacing_spin.setRange(1, 30)
+        self.mastery_spacing_spin.setSuffix(" روز")
+        mastery_form.addRow("کمینهٔ فاصلهٔ جلسه‌ها:", self.mastery_spacing_spin)
+        self.mastery_score_spin = QDoubleSpinBox()
+        self.mastery_score_spin.setRange(0.50, 1.00)
+        self.mastery_score_spin.setSingleStep(0.05)
+        self.mastery_score_spin.setDecimals(2)
+        self.mastery_score_spin.setSuffix(" (۰ تا ۱)")
+        mastery_form.addRow("حداقل نمرهٔ تأخیری و انتقالی:", self.mastery_score_spin)
+        mastery_note = QLabel(
+            "این آستانه‌ها قاعدهٔ عملیاتیِ محصول‌اند، نه استاندارد علمی واحد؛ "
+            "L4 هم عملکرد مشاهده‌شده است، نه تضمین تثبیت حافظه یا نمرهٔ آزمون."
+        )
+        mastery_note.setWordWrap(True)
+        mastery_note.setObjectName("muted")
+        mastery_form.addRow(mastery_note)
+        save_mastery = QPushButton("ذخیرهٔ معیارهای تسلط")
+        save_mastery.clicked.connect(self._save_mastery)
+        mastery_form.addRow(save_mastery)
+        mastery_card.add_layout(mastery_form)
+        root.addWidget(mastery_card)
+
         exam_card = Card("پروفایل آزمون هدف (قابل ویرایش)")
         exam_form = QFormLayout()
         self.exam_name_edit = QLineEdit()
@@ -113,6 +142,10 @@ class SettingsPage(QWidget):
         self.exam_source_edit = QLineEdit()
         self.exam_source_edit.setPlaceholderText("عنوان و محل اطلاعیهٔ رسمی")
         exam_form.addRow("منبع:", self.exam_source_edit)
+        self.contribution_notice = QLabel("")
+        self.contribution_notice.setWordWrap(True)
+        self.contribution_notice.setObjectName("muted")
+        exam_form.addRow("سهم آزمون / سوابق:", self.contribution_notice)
         self.negative_spin = QDoubleSpinBox()
         self.negative_spin.setRange(0.0, 1.0)
         self.negative_spin.setSingleStep(0.05)
@@ -122,6 +155,17 @@ class SettingsPage(QWidget):
         self.formula_combo.addItem("درصد خام", "raw")
         self.formula_combo.addItem("درصد با نمرهٔ منفی", "negative")
         exam_form.addRow("فرمول درصد:", self.formula_combo)
+        self.auto_exam_priority = QCheckBox(
+            "در اولویت خودکار، ضریب رسمی آزمون را لحاظ کن"
+        )
+        exam_form.addRow("اولویت‌بندی:", self.auto_exam_priority)
+        priority_note = QLabel(
+            "فقط برای اولویت فعالیت‌ها: ضریب رسمی به‌صورت تعدیل‌گر ۰٫۵ تا ۱٫۵ به کار می‌رود. "
+            "وزن شخصی درس/مبحث تغییر نمی‌کند؛ ضرایب آزمون و سوابق تحصیلی جدا هستند."
+        )
+        priority_note.setWordWrap(True)
+        priority_note.setObjectName("muted")
+        exam_form.addRow(priority_note)
         btn_exam = QPushButton("ذخیرهٔ پروفایل آزمون")
         btn_exam.setObjectName("primary")
         btn_exam.clicked.connect(self._save_exam)
@@ -189,9 +233,10 @@ class SettingsPage(QWidget):
 
         self.info = info_box()
         self.info.setText(
-            "همهٔ داده‌ها روی همین رایانه و در SQLite نگهداری می‌شوند. هستهٔ "
-            "برنامه به اینترنت نیازی ندارد. هیچ تاریخ یا ضریب رسمی کنکور در کد "
-            "ثابت نشده است."
+            "همهٔ داده‌ها روی همین رایانه و در SQLite نگهداری می‌شوند. ضرایب آزمون ۱۴۰۶ "
+            "از متن کامل بازنشرشدهٔ اطلاعیهٔ سنجش ثبت شده‌اند؛ نسخهٔ اولیهٔ سنجش و "
+            "پیوستِ ضرایب تک‌درسِ سوابق در این محیط مستقیماً واکشی نشده‌اند. مواد آزمون، "
+            "سوابق تحصیلی و وزن‌های شخصی از هم جدا نگه داشته می‌شوند."
         )
         root.addWidget(self.info)
         root.addStretch(1)
@@ -219,7 +264,14 @@ class SettingsPage(QWidget):
         self.energy_combo.setCurrentIndex(
             self.energy_combo.findData(int(energy_value)) if energy_value else 0
         )
+        advisor_settings = self.service.settings.advisor
+        self.mastery_sessions_spin.setValue(advisor_settings.mastery_min_spaced_days)
+        self.mastery_spacing_spin.setValue(advisor_settings.mastery_min_spacing_days)
+        self.mastery_score_spin.setValue(advisor_settings.mastery_confirming_score)
 
+        self.auto_exam_priority.setChecked(
+            self.service.repo.get_setting("priority.use_exam_coefficients") != "0"
+        )
         profile = self.service.active_exam_profile()
         if profile is not None:
             self.exam_name_edit.setText(profile.name)
@@ -234,6 +286,7 @@ class SettingsPage(QWidget):
             self.negative_spin.setValue(profile.negative_marking_ratio)
             formula_index = self.formula_combo.findData(profile.percentage_formula)
             self.formula_combo.setCurrentIndex(max(0, formula_index))
+        self._refresh_contribution_notice(profile)
 
         from ...onboarding import DAY_ORDER
 
@@ -275,6 +328,24 @@ class SettingsPage(QWidget):
         if not routines:
             self.routine_list.addItem("هنوز روالی ثبت نشده است.")
 
+    def _refresh_contribution_notice(self, profile: ExamProfile | None) -> None:
+        group = profile.group_name if profile else self.exam_group_edit.text().strip()
+        year = profile.exam_year if profile else self.exam_year_spin.value()
+        share = EXAM_WEIGHT_BY_GROUP.get(group) if year == 1406 else None
+        if share:
+            exam_share, transcript_share = share
+            self.contribution_notice.setText(
+                f"۱۴۰۶ · سهم کل بازنشرشده: آزمون اختصاصی {exam_share}٪، سوابق تحصیلی "
+                f"{transcript_share}٪. منبع ثانویه (بازنشر اطلاعیه)؛ نسخهٔ اولیهٔ سنجش "
+                "در این محیط مستقیم cross-check نشده. ضرایب تک‌درس آزمون و سابقه، "
+                "و وزن شخصی درس، جدا هستند."
+            )
+        else:
+            self.contribution_notice.setText(
+                "برای سال/گروه انتخابی سهم کل تأییدشده‌ای در کاتالوگ نیست؛ "
+                "وزن ۱۴۰۶ به سال دیگر تعمیم داده نمی‌شود."
+            )
+
     # ---- ذخیره ----
 
     def _save_daily(self) -> None:
@@ -302,6 +373,18 @@ class SettingsPage(QWidget):
                 peaks.append((start, end))
         self.service.peak_hours = peaks
         notify(self, "ذخیره شد", "تنظیمات پنجرهٔ روز ذخیره شد.")
+
+    def _save_mastery(self) -> None:
+        advisor = self.service.settings.advisor
+        advisor.mastery_min_spaced_days = self.mastery_sessions_spin.value()
+        advisor.mastery_min_spacing_days = self.mastery_spacing_spin.value()
+        advisor.mastery_confirming_score = self.mastery_score_spin.value()
+        self.service.settings.save()
+        notify(
+            self,
+            "ذخیره شد",
+            "معیارهای L4 ذخیره شدند. این آستانه‌ها فرضیهٔ محصول هستند، نه تضمین یادگیری.",
+        )
 
     def _save_exam(self) -> None:
         from ...jdate import parse_jalali_date
@@ -337,7 +420,12 @@ class SettingsPage(QWidget):
         profile.negative_marking_ratio = self.negative_spin.value()
         profile.percentage_formula = str(self.formula_combo.currentData())
         self.service.update_exam_profile(profile)
-        notify(self, "ذخیره شد", "پروفایل آزمون به‌روزرسانی شد.")
+        self._refresh_contribution_notice(profile)
+        self.service.repo.set_setting(
+            "priority.use_exam_coefficients", "1" if self.auto_exam_priority.isChecked() else "0"
+        )
+        self.service.commit()
+        notify(self, "ذخیره شد", "پروفایل آزمون و روش اولویت‌بندی به‌روزرسانی شد.")
 
     def _clear_events(self) -> None:
         if not confirm(
