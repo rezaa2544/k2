@@ -186,13 +186,20 @@ class TopicsPage(QWidget):
         self.btn_add.setObjectName("primary")
         self.btn_add.clicked.connect(self._add_topic)
         header.addWidget(self.btn_add)
+        self.btn_seed = QPushButton("ساخت از کاتالوگ")
+        self.btn_seed.setToolTip(
+            "مباحث همهٔ درس‌های انتخاب‌شده را از کاتالوگ [H] می‌سازد؛ "
+            "این فهرست ادعای دامنهٔ رسمی آزمون نیست و باید تأیید کنید."
+        )
+        self.btn_seed.clicked.connect(self._seed_from_catalog)
+        header.addWidget(self.btn_seed)
         root.addLayout(header)
 
         self.info = info_box()
         self.info.setText(
-            "مبحث را به‌صورت خروجی قابل سنجش ثبت کنید. این نسخه برای کتاب‌ها/فصل‌های "
-            "تأییدنشده سرفصل جعل نمی‌کند؛ مباحثی را که واقعاً می‌خوانید خودتان اضافه کنید. "
-            "L4 عملیاتی است و حافظه یا نتیجهٔ آزمون را تضمین نمی‌کند."
+            "مبحث را به‌صورت خروجی قابل سنجش ثبت کنید. دکمهٔ «ساخت از کاتالوگ» "
+            "فهرست مبحثی فرضیه‌محور [H] هر درس را می‌سازد؛ آن را تأیید، حذف یا "
+            "ویرایش کنید. L4 عملیاتی است و حافظه یا نتیجهٔ آزمون را تضمین نمی‌کند."
         )
         root.addWidget(self.info)
 
@@ -235,6 +242,37 @@ class TopicsPage(QWidget):
         item = self.table.item(row, 0)
         topic_id = item.data(Qt.UserRole) if item else None
         return next((t for t in self.service.list_topics() if t.id == topic_id), None)
+
+    def _seed_from_catalog(self) -> None:
+        """ساخت مبحث برای همهٔ درس‌های انتخاب‌شده از کاتالوگ فرضیه‌محور."""
+        from ..widgets import notify
+
+        subjects = self.service.selected_subjects()
+        if not subjects:
+            notify(self, "درسی ثبت نشده", "ابتدا در راه‌اندازی درس‌ها را انتخاب کنید.")
+            return
+        created_total = 0
+        missing: list[str] = []
+        for subject in subjects:
+            if subject.id is None:
+                continue
+            try:
+                created = self.service.seed_topics_from_catalog(subject.id)
+            except Exception as exc:  # noqa: BLE001
+                notify(self, "ساخت مباحث ناموفق", str(exc))
+                return
+            created_total += len(created)
+            if not created:
+                missing.append(subject.name)
+        message = f"{created_total} مبحث از کاتالوگ ساخته شد."
+        if missing:
+            message += (
+                "\n\nبرای این درس‌ها مبحثی در کاتالوگ نبود یا همه از قبل ثبت شده‌اند: "
+                + "، ".join(missing)
+                + "."
+            )
+        notify(self, "ساخت از کاتالوگ", message)
+        self.refresh()
 
     def refresh(self) -> None:
         topics = self.service.list_topics()

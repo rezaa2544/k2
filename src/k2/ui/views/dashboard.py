@@ -102,12 +102,17 @@ class DashboardPage(QWidget):
         self.tile_planned = StatTile("برنامهٔ ساخته‌شده", "—", "", "info")
         self.tile_margin = StatTile("زمان آزادِ محفوظ", "—", "", "muted")
         self.tile_debt = StatTile("کارهای عقب‌افتاده", "—", "", "warn")
-        for tile in (self.tile_capacity, self.tile_planned, self.tile_margin, self.tile_debt):
+        self.tile_consolidation = StatTile("پوشش تثبیت", "—", "", "accent")
+        for tile in (
+            self.tile_capacity, self.tile_planned, self.tile_margin,
+            self.tile_debt, self.tile_consolidation,
+        ):
             tile.setMinimumHeight(114)
         tiles.addWidget(self.tile_capacity, 0, 0)
         tiles.addWidget(self.tile_planned, 0, 1)
         tiles.addWidget(self.tile_margin, 0, 2)
         tiles.addWidget(self.tile_debt, 0, 3)
+        tiles.addWidget(self.tile_consolidation, 0, 4)
         layout.addLayout(tiles)
 
         details = QGridLayout()
@@ -169,7 +174,10 @@ class DashboardPage(QWidget):
         if not has_user_data:
             self.next_title.setText("هنوز اطلاعاتی ثبت نشده است")
             self.next_reason.setText("راه‌اندازی را کامل کنید یا اطلاعات واقعی خود را از بخش‌های مربوط اضافه کنید.")
-            for tile in (self.tile_capacity, self.tile_planned, self.tile_margin, self.tile_debt):
+            for tile in (
+                self.tile_capacity, self.tile_planned, self.tile_margin,
+                self.tile_debt, self.tile_consolidation,
+            ):
                 tile.set_value("—", "پس از ثبت اطلاعات نمایش داده می‌شود")
             self.capacity_text.setText("برای محاسبهٔ ظرفیت، ساعت خواب و بیداری یا تعهدهای خود را ثبت کنید.")
             self.phase_label.setText("هنوز آزمون هدفی ثبت نشده است.")
@@ -263,7 +271,39 @@ class DashboardPage(QWidget):
             advice.append("اگر فشار زیاد است، ترتیب «ضروری / در صورت توان / قابل تعویق» را بررسی کنید.")
         elif backlog.level == DebtLevel.GREEN:
             advice.append("فشار کاری در محدودهٔ عادی است؛ برای پرکردن زمان آزاد عجله نکنید.")
+        self._refresh_consolidation_tile(advice)
         self.advice_text.setText("\n\n".join(advice))
+
+    def _refresh_consolidation_tile(self, advice: list[str]) -> None:
+        """کاشی پوشش تثبیت + یادآوری ماندگاری از موتور تثبیت."""
+        try:
+            overview = self.service.consolidation_overview()
+        except Exception:  # noqa: BLE001 — داشبورد نباید با خطای تثبیت از کار بیفتد
+            self.tile_consolidation.set_value("—", "محاسبهٔ تثبیت ممکن نشد")
+            return
+        forecast = overview["forecast"]
+        if not forecast.topics:
+            self.tile_consolidation.set_value(
+                "—", "مبحثی ثبت نشده؛ از «مباحث و تسلط» یا کاتالوگ اضافه کنید"
+            )
+            return
+        coverage = format_number(forecast.coverage * 100)
+        self.tile_consolidation.set_value(
+            f"{coverage}٪",
+            f"{len(forecast.consolidated)} مبحث تثبیت‌شده از {len(forecast.topics)}",
+        )
+        at_risk = len(forecast.at_risk) + len(forecast.behind)
+        if at_risk:
+            advice.append(
+                f"{at_risk} مبحث در خطر ماندگاری یا عقب‌افتادهٔ تثبیت است؛ "
+                "در صفحهٔ «تثبیت حافظه» صف جبران را ببینید."
+            )
+        verdict = overview["feasibility"]
+        if verdict.level in {"infeasible", "tight"}:
+            advice.append(
+                "کار باقی‌مانده تا آزمون با ظرفیت فعلی جا نمی‌شود؛ "
+                "گزینه‌های تصمیم در صفحهٔ «تثبیت حافظه» آمده است."
+            )
 
     def _rebuild_plan(self) -> None:
         self.service.plan_day(_dt.date.today())

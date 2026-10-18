@@ -26,6 +26,7 @@ from ..jdate import format_jalali_long
 from ..service import AdvisorService
 from .views import (
     ActivitiesPage,
+    ConsolidationPage,
     DashboardPage,
     ExamsPage,
     OnboardingWizard,
@@ -44,6 +45,7 @@ NAV_ITEMS = [
     ("◇   مباحث و تسلط", "مباحث و تسلط", "سنجش تأخیری، روش یادگیری و مسیر مبحث"),
     ("◎   آزمون و تحلیل", "آزمون و تحلیل", "نتیجه و تحلیل سؤال‌ها"),
     ("↻   مرور تطبیقی", "مرور تطبیقی", "مرور بر اساس یادگیری"),
+    ("▨   تثبیت حافظه", "تثبیت حافظه", "نردبان تثبیت، پیش‌بینی ماندگاری و برنامهٔ سه‌مسیره"),
     ("▤   گزارش‌ها", "گزارش‌ها", "گزارش روزانه و هفتگی"),
     ("⚙   تنظیمات", "تنظیمات", "ترجیحات و پشتیبان‌گیری"),
 ]
@@ -180,11 +182,12 @@ class MainWindow(QMainWindow):
         self.topics = TopicsPage(self.service)
         self.exams = ExamsPage(self.service)
         self.review = ReviewPage(self.service)
+        self.consolidation = ConsolidationPage(self.service)
         self.reports = ReportsPage(self.service)
         self.settings = SettingsPage(self.service)
         for page in (
             self.dashboard, self.today, self.activities, self.topics, self.exams,
-            self.review, self.reports, self.settings,
+            self.review, self.consolidation, self.reports, self.settings,
         ):
             self.stack.addWidget(page)
         content.addWidget(self.stack, 1)

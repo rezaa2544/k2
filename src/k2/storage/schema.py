@@ -7,7 +7,7 @@ migration انجام نمی‌شود.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 #: اسکریپت نسخهٔ ۱ — اسکیمای اولیه.
 MIGRATION_1 = """
@@ -260,7 +260,13 @@ CREATE INDEX IF NOT EXISTS idx_textbook_profile_subject
     ON textbook(exam_profile_id, subject_id, is_selected);
 """
 
-#: فهرست مهاجرت‌ها به ترتیب نسخه.
+#: نسخهٔ ۵ — مدل حافظهٔ DSR روی آیتم‌های مرور (سند تحقیق ۵).
+#: ستون‌های تازه برای رکوردهای موجود از فاصلهٔ فعلی برآورد می‌شوند.
+MIGRATION_5 = """
+ALTER TABLE review_item ADD COLUMN stability_days REAL NOT NULL DEFAULT 0;
+ALTER TABLE review_item ADD COLUMN retrievability REAL NOT NULL DEFAULT 1;
+"""
+
 #: نسخهٔ ۴ — ثبت تاریخچهٔ سنجش عملکردی برای ارزیابی تطبیقی تسلط.
 MIGRATION_4 = """
 CREATE TABLE IF NOT EXISTS learning_evidence (
@@ -283,4 +289,5 @@ MIGRATIONS: list[tuple[int, str]] = [
     (2, MIGRATION_2),
     (3, MIGRATION_3),
     (4, MIGRATION_4),
+    (5, MIGRATION_5),
 ]

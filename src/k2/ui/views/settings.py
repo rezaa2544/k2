@@ -121,6 +121,57 @@ class SettingsPage(QWidget):
         mastery_card.add_layout(mastery_form)
         root.addWidget(mastery_card)
 
+        consolidation_card = Card("نردبان تثبیت و سه مسیر · فرضیهٔ قابل تنظیم")
+        consolidation_form = QFormLayout()
+        self.target_retention_spin = QDoubleSpinBox()
+        self.target_retention_spin.setRange(0.50, 0.99)
+        self.target_retention_spin.setSingleStep(0.01)
+        self.target_retention_spin.setDecimals(2)
+        consolidation_form.addRow("هدف ماندگاری تا آزمون:", self.target_retention_spin)
+        self.spacing_ratio_spin = QDoubleSpinBox()
+        self.spacing_ratio_spin.setRange(0.05, 0.50)
+        self.spacing_ratio_spin.setSingleStep(0.01)
+        self.spacing_ratio_spin.setDecimals(2)
+        consolidation_form.addRow("نسبت فاصله تا بازهٔ آزمون:", self.spacing_ratio_spin)
+        self.first_retrieval_spin = QSpinBox()
+        self.first_retrieval_spin.setRange(6, 72)
+        self.first_retrieval_spin.setSuffix(" ساعت")
+        consolidation_form.addRow("پنجرهٔ بازیابی اولیه:", self.first_retrieval_spin)
+        self.stage_score_spin = QDoubleSpinBox()
+        self.stage_score_spin.setRange(0.50, 1.00)
+        self.stage_score_spin.setSingleStep(0.05)
+        self.stage_score_spin.setDecimals(2)
+        consolidation_form.addRow("کمینهٔ نمرهٔ هر شاهد پله:", self.stage_score_spin)
+        self.stage_spacing_spin = QDoubleSpinBox()
+        self.stage_spacing_spin.setRange(1.0, 10.0)
+        self.stage_spacing_spin.setSingleStep(0.5)
+        self.stage_spacing_spin.setDecimals(1)
+        self.stage_spacing_spin.setSuffix(" روز")
+        consolidation_form.addRow("کمینهٔ فاصله بین پله‌ها:", self.stage_spacing_spin)
+        self.consolidation_floor_spin = QDoubleSpinBox()
+        self.consolidation_floor_spin.setRange(0.05, 0.60)
+        self.consolidation_floor_spin.setSingleStep(0.05)
+        self.consolidation_floor_spin.setDecimals(2)
+        consolidation_form.addRow("کف سهم تثبیت از ظرفیت:", self.consolidation_floor_spin)
+        self.catchup_cap_spin = QDoubleSpinBox()
+        self.catchup_cap_spin.setRange(0.10, 0.70)
+        self.catchup_cap_spin.setSingleStep(0.05)
+        self.catchup_cap_spin.setDecimals(2)
+        consolidation_form.addRow("سقف سهم جبران:", self.catchup_cap_spin)
+        consolidation_note = QLabel(
+            "این اعداد قاعدهٔ عملیاتیِ محصول [H] هستند و بر پایهٔ شواهد زمان‌بندی و "
+            "تثبیت تنظیم شده‌اند؛ آن‌ها را متناسب با شرایط خودتان تغییر دهید. "
+            "هدف ماندگاری یک پیش‌بینی مدل است، نه تضمین حافظه یا نمرهٔ آزمون."
+        )
+        consolidation_note.setWordWrap(True)
+        consolidation_note.setObjectName("muted")
+        consolidation_form.addRow(consolidation_note)
+        save_consolidation = QPushButton("ذخیرهٔ معیارهای تثبیت")
+        save_consolidation.clicked.connect(self._save_consolidation)
+        consolidation_form.addRow(save_consolidation)
+        consolidation_card.add_layout(consolidation_form)
+        root.addWidget(consolidation_card)
+
         exam_card = Card("پروفایل آزمون هدف (قابل ویرایش)")
         exam_form = QFormLayout()
         self.exam_name_edit = QLineEdit()
@@ -269,6 +320,18 @@ class SettingsPage(QWidget):
         self.mastery_spacing_spin.setValue(advisor_settings.mastery_min_spacing_days)
         self.mastery_score_spin.setValue(advisor_settings.mastery_confirming_score)
 
+        consolidation_settings = self.service.settings.consolidation
+        stream_settings = self.service.settings.streams
+        self.target_retention_spin.setValue(consolidation_settings.target_retention)
+        self.spacing_ratio_spin.setValue(consolidation_settings.spacing_ratio)
+        self.first_retrieval_spin.setValue(
+            int(consolidation_settings.first_retrieval_hours)
+        )
+        self.stage_score_spin.setValue(consolidation_settings.stage_evidence_score)
+        self.stage_spacing_spin.setValue(consolidation_settings.stage_min_spacing_days)
+        self.consolidation_floor_spin.setValue(stream_settings.consolidation_floor_ratio)
+        self.catchup_cap_spin.setValue(stream_settings.catchup_cap_ratio)
+
         self.auto_exam_priority.setChecked(
             self.service.repo.get_setting("priority.use_exam_coefficients") != "0"
         )
@@ -384,6 +447,24 @@ class SettingsPage(QWidget):
             self,
             "ذخیره شد",
             "معیارهای L4 ذخیره شدند. این آستانه‌ها فرضیهٔ محصول هستند، نه تضمین یادگیری.",
+        )
+
+    def _save_consolidation(self) -> None:
+        consolidation = self.service.settings.consolidation
+        streams = self.service.settings.streams
+        consolidation.target_retention = self.target_retention_spin.value()
+        consolidation.spacing_ratio = self.spacing_ratio_spin.value()
+        consolidation.first_retrieval_hours = self.first_retrieval_spin.value()
+        consolidation.stage_evidence_score = self.stage_score_spin.value()
+        consolidation.stage_min_spacing_days = self.stage_spacing_spin.value()
+        streams.consolidation_floor_ratio = self.consolidation_floor_spin.value()
+        streams.catchup_cap_ratio = self.catchup_cap_spin.value()
+        self.service.settings.save()
+        notify(
+            self,
+            "ذخیره شد",
+            "معیارهای نردبان تثبیت و سه مسیر ذخیره شدند؛ "
+            "این مقادیر فرضیهٔ محصول [H] هستند و پیش‌بینی ماندگاری را تضمین نمی‌کنند.",
         )
 
     def _save_exam(self) -> None:

@@ -343,7 +343,7 @@ class ReviewItem:
     item_type: str = "concept"
     interval_days: float = 0.0
     ease: float = 2.0
-    difficulty: int = 3
+    difficulty: float = 3.0
     lapses: int = 0
     last_review: Optional[_dt.date] = None
     due_date: Optional[_dt.date] = None
@@ -353,6 +353,10 @@ class ReviewItem:
     content: str = ""
     created_at: Optional[_dt.datetime] = None
     success_streak: int = 0
+    #: مدل حافظهٔ DSR (سند تحقیق ۵): پایداری به روز و بازیابی‌پذیری ۰..۱.
+    #: برای رکوردهای قدیمی که مهاجرت نکرده‌اند صفر است و از interval برآورد می‌شود.
+    stability_days: float = 0.0
+    retrievability: float = 1.0
 
 
 @dataclass

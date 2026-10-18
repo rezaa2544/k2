@@ -44,8 +44,8 @@ def test_persian_font_is_loaded(qapp):
 
 
 def test_main_window_has_all_navigation_pages(window: MainWindow):
-    assert window.nav.count() == 8
-    assert window.stack.count() == 8
+    assert window.nav.count() == 9
+    assert window.stack.count() == 9
     assert window.windowTitle() == APP_TITLE
 
 
@@ -108,6 +108,82 @@ def test_new_install_settings_have_no_prefilled_personal_values(window: MainWind
     assert window.review
     assert window.service.repo.list_fixed_events() == []
     assert window.service.repo.list_routines() == []
+
+
+def test_settings_page_exposes_and_saves_consolidation_thresholds(
+    qapp, tmp_path: Path, monkeypatch
+):
+    """آستانه‌های نردبان تثبیت و سه مسیر باید در تنظیمات قابل تغییر و ذخیره باشند."""
+    import k2.ui.views.settings as settings_module
+
+    monkeypatch.setattr(settings_module, "notify", lambda *a, **k: None)
+    # ذخیرهٔ تنظیمات در فایل مشترک /tmp/k2-tests، تست‌های دیگر را آلوده می‌کند؛
+    # پس پوشهٔ داده برای این تست موقت می‌شود.
+    monkeypatch.setenv("K2_DATA_DIR", str(tmp_path / "data"))
+    service = AdvisorService(tmp_path / "settings.db")
+    window = MainWindow(service)
+    page = window.settings
+    page.target_retention_spin.setValue(0.85)
+    page.spacing_ratio_spin.setValue(0.20)
+    page.first_retrieval_spin.setValue(12)
+    page.stage_score_spin.setValue(0.75)
+    page.stage_spacing_spin.setValue(2.0)
+    page.consolidation_floor_spin.setValue(0.25)
+    page.catchup_cap_spin.setValue(0.35)
+    page._save_consolidation()
+    settings = service.settings
+    assert settings.consolidation.target_retention == 0.85
+    assert settings.consolidation.spacing_ratio == 0.20
+    assert settings.consolidation.first_retrieval_hours == 12
+    assert settings.consolidation.stage_evidence_score == 0.75
+    assert settings.consolidation.stage_min_spacing_days == 2.0
+    assert settings.streams.consolidation_floor_ratio == 0.25
+    assert settings.streams.catchup_cap_ratio == 0.35
+    # بازخوانی از تنظیمات ذخیره‌شده باید همان مقادیر را نشان دهد
+    page.refresh()
+    assert page.target_retention_spin.value() == 0.85
+    assert page.consolidation_floor_spin.value() == 0.25
+    window.close()
+    service.close()
+
+
+def test_consolidation_page_renders_three_streams_and_ladder(qapp, tmp_path: Path):
+    """صفحهٔ تثبیت باید مسیرها، امکان‌سنجی و نردبان را از دادهٔ واقعی بسازد."""
+    from k2.domain.models import ExamProfile, LearningEvidence, Subject, Topic
+
+    service = AdvisorService(tmp_path / "cons.db")
+    service.create_exam_profile(
+        ExamProfile(
+            name="کنکور",
+            group_name="علوم تجربی",
+            target_date=_dt.date(2027, 7, 1),
+        )
+    )
+    subject_id = service.create_subject(
+        Subject(name="زیست‌شناسی", exam_profile_id=1, coefficient=12.0)
+    )
+    topic_id = service.create_topic(Topic(subject_id=subject_id, name="ژنتیک"))
+    for offset, source, score in ((0, "study", 1.0), (1, "review", 0.9)):
+        service.record_learning_evidence(
+            LearningEvidence(
+                topic_id=topic_id,
+                observed_on=_dt.date(2026, 10, 10) + _dt.timedelta(days=offset),
+                source=source,
+                score=score,
+            )
+        )
+    window = MainWindow(service)
+    window.refresh_all()
+    page = window.consolidation
+    page.refresh()
+    assert page.table.rowCount() >= 1
+    assert page.streams_summary.text().startswith("ظرفیت")
+    assert page.feasibility_label.text()
+    assert page.stream_bars["consolidation"].maximum() > 0
+    advice_item = page.table.item(0, 6)
+    assert advice_item is not None and advice_item.text()
+    window.close()
+    service.close()
 
 
 def test_pages_render_with_real_data(window: MainWindow):

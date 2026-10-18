@@ -92,6 +92,15 @@
 | ADV-03 | P0 | `advisor_engine.py::next_action` (+ دلیل)، `ui/views/dashboard.py` | `test_advisor.py::test_next_action_has_a_reason` | کامل |
 | ADV-04 | P1 | `reporting.py::build_weekly_report` | `test_reporting.py::test_weekly_report_computes_adherence`، `test_weekly_report_flags_underestimation` | کامل |
 | ADV-05 | P1 | `reporting.py::pressure_signal` (غیرتشخیصی) | `test_reporting.py::test_pressure_signal_activates_and_is_non_diagnostic`، `test_pressure_signal_is_inactive_without_patterns` | کامل |
+| CONS-01 | P0 | `consolidation.py::assess_topic_consolidation` (نردبان S0–S5) + `service.py::topic_consolidations` | `test_consolidation.py`، `test_consolidation_service.py::test_topic_advances_ladder_with_spaced_evidence`، `test_missing_first_retrieval_marks_topic_behind` | کامل |
+| CONS-02 | P0 | `consolidation.py::forecast_retention`، `retrievability` (مدل DSR) + `service.py::consolidation_overview` | `test_consolidation.py::test_forecast_and_retrievability_*`، `test_consolidation_service.py::test_retention_decays_and_exam_horizon_is_visible` | کامل |
+| CONS-03 | P0 | `consolidation.py::consolidation_debt`، `consolidation_advice` + `service.py::consolidation_advice_for` | `test_consolidation.py`، `test_consolidation_service.py::test_forecast_and_debt_group_by_subject` | کامل |
+| STR-01 | P0 | `streams.py::allocate_streams` (سه مسیر + کف/سقف) + `service.py::consolidation_overview` | `test_streams.py`، `test_consolidation_service.py::test_overview_splits_capacity_into_three_streams` | کامل |
+| STR-02 | P0 | `streams.py::catchup_plan` (جبران قدم‌به‌قدم، بدون حذف بی‌صدا) | `test_streams.py`، `test_consolidation_service.py::test_catchup_plan_*` | کامل |
+| STR-03 | P0 | `streams.py::assess_feasibility` (امکان‌سنجی + گزینه‌های تصمیم) | `test_streams.py`، `test_consolidation_service.py::test_feasibility_*` | کامل |
+| CONS-04 | P0 | `learning_science.py` (۲۰ شواهد با شناسه) + `consolidation.py::consolidation_advice` (پیوند شواهد به توصیه) | `test_learning_science.py` | کامل |
+| CAT-01 | P1 | `konkur_catalog.py::TOPICS_BY_COURSE`، `topics_for_course` + `service.py::seed_topics_from_catalog` | `test_konkur_catalog.py`، `test_consolidation_service.py::test_catalog_*` | کامل |
+| UI-03 | P1 | `ui/views/consolidation.py` (نمای تثبیت: مسیرها، امکان‌سنجی، نردبان، صف جبران) | `test_gui.py::test_consolidation_page_renders_three_streams_and_ladder` | کامل |
 | BEH-01 | P0 | `backlog.py::minimal_day`، `recovery_after_break` | `test_edge_cases.py::test_minimal_day_is_small_and_contains_no_heavy_new_work`، `test_return_after_break_reduces_load` | کامل |
 | BEH-02 | P1 | `scheduler.py` (تقسیم فعالیت بزرگ به بلوک) + `ui/views/dashboard.py` (کار بعدی) | `test_scheduler.py::test_splittable_activity_is_split_across_blocks` | کامل |
 | BEH-03 | P2 | — | — | **انجام‌نشده** (اختیاری/آزمایشی در سند مبدأ) |

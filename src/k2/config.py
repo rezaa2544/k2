@@ -112,6 +112,43 @@ class ReviewSettings:
 
 
 @dataclass
+class ConsolidationSettings:
+    """پارامترهای نردبان تثبیت و مدل حافظه (سند تحقیق ۵). همه [H]."""
+
+    #: هدف بازیابی‌پذیری هنگام موعد مرور (پیش‌فرض ۹۰٪ در FSRS).
+    target_retention: float = 0.90
+    #: سقف فاصلهٔ مرور به‌صورت نسبت از روزهای باقی‌مانده تا آزمون
+    #: (قاعدهٔ ۱۰–۲۰٪ سپدیا؛ پیش‌فرض محافظه‌کارانه ۱۵٪).
+    spacing_ratio: float = 0.15
+    #: نخستین بازیابی حداکثر چند ساعت پس از یادگیری (تثبیت سیناپسی + خواب).
+    first_retrieval_hours: int = 24
+    #: موعد هدف پله‌های نردبان به‌روزها [H].
+    spaced_days: float = 3.0
+    delayed_days: float = 7.0
+    transfer_days: float = 14.0
+    #: کمینهٔ نمرهٔ شاهد برای تأیید هر پله (۰..۱).
+    stage_evidence_score: float = 0.70
+    #: کمینهٔ فاصلهٔ روزها بین شواهد دو پلهٔ متوالی.
+    stage_min_spacing_days: float = 1.0
+
+
+@dataclass
+class StreamSettings:
+    """توزیع ظرفیت بین سه مسیر: مطلب جدید، جبران، تثبیت (سند تحقیق ۵). [H]"""
+
+    #: سهم کف تثبیت از ظرفیت روز — هرگز صفر نمی‌شود.
+    consolidation_floor_ratio: float = 0.20
+    #: سقف سهم تثبیت از ظرفیت روز.
+    consolidation_cap_ratio: float = 0.45
+    #: سقف سهم جبران از ظرفیت روز (جلوگیری از تزریق شوک).
+    catchup_cap_ratio: float = 0.40
+    #: سهم کف مطلب جدید تا آزمون دور نباشد.
+    new_floor_ratio: float = 0.15
+    #: اگر بار مرور سررسید از این سهم بیشتر شود، تثبیت اولویت می‌گیرد.
+    consolidation_surge_ratio: float = 0.30
+
+
+@dataclass
 class BacklogSettings:
     """سطوح بدهی و سقف جبران (سند تحقیق ۲، بخش ۱۱)."""
 
@@ -175,6 +212,8 @@ class Settings:
     capacity: CapacitySettings = field(default_factory=CapacitySettings)
     scheduler: SchedulerSettings = field(default_factory=SchedulerSettings)
     review: ReviewSettings = field(default_factory=ReviewSettings)
+    consolidation: ConsolidationSettings = field(default_factory=ConsolidationSettings)
+    streams: StreamSettings = field(default_factory=StreamSettings)
     backlog: BacklogSettings = field(default_factory=BacklogSettings)
     advisor: AdvisorSettings = field(default_factory=AdvisorSettings)
     ui: UiSettings = field(default_factory=UiSettings)

@@ -34,14 +34,16 @@ def test_preview_exposes_core_pages_and_persistent_data_controls():
     html = PREVIEW.read_text(encoding="utf-8")
     for label in (
         "داشبورد", "برنامهٔ امروز", "فعالیت‌ها", "آزمون و تحلیل", "مرور تطبیقی",
-        "گزارش‌ها", "تنظیمات", "مباحث و تسلط", "انتخاب همهٔ درس‌ها", "انتخاب همهٔ کتاب‌ها",
-        "خروجی HTML داده‌دار", "پشتیبان JSON", "بازیابی فایل", "ساخت مسیر پیشنهادی",
+        "تثبیت حافظه", "گزارش‌ها", "تنظیمات", "مباحث و تسلط", "انتخاب همهٔ درس‌ها",
+        "انتخاب همهٔ کتاب‌ها", "خروجی HTML داده‌دار", "پشتیبان JSON", "بازیابی فایل",
+        "ساخت مسیر پیشنهادی",
     ):
         assert label in html
     for implementation_marker in (
         "localStorage", "showSaveFilePicker", "backupJSON", "restoreFile",
         "wizard-finish", "subjectWeightsForm", "detectConflicts", "learningEvidence",
         "masteryMinSpacingDays", "addTopicEvidenceForm", "generateTopicPathway",
+        "consolidationPage", "ladderState",
     ):
         assert implementation_marker in html
     assert "checked>" not in html

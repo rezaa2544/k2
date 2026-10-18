@@ -6,6 +6,8 @@
   * سقف فاصله وابسته به روزهای باقی‌مانده تا آزمون است (اصل ۳ سند ۱).
   * سقف روزانهٔ مرور از ظرفیت روز مشتق می‌شود تا «بهمن مرور» رخ ندهد.
   * آیتم‌های پرتکراراً فراموش‌شده (leech) به تغییر روش تبدیل می‌شوند، نه تکرار بیشتر.
+  * مدل حافظهٔ DSR (پایداری/بازیابی‌پذیری) روی موعد بعدی سوار می‌شود
+    (سند تحقیق ۵): مرور نزدیکِ مرز فراموشی، رشد پایداری بیشتری می‌دهد.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ import datetime as _dt
 from dataclasses import dataclass
 from typing import Optional, Sequence
 
+from . import consolidation as _consolidation
 from .config import Settings
 from .domain.enums import ReviewState
 from .domain.models import ReviewItem
@@ -158,6 +161,16 @@ def apply_review(
     item.last_time_ratio = time_ratio
     item.due_date = today + _dt.timedelta(days=int(round(item.interval_days)))
 
+    # لایهٔ مدل حافظهٔ DSR: پایداری و موعد بر پایهٔ هدف بازیابی (سند تحقیق ۵).
+    _consolidation.apply_review_to_memory(
+        item,
+        grade=grade,
+        today=today,
+        exam_date=exam_date,
+        settings=settings,
+    )
+    item.due_date = today + _dt.timedelta(days=int(round(item.interval_days)))
+
     return ReviewUpdate(
         item=item,
         old_interval=old_interval,
@@ -175,7 +188,7 @@ def create_review_item(
     subject_id: Optional[int] = None,
     topic_id: Optional[int] = None,
     item_type: str = "concept",
-    difficulty: int = 3,
+    difficulty: float = 3.0,
     today: Optional[_dt.date] = None,
     settings: Optional[Settings] = None,
 ) -> ReviewItem:
@@ -187,13 +200,26 @@ def create_review_item(
         subject_id=subject_id,
         topic_id=topic_id,
         item_type=item_type,
-        difficulty=difficulty,
+        difficulty=float(difficulty),
         ease=settings.review.ease_initial,
         interval_days=1.0,
         state=ReviewState.NEW,
         due_date=today + _dt.timedelta(days=1),
         created_at=_dt.datetime.combine(today, _dt.time.min),
+        stability_days=0.0,
+        retrievability=1.0,
     )
+
+
+def stability_from_interval(item: ReviewItem) -> float:
+    """برآورد پایداری برای رکوردهای قدیمی از فاصلهٔ فعلی (مهاجرت داده).
+
+    با هدف بازیابی پیش‌فرض ۹۰٪: S = t / (۹۰٪^-۲ − ۱) × ۱۹/۸۱ ≈ t × ۰٫۴۷.
+    """
+    if item.stability_days and item.stability_days > 0:
+        return item.stability_days
+    interval = max(0.5, float(item.interval_days or 0.0))
+    return round(interval * _consolidation.FORGETTING_FACTOR / 0.2346, 4)
 
 
 def due_items(
