@@ -33,6 +33,9 @@ def _catalog_from_domain() -> dict:
 
 
 catalog = _catalog_from_domain()
+# escaping outside the f-string keeps this file importable on Python < 3.12,
+# where backslashes are not allowed inside f-string expression parts.
+_catalog_json = json.dumps(catalog, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
 weights = {
     group: {"exam": exam, "transcript": transcript, "source": "reported_official_notice_1406"}
     for group, (exam, transcript) in EXAM_WEIGHT_BY_GROUP.items()
@@ -43,6 +46,7 @@ weights = {
 (ROOT / "group_weights.json").write_text(
     json.dumps(weights, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
 )
+_weights_json = json.dumps(weights, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
 css = (ROOT / "base.css").read_text(encoding="utf-8")
 app_js = "\n".join((ROOT / name).read_text(encoding="utf-8") for name in ("core.js", "forms.js", "app.js"))
 extra_css = r'''
@@ -75,8 +79,8 @@ html = f'''<!doctype html>
   <footer class="status-bar"><span id="statusMessage">پایگاه دادهٔ خالی · آمادهٔ راه‌اندازی</span><span class="privacy"><span class="privacy-dot">●</span> <span>داده‌ها روی همین دستگاه می‌مانند</span></span></footer></section>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div><div class="modal-backdrop" id="modalBackdrop" role="presentation"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-head"><h2 id="modalTitle"></h2><button class="modal-close" id="modalClose" aria-label="بستن">×</button></div><div id="modalBody"></div><div class="modal-actions" id="modalActions"></div></section></div><input id="restoreInput" type="file" accept=".json,.html,application/json,text/html" hidden>
-<script id="catalogData" type="application/json">{json.dumps(catalog,ensure_ascii=False,separators=(',',':')).replace('<','\\u003c')}</script>
-<script id="groupWeightsData" type="application/json">{json.dumps(weights,ensure_ascii=False,separators=(',',':')).replace('<','\\u003c')}</script>
+<script id="catalogData" type="application/json">{_catalog_json}</script>
+<script id="groupWeightsData" type="application/json">{_weights_json}</script>
 <script id="embeddedState" type="application/json">{{}}</script>
 <script>window.K2_CATALOG=JSON.parse(document.getElementById('catalogData').textContent);window.K2_GROUP_WEIGHTS=JSON.parse(document.getElementById('groupWeightsData').textContent);</script>
 <script>{app_js}</script>
