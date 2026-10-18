@@ -73,6 +73,34 @@ def test_migration_from_v1_preserves_data(tmp_path: Path):
     conn.close()
 
 
+def test_migration_from_v4_adds_memory_columns(tmp_path: Path):
+    """مهاجرت ۴→۵ ستون‌های مدل حافظه را اضافه و داده‌های مرور را نگه می‌دارد."""
+    path = tmp_path / "v4.db"
+    conn = connect(path)
+    apply_migrations(conn, target_version=4)
+    assert current_version(conn) == 4
+    conn.execute(
+        "INSERT INTO review_item (label, item_type, due_date, state, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        ("مورد قدیمی", "concept", "2026-01-01", "new", "2026-01-01T00:00:00"),
+    )
+    conn.commit()
+    conn.close()
+
+    conn = connect(path)
+    apply_migrations(conn)
+    assert current_version(conn) == SCHEMA_VERSION
+    row = conn.execute(
+        "SELECT label, stability_days, retrievability, difficulty FROM review_item"
+    ).fetchone()
+    assert row["label"] == "مورد قدیمی"
+    # مقدار پیش‌فرض: پایداری صفر (نامعلوم) و بازیابستگی ۱
+    assert row["stability_days"] == 0
+    assert row["retrievability"] == 1
+    assert row["difficulty"] is not None
+    conn.close()
+
+
 def test_future_database_is_rejected(tmp_path: Path):
     conn = connect(tmp_path / "future.db")
     conn.execute("PRAGMA user_version = 999")
