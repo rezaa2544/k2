@@ -60,13 +60,17 @@ def test_preview_zip_bundle_is_current_and_reproducible():
 
     bundle = ROOT / "downloads" / "K2-preview-html.zip"
     assert bundle.exists(), "فایل ZIP دانلود در downloads/ نیست"
+    from build_preview_zip import normalize
+
     payload = bundle.read_bytes()
     with zipfile.ZipFile(bundle) as archive:
         assert archive.namelist() == [ENTRY]
         html_from_zip = archive.read(ENTRY)
-    assert html_from_zip == (ROOT / "preview" / "K2-preview.html").read_bytes()
+    # محتوای ZIP باید همان HTML جاری باشد (مستقل از CRLF ویندوز)
+    on_disk = (ROOT / "preview" / "K2-preview.html").read_bytes()
+    assert html_from_zip == normalize(on_disk)
     # بسته باید دقیقاً با اسکریپت بازتولید شود (کهنگی یعنی عدم تطابق)
-    assert payload == build_zip(html_from_zip)
+    assert payload == build_zip(on_disk)
 
 
 def test_preview_javascript_parses_when_node_is_available(tmp_path: Path):

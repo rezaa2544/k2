@@ -26,10 +26,21 @@ ENTRY = "K2-preview.html"
 TIMESTAMP = (2026, 10, 19, 0, 0, 0)
 
 
+def normalize(html_bytes: bytes) -> bytes:
+    """پایان‌خط‌ها را به LF یکدست می‌کند.
+
+    چرا لازم است: روی ویندوز، ``git checkout`` و ``write_text`` پایان‌خط را به
+    CRLF تبدیل می‌کنند؛ بدون این یکدست‌سازی هش بسته روی لینوکس و ویندوز تفاوت
+    می‌کند و تست کهنگی بسته روی ویندوز شکست می‌خورد.
+    """
+    return html_bytes.replace(b"\r\n", b"\n")
+
+
 def build_zip(html_bytes: bytes) -> bytes:
     """بایت‌های ZIP را برای محتوای داده‌شده به‌صورت قطعی می‌سازد."""
     import io
 
+    html_bytes = normalize(html_bytes)
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         info = zipfile.ZipInfo(ENTRY, date_time=TIMESTAMP)
