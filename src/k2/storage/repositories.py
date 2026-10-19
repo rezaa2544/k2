@@ -798,8 +798,9 @@ class Repository:
         cursor = self.conn.execute(
             "INSERT INTO review_item (subject_id, topic_id, label, item_type, "
             "interval_days, ease, difficulty, lapses, last_review, due_date, state, "
-            "last_grade, last_time_ratio, content, created_at, success_streak) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "last_grade, last_time_ratio, content, created_at, success_streak, "
+            "stability_days, retrievability) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 item.subject_id,
                 item.topic_id,
@@ -817,6 +818,8 @@ class Repository:
                 item.content,
                 _datetime_str(item.created_at or _now()),
                 item.success_streak,
+                item.stability_days,
+                item.retrievability,
             ),
         )
         item.id = cursor.lastrowid
@@ -826,7 +829,8 @@ class Repository:
         self.conn.execute(
             "UPDATE review_item SET interval_days = ?, ease = ?, difficulty = ?, "
             "lapses = ?, last_review = ?, due_date = ?, state = ?, last_grade = ?, "
-            "last_time_ratio = ?, success_streak = ? WHERE id = ?",
+            "last_time_ratio = ?, success_streak = ?, stability_days = ?, "
+            "retrievability = ? WHERE id = ?",
             (
                 item.interval_days,
                 item.ease,
@@ -838,6 +842,8 @@ class Repository:
                 item.last_grade,
                 item.last_time_ratio,
                 item.success_streak,
+                item.stability_days,
+                item.retrievability,
                 item.id,
             ),
         )
@@ -863,6 +869,16 @@ class Repository:
                 content=row["content"],
                 created_at=_parse_datetime(row["created_at"]),
                 success_streak=row["success_streak"],
+                stability_days=(
+                    row["stability_days"]
+                    if "stability_days" in row.keys() and row["stability_days"]
+                    else 0.0
+                ),
+                retrievability=(
+                    row["retrievability"]
+                    if "retrievability" in row.keys() and row["retrievability"] is not None
+                    else 1.0
+                ),
             )
             for row in rows
         ]

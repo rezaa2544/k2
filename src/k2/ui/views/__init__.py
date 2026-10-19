@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .activities import ActivitiesPage, AddActivityDialog
+from .consolidation import ConsolidationPage
 from .dashboard import DashboardPage
 from .exams import ExamsPage, RecordAttemptDialog
 from .onboarding import OnboardingWizard
@@ -15,6 +16,7 @@ from .topics import TopicsPage
 __all__ = [
     "ActivitiesPage",
     "AddActivityDialog",
+    "ConsolidationPage",
     "DashboardPage",
     "ExamsPage",
     "OnboardingWizard",

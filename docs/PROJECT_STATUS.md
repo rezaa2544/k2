@@ -1,19 +1,58 @@
 # وضعیت پروژه — K2
 
-تاریخ گزارش: ۱۴۰۵/۰۷/۲۵ (2026-10-17)
-شاخه: `main` — مخزن محلی: `/home/user/k2`
+تاریخ گزارش: ۱۴۰۵/۰۷/۲۶ (2026-10-18)
+شاخهٔ کاری: `arena/947664ef-k2` — مخزن محلی: `/home/user/k2` (remote: `github.com/rezaa2544/k2`)
 
 ---
 
 ## ۱. خلاصهٔ اجرایی
 
-**وضعیت این workspace در این نوبت:** `HEAD=3d6605a`; تغییرات محلی متعدد پیشین حفظ شدند و reset/checkout/stash انجام نشد. در ادامهٔ همین کار، سنجش عملکردی هر مبحث با migration و ذخیرهٔ مستقل، صفحهٔ مباحث در دسکتاپ، اتصال مرور فعال به شواهد تسلط، تنظیم قابل‌ویرایش آستانه‌های L4، و مسیر موضوعی بدون تکرار پیاده شدند. Preview HTML نیز حالا شامل صفحهٔ مباحث، ثبت شواهد، وصل کردن مرور به مبحث، مسیر پیشنهادی، تنظیم آستانه‌ها، persistence مرورگر و export داده‌دار است؛ کاتالوگ/سهم‌های گروهی را از Python source of truth می‌گیرد.
+**وضعیت این workspace در این نوبت:** `HEAD=4bb774a` روی شاخهٔ `arena/947664ef-k2`؛ تغییرهای محلی این نوبت ثبت/commit شده و push به همان شاخه انجام شده است. reset/checkout/stash انجام نشد.
 
-`docs/LEARNING_SCIENCE_RESEARCH.md` مرور هدفمند شواهد و مشخصات رفتاری مشاور است. `EXAM_COURSES` ردیف‌های آزمون ۱۴۰۶ برای پنج گروه و `EXAM_WEIGHT_BY_GROUP` سهم‌های ۴۰/۶۰ و ۷۰/۳۰ را دارد؛ به‌دلیل نبود cross-check مستقیم، کتاب‌ها/فصل‌های هنر و زبان و ضرایب تک‌درس سوابق تحصیلی حدس زده نشده‌اند. `L4` معیار عملکردی موقت با فاصله، بازیابی تأخیری و انتقال است؛ آستانه‌ها قابل تنظیم و فاقد تضمین حافظه‌اند.
+**تمرکز این نوبت روی سه شکاف محصول بود** (بازخورد کاربر: «برنامه‌ها نیازهای منو برآورده نکرده»):
 
-در این نوبت، کل suite با **203 تست موفق** اجرا شد؛ `compileall`، Node parse روی JS ترکیب‌شده، بازتولید Preview و `git diff --check` نیز پاس شدند. آزمون DOM واقعی مرورگر انجام نشد. **build/اجرای EXE ویندوز این working tree انجام نشده** و ZIP موجود مربوط به build قبلی است. remote قابل‌استفاده وجود ندارد؛ در نتیجه pushی انجام نشده است.
+1. **تثبیت حافظه به‌جای تیک «انجام‌شده»** — `src/k2/consolidation.py` مدل DSR
+   (Difficulty/Stability/Retrievability) و **نردبان تثبیت S0–S5** را پیاده می‌کند.
+   هر مبحث فقط با شاهد عملکردی (score ≥ آستانهٔ [H]) و در پنجرهٔ زمانی خودش از یک
+   پله به پلهٔ بعد می‌رود: دیده‌شده → بازیابی اولیه ≤۲۴ ساعت (پیش از خواب) →
+   فاصله‌دار → تأخیری → انتقالی (سؤال تازه/ترکیبی) → نگهداری. پلهٔ از موعد گذشته
+   وضعیت «عقب‌افتاده» می‌گیرد و در صف جبران قرار می‌گیرد؛ هیچ‌وقت بی‌صدا حذف نمی‌شود.
+2. **پیش‌بینی ماندگاری تا روز آزمون** — `forecast_retention` با فرمول FSRS
+   (`R(t,S) = (1 + 19t/81S)^−0.5`) درصد بازیابی‌پذیریِ هر مبحث در روز آزمون را
+   بر پایهٔ پایداریِ مشتق‌شده از مرورهای واقعی همان کاربر پیش‌بینی می‌کند؛ در نبود
+   داده، عددی ساخته نمی‌شود. این یک **پیش‌بینی** است، نه تضمین حافظه.
+3. **برنامهٔ سه‌مسیره و امکان‌سنجی** — `src/k2/streams.py` ظرفیت مؤثر هر روز را بین
+   «مبحث جدید / جبران عقب‌افتادگی / تثبیت» تقسیم می‌کند (کف تثبیت ۲۰٪، سقف ۴۵٪،
+   سقف جبران ۴۰٪، کف مطلب جدید ۱۵٪). `catchup_plan` بدهی را قدم‌به‌قدم روی روزها
+   پخش می‌کند (حداکثر به‌اندازهٔ بلوک مجاز در هر روز) و باقی‌مانده را صریح گزارش
+   می‌کند؛ `assess_feasibility` اگر کار تا آزمون جا نشود، سطح و چهار گزینهٔ
+   **پیشنهادی** (نه خودکار) می‌دهد.
 
-**Windows:** build/اجرای EXE این working tree انجام نشده؛ بسته و شواهد Windows Actions موجود مربوط به build قبلی‌اند. در checkout فعلی git remote نمایش داده نشد و این نوبت هیچ pushی انجام نشده است. بنابراین این سند build قبلی را از پیاده‌سازی محلی فعلی جدا می‌کند؛ GUI روی Windows فیزیکی، نصب تمیز و امضای دیجیتال همچنان تأیید نشده‌اند.
+همراه این موتورها: `src/k2/learning_science.py` با ۲۰ شواهد مستقل (testing effect،
+spacing، interleaving، worked examples/expertise reversal، تثبیت در خواب، desirable
+difficulties، DSR/FSRS، hypercorrection) که هر توصیهٔ موتور به شناسهٔ آن‌ها پیوند
+می‌خورد؛ کاتالوگ فرضیه‌محور ۲۱۴ مبحث برای ۲۰ ترکیب درس/گروه
+(`konkur_catalog.TOPICS_BY_COURSE` + `service.seed_topics_from_catalog`) تا کاربر
+بتواند سریع شروع کند و خودش تأیید/حذف کند؛ و نمای «تثبیت حافظه» در رابط کاربری
+(صفحهٔ نهم) با توزیع مسیرها، امکان‌سنجی، صف جبران و جدول نردبان.
+
+`ReviewItem` دو ستون جدید `stability_days` و `retrievability` گرفت،
+`difficulty` از int به float تغییر کرد (تطابق با مدل DSR)، و `schema.py` به
+نسخهٔ ۵ با `MIGRATION_5` رسید؛ `repositories.py` هر دو ستون را با fallback
+سازگار با نسخهٔ پیشین می‌خواند و می‌نویسد. سندٔ کامل شواهد و نگاشت شواهد به کد:
+`docs/research/05_MEMORY_CONSOLIDATION_AND_STREAMS.md`.
+
+در این نوبت، کل suite با **۲۷۲ تست موفق** اجرا شد (پیش‌تر ۲۰۳)؛ `compileall`،
+Node parse روی JS ترکیب‌شدهٔ preview، بازتولید Preview و `git diff --check` نیز
+پاس شدند. Preview HTML در همان commit به‌روز شد (درگاه CI). آزمون DOM واقعی
+مرورگر انجام نشده. **build/اجرای EXE ویندوز برای این working tree انجام نشده** و
+ZIP موجود مربوط به build قبلی است.
+
+**Windows:** build/اجرای EXE این working tree انجام نشده؛ بسته و شواهد Windows
+Actions موجود مربوط به build قبلی‌اند. GUI روی Windows فیزیکی، نصب تمیز و امضای
+دیجیتال همچنان تأیید نشده‌اند.
+
+---
 
 ---
 
@@ -26,9 +65,10 @@
 | Gate 2 | راه‌اندازی و تقویم ثابت | ✅ | `onboarding.py` + `test_onboarding.py` (۱۴ تست) |
 | Gate 3 | ظرفیت و زمان‌بند | ✅ | `capacity.py`، `scheduler.py` + تست‌ها |
 | Gate 4 | چرخهٔ فعالیت و عقب‌افتادگی | ✅ | `activity_lifecycle.py`، `backlog.py` |
-| Gate 5 | چرخهٔ یادگیری و مرور | ✅ | `review_engine.py` + ۱۷ تست |
+| Gate 5 | چرخهٔ یادگیری و مرور | ✅ | `review_engine.py` + ۱۷ تست + مدل DSR در `consolidation.py` |
 | Gate 6 | آزمون، بانک خطا و موتور مشاور | ✅ | `exam_analysis.py`، `advisor_engine.py` + ۲۶ تست |
-| Gate 7 | گزارش‌ها و UX | ✅ | `reporting.py`، ۸ صفحهٔ UI + ۱۸ تست GUI |
+| Gate 7 | گزارش‌ها و UX | ✅ | `reporting.py`، ۹ صفحهٔ UI + ۱۹ تست GUI |
+| Gate 9 | تثبیت حافظه، سه مسیر و امکان‌سنجی | ✅ | `consolidation.py`، `streams.py`، `learning_science.py` + ۶۹ تست تازه + نمای تثبیت |
 | Gate 8 | بسته‌بندی و اعتبارسنجی | ⚠️ **تاریخی؛ working tree فعلی نیازمند build** | [Windows Actions پیشین](https://github.com/rezaa2544/k2/actions/runs/39058074025) و ZIP آن نسخه؛ به تغییرهای فعلی تعمیم داده نمی‌شوند |
 
 ---
@@ -43,7 +83,7 @@ python3 -m pytest tests -q
 ```
 
 ```
-203 passed  # run in current local working tree on 2026-10-17
+272 passed  # run in current local working tree on 2026-10-19
 ```
 
 > جدول تفکیکی فایل‌های زیر از snapshot قدیمی‌تر است؛ جمع 203 تستِ بالا نتیجهٔ اجرای جاری را نشان می‌دهد. تست‌های تازهٔ `test_learning_evidence.py` و `test_preview.py` نیز در همین اجرا بودند.
@@ -56,21 +96,27 @@ python3 -m pytest tests -q
 | `tests/test_activity_lifecycle.py` | 13 |
 | `tests/test_review_engine.py` | 17 |
 | `tests/test_exam_analysis.py` | 10 |
-| `tests/test_storage.py` | 13 |
+| `tests/test_storage.py` | 14 |
 | `tests/test_invariants.py` | 10 |
 | `tests/test_edge_cases.py` | 16 |
-| `tests/test_onboarding.py` | 14 |
-| `tests/test_advisor.py` | 16 |
+| `tests/test_onboarding.py` | 15 |
+| `tests/test_advisor.py` | 18 |
 | `tests/test_reporting.py` | 10 |
-| `tests/test_gui.py` | 18 |
+| `tests/test_gui.py` | 22 |
 | `tests/test_app.py` | 2 |
 | `tests/test_windows_download.py` | 3 |
 | `tests/test_e2e_scenario.py` | 4 |
-| `tests/test_subject_selection.py` | 2 |
-| `tests/test_konkur_catalog.py` | 3 |
-| **مجموع** | **189** |
+| `tests/test_subject_selection.py` | 3 |
+| `tests/test_konkur_catalog.py` | 5 |
+| `tests/test_learning_science.py` | 7 |
+| `tests/test_consolidation.py` | 27 |
+| `tests/test_streams.py` | 13 |
+| `tests/test_consolidation_service.py` | 18 |
+| `tests/test_learning_evidence.py` | 3 |
+| `tests/test_preview.py` | 4 |
+| **مجموع** | **۲۷۲** |
 
-محیط تست این نوبت: Linux / Python 3.13 / PySide6 6.9.1، با `QT_QPA_PLATFORM=offscreen` و `libxkbcommon.so.0` موقت در `/tmp`. workflowهای GitHub در مخزن تعریف شده‌اند، اما برای این working tree اجرا نشده‌اند.
+محیط تست این نوبت: Linux / Python 3.11.2 / PySide6 6.9.1، با `QT_QPA_PLATFORM=offscreen` و کتابخانه‌های استاب موقت در `/tmp` (بدون دسترسی به apt). workflowهای GitHub در مخزن تعریف شده‌اند، اما برای این working tree اجرا نشده‌اند.
 
 ---
 

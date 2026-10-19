@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,17 +35,42 @@ def test_preview_exposes_core_pages_and_persistent_data_controls():
     html = PREVIEW.read_text(encoding="utf-8")
     for label in (
         "داشبورد", "برنامهٔ امروز", "فعالیت‌ها", "آزمون و تحلیل", "مرور تطبیقی",
-        "گزارش‌ها", "تنظیمات", "مباحث و تسلط", "انتخاب همهٔ درس‌ها", "انتخاب همهٔ کتاب‌ها",
-        "خروجی HTML داده‌دار", "پشتیبان JSON", "بازیابی فایل", "ساخت مسیر پیشنهادی",
+        "تثبیت حافظه", "گزارش‌ها", "تنظیمات", "مباحث و تسلط", "انتخاب همهٔ درس‌ها",
+        "انتخاب همهٔ کتاب‌ها", "خروجی HTML داده‌دار", "پشتیبان JSON", "بازیابی فایل",
+        "ساخت مسیر پیشنهادی", "کارهای تثبیت فعال",
     ):
         assert label in html
     for implementation_marker in (
         "localStorage", "showSaveFilePicker", "backupJSON", "restoreFile",
         "wizard-finish", "subjectWeightsForm", "detectConflicts", "learningEvidence",
         "masteryMinSpacingDays", "addTopicEvidenceForm", "generateTopicPathway",
+        "consolidationPage", "ladderState",
     ):
         assert implementation_marker in html
     assert "checked>" not in html
+
+
+def test_preview_zip_bundle_is_current_and_reproducible():
+    """ZIP دانلود پیش‌نمایش باید تازه و قطعی باشد تا لینک README کهنه نشود."""
+    sys.path.insert(0, str(ROOT / "preview"))
+    try:
+        from build_preview_zip import ENTRY, build_zip
+    finally:
+        sys.path.pop(0)
+
+    bundle = ROOT / "downloads" / "K2-preview-html.zip"
+    assert bundle.exists(), "فایل ZIP دانلود در downloads/ نیست"
+    from build_preview_zip import normalize
+
+    payload = bundle.read_bytes()
+    with zipfile.ZipFile(bundle) as archive:
+        assert archive.namelist() == [ENTRY]
+        html_from_zip = archive.read(ENTRY)
+    # محتوای ZIP باید همان HTML جاری باشد (مستقل از CRLF ویندوز)
+    on_disk = (ROOT / "preview" / "K2-preview.html").read_bytes()
+    assert html_from_zip == normalize(on_disk)
+    # بسته باید دقیقاً با اسکریپت بازتولید شود (کهنگی یعنی عدم تطابق)
+    assert payload == build_zip(on_disk)
 
 
 def test_preview_javascript_parses_when_node_is_available(tmp_path: Path):

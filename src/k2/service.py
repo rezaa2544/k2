@@ -12,12 +12,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Sequence
 
-from . import activity_lifecycle, advisor_engine, backlog as backlog_mod, capacity
-from . import exam_analysis, onboarding, reporting, review_engine
+from . import (
+    activity_lifecycle,
+    advisor_engine,
+    backlog as backlog_mod,
+    capacity,
+    consolidation,
+)
+from . import exam_analysis, konkur_catalog, onboarding, reporting, review_engine, streams
 from .config import Settings, database_path
 from .domain.enums import (
     ActivityState,
     DateStatus,
+    DeadlineType,
     EnergyNeed,
     ErrorCode,
     ExamKind,
@@ -286,7 +293,18 @@ class AdvisorService:
             raise ValueError("تاریخ سنجش نمی‌تواند در آینده باشد.")
         if not 0 <= evidence.score <= 1:
             raise ValueError("درصد پاسخ درست باید بین صفر و یک باشد.")
-        if evidence.source not in {"diagnostic", "delayed", "transfer", "mixed_exam", "review"}:
+        if evidence.source not in {
+            "study",
+            "class",
+            "diagnostic",
+            "review",
+            "retrieval",
+            "delayed",
+            "delayed_exam",
+            "transfer",
+            "mixed_exam",
+            "novel_item",
+        }:
             raise ValueError("نوع شاهد سنجش معتبر نیست.")
         if evidence.item_count < 0 or evidence.confidence not in {1, 2, 3, 4}:
             raise ValueError("تعداد آیتم یا میزان اطمینان نامعتبر است.")
@@ -420,6 +438,9 @@ class AdvisorService:
     def plan_day(self, date: Optional[_dt.date] = None) -> DayPlan:
         """برنامهٔ یک روز را می‌سازد و ذخیره می‌کند."""
         date = date or _dt.date.today()
+        # پله‌های تثبیتِ سررسیدشده پیش از زمان‌بندی به فعالیت تبدیل می‌شوند تا
+        # کف تثبیت در برنامهٔ واقعی روز دیده شود، نه فقط در گزارش.
+        self.ensure_consolidation_activities(date)
         activities = self._schedulable_activities(date)
         plan = self.scheduler.plan_day(date, activities, self.build_context(date))
         self.repo.replace_schedule(date, plan.placements)
@@ -757,6 +778,264 @@ class AdvisorService:
     def due_review_items(self, today: Optional[_dt.date] = None) -> list[ReviewItem]:
         today = today or _dt.date.today()
         return review_engine.due_items(self.repo.list_review_items(), today)
+
+    # ------------------------------------------------------------------
+    # تثبیت حافظه (سند تحقیق ۵)
+    # ------------------------------------------------------------------
+
+    def topic_consolidations(
+        self, today: Optional[_dt.date] = None
+    ) -> list[consolidation.TopicConsolidation]:
+        """وضعیت نردبان تثبیت همهٔ مبحث‌ها."""
+        today = today or _dt.date.today()
+        profile = self.active_exam_profile()
+        exam_date = profile.target_date if profile else None
+        topics = self.repo.list_topics()
+        evidence_by_topic: dict[int, list[consolidation.StageEvidence]] = {}
+        for item in self.repo.list_learning_evidence():
+            if item.topic_id is None or item.observed_on is None:
+                continue
+            evidence_by_topic.setdefault(item.topic_id, []).append(
+                consolidation.StageEvidence(
+                    at=item.observed_on, source=item.source, score=item.score
+                )
+            )
+        # پایداری هر مبحث از آیتم‌های مرورش تخمین زده می‌شود.
+        stability_by_topic: dict[int, tuple[float, float, Optional[_dt.date]]] = {}
+        for item in self.repo.list_review_items():
+            if item.topic_id is None:
+                continue
+            stability = item.stability_days
+            if not stability:
+                stability = review_engine.stability_from_interval(item)
+            current = stability_by_topic.get(item.topic_id)
+            if current is None or stability > current[0]:
+                stability_by_topic[item.topic_id] = (
+                    stability, item.difficulty, item.last_review,
+                )
+        result: list[consolidation.TopicConsolidation] = []
+        for topic in topics:
+            stability, difficulty, last_review = stability_by_topic.get(
+                topic.id or -1, (0.0, 5.0, None)
+            )
+            result.append(
+                consolidation.assess_topic_consolidation(
+                    topic_id=topic.id,
+                    topic_name=topic.name,
+                    subject_name=topic.subject_name,
+                    evidence=evidence_by_topic.get(topic.id or -1, []),
+                    stability=stability,
+                    difficulty=difficulty,
+                    last_review=last_review,
+                    today=today,
+                    exam_date=exam_date,
+                    settings=self.settings,
+                )
+            )
+        return result
+
+    def consolidation_overview(self, date: Optional[_dt.date] = None) -> dict:
+        """خلاصهٔ مدیریت تثبیت برای داشبورد و صفحهٔ تثبیت."""
+        date = date or _dt.date.today()
+        consolidations = self.topic_consolidations(date)
+        forecast = consolidation.forecast_retention(consolidations)
+        subjects = {s.name: s for s in self.repo.list_subjects()}
+        weights = {
+            name: (subject.effective_weight or 1.0)
+            for name, subject in subjects.items()
+        }
+        debts = consolidation.consolidation_debt(
+            consolidations, date, subject_weights=weights
+        )
+        breakdown = self.build_context(date).capacity_for(date)
+        # بار هر مسیر جدا شمارش می‌شود تا تثبیت با مطلب جدید قاطی نشود: فعالیت‌های
+        # تثبیت (خودکار یا مرور) به مسیر «تثبیت» می‌روند، بقیه به «مطلب جدید».
+        review_load = sum(item.effective_minutes for item in self.due_review_items(date))
+        activities = self._schedulable_activities(date)
+        consolidation_ids = {
+            activity.id
+            for activity in activities
+            if activity.origin == "consolidation"
+            or activity.type
+            in {ActivityType.REVIEW, ActivityType.CONSOLIDATION, ActivityType.SUMMARY}
+        }
+        consolidation_load = review_load + sum(
+            activity.effective_minutes
+            for activity in activities
+            if activity.id in consolidation_ids
+        )
+        new_load = sum(
+            activity.effective_minutes
+            for activity in activities
+            if activity.id not in consolidation_ids
+        )
+        backlog = self.backlog(date)
+        # بدهی تثبیت در مسیر تثبیت پوشش داده می‌شود؛ در بدهی جبران دوباره شمرده نمی‌شود.
+        catchup_items = [
+            item for item in backlog.items if item.activity_id not in consolidation_ids
+        ]
+        catchup_debt = sum(item.remaining_minutes for item in catchup_items)
+        profile = self.active_exam_profile()
+        days_to_exam = profile.days_remaining if profile else None
+        allocation = streams.allocate_streams(
+            capacity_minutes=breakdown.capacity_minutes,
+            review_load_minutes=consolidation_load,
+            catchup_debt_minutes=catchup_debt,
+            new_load_minutes=new_load,
+            days_to_exam=days_to_exam,
+            date=date,
+            settings=self.settings,
+        )
+        verdict = streams.assess_feasibility(
+            new_load_minutes=new_load,
+            catchup_debt_minutes=catchup_debt,
+            consolidation_load_minutes=consolidation_load,
+            daily_capacity_minutes=breakdown.capacity_minutes,
+            days_to_exam=days_to_exam,
+            settings=self.settings,
+        )
+        catchup = streams.catchup_plan(
+            debts=[
+                (item.activity_id, item.title, item.remaining_minutes)
+                for item in catchup_items
+            ],
+            start_date=date,
+            days=max(1, min(days_to_exam or 7, 60)),
+            daily_budget_minutes=allocation.catchup_minutes,
+            settings=self.settings,
+        )
+        return {
+            "date": date,
+            "consolidations": consolidations,
+            "forecast": forecast,
+            "debts": debts,
+            "allocation": allocation,
+            "feasibility": verdict,
+            "catchup": catchup,
+            "backlog": backlog,
+            "capacity_minutes": breakdown.capacity_minutes,
+            "days_to_exam": days_to_exam,
+        }
+
+    def consolidation_advice_for(
+        self, topic_id: int, today: Optional[_dt.date] = None
+    ) -> Optional[tuple[consolidation.TopicConsolidation, tuple[str, str, tuple[str, ...]]]]:
+        """اقدام بعدی برای یک مبحث بر پایهٔ نردبان تثبیت."""
+        today = today or _dt.date.today()
+        for item in self.topic_consolidations(today):
+            if item.topic_id == topic_id:
+                return item, consolidation.consolidation_advice(item, self.settings)
+        return None
+
+    def seed_topics_from_catalog(self, subject_id: int) -> list[Topic]:
+        """مباحث یک درس را از کاتالوگ [H] بسازد؛ موارد تکراری رد می‌شوند.
+
+        خروجی: مباحث تازه‌ای که ساخته شد. کاربر باید در صفحهٔ مباحث آن‌ها را
+        تأیید یا حذف کند؛ این فهرست ادعای دامنهٔ رسمی آزمون نیست.
+        """
+        subjects = self.repo.list_subjects()
+        subject = next((s for s in subjects if s.id == subject_id), None)
+        if subject is None:
+            raise ValueError("درس یافت نشد.")
+        group = ""
+        profile = self.active_exam_profile()
+        if profile:
+            group = profile.group_name
+        names = konkur_catalog.topics_for_course(subject.name, group)
+        existing = {t.name for t in self.repo.list_topics(subject_id) if t.name}
+        from .domain.learning import subject_default_content_type
+
+        created: list[Topic] = []
+        for name in names:
+            if name in existing:
+                continue
+            topic = Topic(
+                subject_id=subject_id,
+                subject_name=subject.name,
+                name=name,
+                content_type=subject_default_content_type(subject.name),
+            )
+            topic.id = self.repo.create_topic(topic)
+            created.append(topic)
+        self.conn.commit()
+        return created
+
+    def ensure_consolidation_activities(
+        self, date: Optional[_dt.date] = None
+    ) -> list[Activity]:
+        """برای پله‌های تثبیتِ سررسیدشده، فعالیت واقعی می‌سازد (idempotent).
+
+        چرا لازم است: نردبان تثبیت بدون «کارِ قابل برنامه‌ریزی» فقط یک جدول
+        گزارش می‌ماند. این متد پلهٔ سررسیدشدهٔ هر مبحث را به یک فعالیت با مهلت
+        نرم تبدیل می‌کند تا در برنامهٔ روز و صف جبران دیده شود؛ اگر انجام نشود،
+        به‌عنوان بدهی گزارش می‌شود و بی‌صدا حذف نمی‌شود.
+
+        قواعد:
+          * فقط پله‌هایی که موعدشان رسیده یا گذشته است.
+          * برای هر (مبحث، پله) حداکثر یک فعالیت باز؛ تکرار اجرا چیزی اضافه نمی‌کند.
+          * فعالیت با نشانگر ``consolidation:<stage>`` در ``state_reason`` و
+            ``origin="consolidation"`` ثبت می‌شود تا قابل تشخیص باشد.
+        """
+        date = date or _dt.date.today()
+        states = self.topic_consolidations(date)
+        activities = self.repo.list_activities()
+        open_states = {
+            ActivityState.PLANNED,
+            ActivityState.READY,
+            ActivityState.BLOCKED,
+            ActivityState.IN_PROGRESS,
+            ActivityState.PARTIAL,
+            ActivityState.OVERDUE,
+        }
+        taken: set[tuple[Optional[int], str]] = set()
+        for activity in activities:
+            if activity.state not in open_states:
+                continue
+            reason = activity.state_reason or ""
+            if not reason.startswith(consolidation.CONSOLIDATION_MARKER):
+                continue
+            stage = reason[len(consolidation.CONSOLIDATION_MARKER):].split(" ")[0]
+            taken.add((activity.topic_id, stage))
+
+        created: list[Activity] = []
+        for state in states:
+            if state.status == "not_started" or state.consolidated:
+                continue
+            stage = state.next_stage
+            if stage is None or state.next_due is None or state.next_due > date:
+                continue
+            if (state.topic_id, stage) in taken:
+                continue
+            stage_label = consolidation.STAGE_LABELS.get(stage, stage)
+            overdue_days = max(0, (date - state.next_due).days)
+            reason = f"{consolidation.CONSOLIDATION_MARKER}{stage}"
+            if overdue_days:
+                reason += f" · {overdue_days} روز از موعد گذشته"
+            minutes = consolidation.stage_minutes(stage)
+            activity = Activity(
+                title=f"تثبیت {state.topic_name} — {stage_label}",
+                type=ActivityType(consolidation.stage_activity_type(stage)),
+                subject_name=state.subject_name,
+                topic_id=state.topic_id,
+                topic_name=state.topic_name,
+                est_minutes=minutes,
+                remaining_minutes=minutes,
+                min_chunk=10,
+                max_chunk=max(10, minutes),
+                splittable=True,
+                deadline_type=DeadlineType.SOFT,
+                deadline_at=_dt.datetime.combine(state.next_due, _dt.time(23, 59)),
+                state_reason=reason,
+                energy_need=EnergyNeed.MEDIUM,
+                origin="consolidation",
+            )
+            activity.id = self.repo.create_activity(activity)
+            self._refresh_dependencies()
+            created.append(activity)
+            taken.add((state.topic_id, stage))
+        if created:
+            self.conn.commit()
+        return created
 
     # ------------------------------------------------------------------
     # آزمون
