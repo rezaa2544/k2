@@ -42,7 +42,7 @@ difficulties، DSR/FSRS، hypercorrection) که هر توصیهٔ موتور ب�
 سازگار با نسخهٔ پیشین می‌خواند و می‌نویسد. سندٔ کامل شواهد و نگاشت شواهد به کد:
 `docs/research/05_MEMORY_CONSOLIDATION_AND_STREAMS.md`.
 
-در این نوبت، کل suite با **۲۷۱ تست موفق** اجرا شد (پیش‌تر ۲۰۳)؛ `compileall`،
+در این نوبت، کل suite با **۲۷۲ تست موفق** اجرا شد (پیش‌تر ۲۰۳)؛ `compileall`،
 Node parse روی JS ترکیب‌شدهٔ preview، بازتولید Preview و `git diff --check` نیز
 پاس شدند. Preview HTML در همان commit به‌روز شد (درگاه CI). آزمون DOM واقعی
 مرورگر انجام نشده. **build/اجرای EXE ویندوز برای این working tree انجام نشده** و
@@ -68,7 +68,7 @@ Actions موجود مربوط به build قبلی‌اند. GUI روی Windows �
 | Gate 5 | چرخهٔ یادگیری و مرور | ✅ | `review_engine.py` + ۱۷ تست + مدل DSR در `consolidation.py` |
 | Gate 6 | آزمون، بانک خطا و موتور مشاور | ✅ | `exam_analysis.py`، `advisor_engine.py` + ۲۶ تست |
 | Gate 7 | گزارش‌ها و UX | ✅ | `reporting.py`، ۹ صفحهٔ UI + ۱۹ تست GUI |
-| Gate 9 | تثبیت حافظه، سه مسیر و امکان‌سنجی | ✅ | `consolidation.py`، `streams.py`، `learning_science.py` + ۶۸ تست تازه + نمای تثبیت |
+| Gate 9 | تثبیت حافظه، سه مسیر و امکان‌سنجی | ✅ | `consolidation.py`، `streams.py`، `learning_science.py` + ۶۹ تست تازه + نمای تثبیت |
 | Gate 8 | بسته‌بندی و اعتبارسنجی | ⚠️ **تاریخی؛ working tree فعلی نیازمند build** | [Windows Actions پیشین](https://github.com/rezaa2544/k2/actions/runs/39058074025) و ZIP آن نسخه؛ به تغییرهای فعلی تعمیم داده نمی‌شوند |
 
 ---
@@ -83,7 +83,7 @@ python3 -m pytest tests -q
 ```
 
 ```
-271 passed  # run in current local working tree on 2026-10-18
+272 passed  # run in current local working tree on 2026-10-19
 ```
 
 > جدول تفکیکی فایل‌های زیر از snapshot قدیمی‌تر است؛ جمع 203 تستِ بالا نتیجهٔ اجرای جاری را نشان می‌دهد. تست‌های تازهٔ `test_learning_evidence.py` و `test_preview.py` نیز در همین اجرا بودند.
@@ -113,8 +113,8 @@ python3 -m pytest tests -q
 | `tests/test_streams.py` | 13 |
 | `tests/test_consolidation_service.py` | 18 |
 | `tests/test_learning_evidence.py` | 3 |
-| `tests/test_preview.py` | 3 |
-| **مجموع** | **۲۷۱** |
+| `tests/test_preview.py` | 4 |
+| **مجموع** | **۲۷۲** |
 
 محیط تست این نوبت: Linux / Python 3.11.2 / PySide6 6.9.1، با `QT_QPA_PLATFORM=offscreen` و کتابخانه‌های استاب موقت در `/tmp` (بدون دسترسی به apt). workflowهای GitHub در مخزن تعریف شده‌اند، اما برای این working tree اجرا نشده‌اند.
 
