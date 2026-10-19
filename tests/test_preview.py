@@ -73,6 +73,26 @@ def test_preview_zip_bundle_is_current_and_reproducible():
     assert payload == build_zip(on_disk)
 
 
+def test_preview_zip_bundle_is_platform_independent(monkeypatch):
+    """بسته روی ویندوز و یونیکس بایت‌به‌بایت یکسان ساخته می‌شود.
+
+    ``zipfile.ZipInfo`` مقدار create_system را از sys.platform می‌گیرد؛ بی تثبیت
+    آن هش بسته روی ویندوز تغییر می‌کند و CI شکست می‌خورد.
+    """
+    sys.path.insert(0, str(ROOT / "preview"))
+    try:
+        from build_preview_zip import build_zip
+    finally:
+        sys.path.pop(0)
+
+    on_disk = (ROOT / "preview" / "K2-preview.html").read_bytes()
+    unix_bytes = build_zip(on_disk)
+    monkeypatch.setattr(sys, "platform", "win32")
+    assert build_zip(on_disk) == unix_bytes
+    monkeypatch.setattr(sys, "platform", "darwin")
+    assert build_zip(on_disk) == unix_bytes
+
+
 def test_preview_javascript_parses_when_node_is_available(tmp_path: Path):
     node = shutil.which("node")
     if node is None:
