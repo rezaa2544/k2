@@ -45,6 +45,9 @@ def build_zip(html_bytes: bytes) -> bytes:
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         info = zipfile.ZipInfo(ENTRY, date_time=TIMESTAMP)
         info.compress_type = zipfile.ZIP_DEFLATED
+        # ساخت با «سیستم یونیکس» همیشه ثابت است؛ ZipInfo این مقدار را از
+        # sys.platform می‌گیرد (۰ روی ویندوز، ۳ روی یونیکس) و بی‌ثباتی می‌سازد.
+        info.create_system = 3
         info.external_attr = 0o644 << 16
         archive.writestr(info, html_bytes)
     return buffer.getvalue()
