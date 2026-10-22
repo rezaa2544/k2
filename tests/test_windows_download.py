@@ -76,6 +76,47 @@ def test_release_metadata_tracks_exe_and_zip_hashes_and_sizes(tmp_path: Path):
     assert f'<b id="sourceRevision">{source_revision[:8]}</b>' in preview
 
 
+def test_refresh_preview_download_bundle_keeps_zip_and_readme_in_sync(tmp_path: Path):
+    """ZIP دانلود پیش‌نمایش باید با HTML جاری و هش README همیشه بخواند.
+
+    چرا لازم است: مرحلهٔ «refresh bundle» در CI هش نسخه را داخل
+    ``preview/K2-preview.html`` مهر می‌زند. اگر ZIP بازسازی نشود، ZIP و HTML
+    از هم جدا می‌افتند و لینک دانلود README کهنه می‌شود.
+    """
+    import hashlib
+    import importlib
+
+    repo = tmp_path / "repo"
+    (repo / "preview").mkdir(parents=True)
+    (repo / "downloads").mkdir()
+    shutil.copyfile(ROOT / "README.md", repo / "README.md")
+    shutil.copyfile(ROOT / "preview" / "K2-preview.html", repo / "preview" / "K2-preview.html")
+    shutil.copyfile(ROOT / "preview" / "build_preview_zip.py", repo / "preview" / "build_preview_zip.py")
+    original_root = _packager.ROOT
+    _packager.ROOT = repo
+
+    preview = repo / "preview" / "K2-preview.html"
+    # همان کاری که CI می‌کند: مهر کردن هش نسخهٔ سورس در پیش‌نمایش.
+    preview.write_text(
+        preview.read_text(encoding="utf-8").replace(
+            'data-source-revision="pending"', 'data-source-revision="abcdef1234567"'
+        ),
+        encoding="utf-8",
+    )
+
+    zip_path, digest = _packager.refresh_preview_download_bundle()
+
+    assert zip_path == repo / "downloads" / "K2-preview-html.zip"
+    assert digest == hashlib.sha256(zip_path.read_bytes()).hexdigest()
+    assert f"SHA-256 فایل ZIP: `{digest}`" in (repo / "README.md").read_text(encoding="utf-8")
+    try:
+        with ZipFile(zip_path) as archive:
+            assert archive.namelist() == ["K2-preview.html"]
+            assert archive.read("K2-preview.html") == preview.read_bytes()
+    finally:
+        _packager.ROOT = original_root
+
+
 def test_html_preview_is_offline_and_contains_app_menus_and_navigation():
     preview = (ROOT / "preview" / "K2-preview.html").read_text(encoding="utf-8")
 
