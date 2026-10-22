@@ -153,9 +153,14 @@ def next_interval_days(
     قاعدهٔ «۱۰–۲۰٪» (Cepeda et al. 2008): فاصلهٔ مرور نسبت به روزهای
     باقی‌مانده تا آزمون مقیاس می‌شود تا همهٔ مبحث‌ها پیش از آزمون به
     فاز نگهداری برسند. دو سقف اعمال می‌شود و کوچک‌ترین انتخاب می‌شود.
+
+    اگر روز آزمون گذشته یا امروز باشد، فاصله به کوچک‌ترین مقدار مجاز
+    (نیم روز) می‌رسد تا ماندگاری در آخرین لحظه حفظ شود.
     """
     if stability <= 0:
         return 1.0
+    if days_to_exam is not None and days_to_exam <= 0:
+        return 0.5
     base = days_until_retrievability(target_retention, stability)
     if days_to_exam is not None and days_to_exam > 0:
         exam_cap = max(1.0, spacing_ratio * days_to_exam)
