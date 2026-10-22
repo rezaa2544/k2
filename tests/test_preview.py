@@ -12,14 +12,64 @@ ROOT = Path(__file__).resolve().parents[1]
 PREVIEW = ROOT / "preview" / "K2-preview.html"
 
 
+def _comparable(html: bytes) -> bytes:
+    """HTML را برای مقایسه آماده می‌کند: مهر نسخه و پایان‌خط نادیده می‌رود.
+
+    چرا لازم است: مرحلهٔ «refresh bundle» در CI هش واقعی مبدأ را داخل
+    ``data-source-revision`` و ``#sourceRevision`` مهر می‌کند، ولی سازندهٔ
+    پیش‌نمایش همیشه ``pending`` می‌گذارد. پس مقایسهٔ بازتولیدپذیری باید
+    همین دو فیلد و تفاوت CRLF ویندوز را نادیده بگیرد.
+    """
+    html = html.replace(b"\r\n", b"\n")
+    html = re.sub(rb'data-source-revision="[^"]*"', b'data-source-revision="pending"', html)
+    return re.sub(
+        rb'(<b id="sourceRevision">)[^<]*(</b>)',
+        rb"\g<1>working tree\g<2>",
+        html,
+    )
+
+
+def test_source_revision_stamp_does_not_break_reproducibility():
+    """مهر شدن هش نسخه توسط CI نباید بازتولیدپذیری را بشکند.
+
+    تست رگرسیون: پیش از این، کامیت بازتولید بستهٔ CI روی ``main`` دو تست
+    پیش‌نمایش را می‌شکست، چون فایل کامیت‌شده مهر‌خورده و فایل بازتولیدشده
+    ``pending`` بود. این تست به حالت کامیت‌شده تکیه نمی‌کند (مهر‌شده یا
+    ``pending``) و هر دو را می‌سازد.
+    """
+    html = PREVIEW.read_text(encoding="utf-8")
+    # ابتدا به شکل متعارف می‌رسیم تا مستقل از حالت کامیت‌شده باشد.
+    canonical = re.sub(
+        r'data-source-revision="[^"]*"', 'data-source-revision="pending"', html
+    )
+    canonical = re.sub(
+        r'(<b id="sourceRevision">)[^<]*(</b>)',
+        r"\g<1>working tree\g<2>",
+        canonical,
+    )
+    stamped = canonical.replace(
+        'data-source-revision="pending"',
+        'data-source-revision="3058074aa4bc5dbb767927763990037c355eb8c9"',
+    ).replace(
+        '<b id="sourceRevision">working tree</b>',
+        '<b id="sourceRevision">3058074a</b>',
+    )
+    assert stamped != canonical, "دادهٔ مهر‌شده ساخته نشد"
+    assert _comparable(stamped.encode("utf-8")) == _comparable(canonical.encode("utf-8"))
+
+
 def test_preview_is_reproducible_single_file_and_offline():
     before = PREVIEW.read_bytes()
-    subprocess.run([sys.executable, "preview/build_preview.py"], cwd=ROOT, check=True, capture_output=True)
-    after = PREVIEW.read_bytes()
-    # مقایسه با پایان‌خط یکدست‌شده لازم است: روی ویندوز ``git checkout``
-    # فایل را CRLF می‌کند و ساختِ بازتولیدشده LF است؛ بی این یکدست‌سازی
-    # همین تست روی ویندوز شکست می‌خورد.
-    assert before.replace(b"\r\n", b"\n") == after.replace(b"\r\n", b"\n")
+    try:
+        subprocess.run(
+            [sys.executable, "preview/build_preview.py"], cwd=ROOT, check=True, capture_output=True
+        )
+        after = PREVIEW.read_bytes()
+    finally:
+        # فایل کامیت‌شده دست‌نخورده می‌ماند؛ تست‌های بعدی (مثل کهنگی ZIP)
+        # به نسخهٔ واقعی مخزن تکیه دارند.
+        PREVIEW.write_bytes(before)
+    assert _comparable(before) == _comparable(after)
     html = after.decode("utf-8")
     assert not re.search(r"<(?:script|link)[^>]+(?:src|href)=['\"]https?://", html, re.I)
     assert "https://" not in html and "http://" not in html
