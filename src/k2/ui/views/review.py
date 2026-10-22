@@ -151,8 +151,17 @@ class ReviewPage(QWidget):
         )
         root.addWidget(self.info)
 
+        # نردبان تثبیت حافظه زیرمجموعهٔ همین صفحه است تا کار تثبیتی از کار
+        # مرور جدا نیفتد (بند ۱۷).
+        from .consolidation import ConsolidationPage
+
+        self.consolidation = ConsolidationPage(self.service, self)
+        root.addWidget(self.consolidation, 1)
+
     def refresh(self) -> None:
         today = _dt.date.today()
+        if hasattr(self, "consolidation"):
+            self.consolidation.refresh()
         items = self.service.list_review_items()
         due = self.service.due_review_items(today)
         if items:

@@ -42,6 +42,8 @@ class AddActivityDialog(QDialog):
         self.service = service
         self.setWindowTitle("افزودن فعالیت")
         self.setLayoutDirection(Qt.RightToLeft)
+        #: فعالیت ساخته‌شده پس از پذیرش؛ برای صفحه‌هایی که دیالوگ را می‌بازند.
+        self.activity: Activity | None = None
 
         form = QFormLayout(self)
         self.title_edit = QLineEdit()
@@ -129,6 +131,7 @@ class AddActivityDialog(QDialog):
             deadline_at=deadline_at,
             energy_need=EnergyNeed(self.energy_combo.currentData()),
         )
+        self.activity = activity
         self.service.create_activity(activity)
         self.accept()
 

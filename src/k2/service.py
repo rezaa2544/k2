@@ -1555,9 +1555,10 @@ class AdvisorService:
         )
 
     def record_track_evidence(
-        self, topic_id: int, track: TrackKind, evidence: LearningEvidence
+        self, topic_id: int, track: TrackKind | str, evidence: LearningEvidence
     ) -> tuple[bool, str]:
         """شاهد جدید را ثبت می‌کند و در صورت کفایت، پله را جلو می‌برد."""
+        track = TrackKind(track)
         topic = next(
             (t for t in self.repo.list_topics() if t.id == topic_id), None
         )
@@ -1583,9 +1584,10 @@ class AdvisorService:
         return changed, message
 
     def set_topic_stage(
-        self, topic_id: int, track: TrackKind, stage: str
+        self, topic_id: int, track: TrackKind | str, stage: str
     ) -> None:
         """تنظیم دستی پله — فقط برای اصلاح اشتباه، بدون شاهد خودکار."""
+        track = TrackKind(track)
         topic = next(
             (t for t in self.repo.list_topics() if t.id == topic_id), None
         )
