@@ -84,7 +84,14 @@ def test_refresh_preview_download_bundle_keeps_zip_and_readme_in_sync(tmp_path: 
     از هم جدا می‌افتند و لینک دانلود README کهنه می‌شود.
     """
     import hashlib
-    import importlib
+
+    # ``normalize`` همان یکدست‌سازی پایان‌خط بسته است؛ تست کهنگی در
+    # ``tests/test_preview.py`` هم از همین تابع استفاده می‌کند.
+    sys.path.insert(0, str(ROOT / "preview"))
+    try:
+        from build_preview_zip import normalize
+    finally:
+        sys.path.pop(0)
 
     repo = tmp_path / "repo"
     (repo / "preview").mkdir(parents=True)
@@ -97,11 +104,14 @@ def test_refresh_preview_download_bundle_keeps_zip_and_readme_in_sync(tmp_path: 
 
     preview = repo / "preview" / "K2-preview.html"
     # همان کاری که CI می‌کند: مهر کردن هش نسخهٔ سورس در پیش‌نمایش.
+    # ``newline="\\n"`` مثل کد محصول لازم است، وگرنه روی ویندوز
+    # ``write_text`` پایان‌خط را CRLF می‌کند و بسته با فایل نمی‌خواند.
     preview.write_text(
         preview.read_text(encoding="utf-8").replace(
             'data-source-revision="pending"', 'data-source-revision="abcdef1234567"'
         ),
         encoding="utf-8",
+        newline="\n",
     )
 
     zip_path, digest = _packager.refresh_preview_download_bundle()
@@ -112,7 +122,9 @@ def test_refresh_preview_download_bundle_keeps_zip_and_readme_in_sync(tmp_path: 
     try:
         with ZipFile(zip_path) as archive:
             assert archive.namelist() == ["K2-preview.html"]
-            assert archive.read("K2-preview.html") == preview.read_bytes()
+            # بسته همیشه LF یکدست شده ذبابه می‌کند (normalize)؛ مقایسه با
+            # بایت خام فایل روی ویندوز به‌خاطر CRLF شکست می‌خورد.
+            assert archive.read("K2-preview.html") == normalize(preview.read_bytes())
     finally:
         _packager.ROOT = original_root
 

@@ -16,7 +16,10 @@ def test_preview_is_reproducible_single_file_and_offline():
     before = PREVIEW.read_bytes()
     subprocess.run([sys.executable, "preview/build_preview.py"], cwd=ROOT, check=True, capture_output=True)
     after = PREVIEW.read_bytes()
-    assert before == after
+    # مقایسه با پایان‌خط یکدست‌شده لازم است: روی ویندوز ``git checkout``
+    # فایل را CRLF می‌کند و ساختِ بازتولیدشده LF است؛ بی این یکدست‌سازی
+    # همین تست روی ویندوز شکست می‌خورد.
+    assert before.replace(b"\r\n", b"\n") == after.replace(b"\r\n", b"\n")
     html = after.decode("utf-8")
     assert not re.search(r"<(?:script|link)[^>]+(?:src|href)=['\"]https?://", html, re.I)
     assert "https://" not in html and "http://" not in html

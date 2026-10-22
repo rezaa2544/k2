@@ -41,10 +41,14 @@ weights = {
     for group, (exam, transcript) in EXAM_WEIGHT_BY_GROUP.items()
 }
 (ROOT / "catalog.json").write_text(
-    json.dumps(catalog, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+    json.dumps(catalog, ensure_ascii=False, separators=(",", ":")),
+    encoding="utf-8",
+    newline="\n",
 )
 (ROOT / "group_weights.json").write_text(
-    json.dumps(weights, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+    json.dumps(weights, ensure_ascii=False, separators=(",", ":")),
+    encoding="utf-8",
+    newline="\n",
 )
 _weights_json = json.dumps(weights, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
 css = (ROOT / "base.css").read_text(encoding="utf-8")
@@ -87,5 +91,5 @@ html = f'''<!doctype html>
 </body></html>
 '''
 # Preserve no hard-coded choice or test/user data in the fresh-file payload.
-(ROOT / "K2-preview.html").write_text(html, encoding="utf-8")
+(ROOT / "K2-preview.html").write_text(html, encoding="utf-8", newline="\n")
 print(f"Built {ROOT / 'K2-preview.html'} ({len(html)} bytes)")
