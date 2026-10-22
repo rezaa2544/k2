@@ -83,6 +83,20 @@ class SchedulerSettings:
     max_auto_reschedules_per_day: int = 2
     #: حداقل نسبت زمانی که یک فعالیت تقسیم‌پذیر باید در یک بلوک بگیرد.
     split_min_chunk: int = 20
+    # ---- فاکتورهای تازهٔ اولویت (بند ۱۴) ----
+    #: پیش‌نیاز بودن مبحث برای مباحث دیگر.
+    w_prerequisite: float = 2.0
+    #: سهم لازم مبحث در سؤال‌های تشریحی/نهایی.
+    w_final_exam_share: float = 1.5
+    #: سرعت فراموشی (بیشتر ⇒ مرور فوری‌تر).
+    w_forgetting_rate: float = 1.0
+    #: نزدیکی مهلت اختصاصی خود مبحث.
+    w_topic_deadline: float = 1.5
+    #: احتمال پیشرفت معنادار در زمان باقی‌مانده.
+    w_progress_probability: float = 1.5
+    #: حداقل سهم ظرفیت برای مباحث سخت/ضعیف — هیچ مبحثی فقط به‌خاطر
+    #: سخت‌بودن یا نمرهٔ پایین حذف نمی‌شود (بند ۱۴) [H].
+    hard_topic_floor_ratio: float = 0.15
 
 
 @dataclass
@@ -196,6 +210,38 @@ class AdvisorSettings:
 
 
 @dataclass
+class StudyTimerSettings:
+    """پارامترهای تایمر و جمع ساعت مطالعه (بند ۱۵). همه [H]."""
+
+    #: حداکثر طول یک بلوک تایمر پیش از پیشنهاد استراحت (دقیقه).
+    max_continuous_minutes: int = 50
+    #: استراحت پیشنهادی پس از هر بلوک (دقیقه).
+    suggested_break_minutes: int = 10
+    #: کمینهٔ دقایقی که یک جلسه برای ثبت نیاز دارد.
+    min_session_minutes: int = 1
+    #: سقف ساعت مطالعهٔ مستقل روزانه پیش از هشدار (دقیقه) — جلوگیری از برنامهٔ غیرواقعی.
+    independent_daily_warning_minutes: int = 480
+    #: تعداد روزهای هفتهٔ کاری برای میانگین‌گیری گزارش.
+    report_window_days: int = 7
+
+
+@dataclass
+class DeadlineSettings:
+    """پارامترهای بازمحاسبهٔ مهلت (بند ۱۲). همه [H]."""
+
+    #: فاصلهٔ ایمن بین دو پلهٔ متوالی (روز).
+    min_gap_days: int = 1
+    #: کمینهٔ روزهای لازم برای یادگیری اولیه.
+    initial_learning_min_days: int = 2
+    #: کمینهٔ روزهای لازم برای تمرین و تست.
+    practice_min_days: int = 2
+    #: کمینهٔ روزهای لازم برای تثبیت نهایی.
+    consolidation_min_days: int = 2
+    #: چند روز پیش از مهلت، هشدار «مهلت در خطر» داده شود.
+    warning_window_days: int = 7
+
+
+@dataclass
 class UiSettings:
     """تنظیمات نمایش."""
 
@@ -216,6 +262,8 @@ class Settings:
     streams: StreamSettings = field(default_factory=StreamSettings)
     backlog: BacklogSettings = field(default_factory=BacklogSettings)
     advisor: AdvisorSettings = field(default_factory=AdvisorSettings)
+    timer: StudyTimerSettings = field(default_factory=StudyTimerSettings)
+    deadline: DeadlineSettings = field(default_factory=DeadlineSettings)
     ui: UiSettings = field(default_factory=UiSettings)
 
     # ---- بارگذاری/ذخیره ----

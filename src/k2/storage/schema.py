@@ -7,7 +7,7 @@ migration انجام نمی‌شود.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 #: اسکریپت نسخهٔ ۱ — اسکیمای اولیه.
 MIGRATION_1 = """
@@ -284,10 +284,104 @@ CREATE INDEX IF NOT EXISTS idx_learning_evidence_topic_date
     ON learning_evidence(topic_id, observed_on, id);
 """
 
+#: نسخهٔ ۶ — مهلت‌های مبحث، ساعت مطالعه و مشکلات یادگیری (بندهای ۱۲، ۱۵، ۱۷).
+#: این migration هم جدول‌های تازه می‌سازد و هم ستون‌های مسیر دوگانه را به
+#: جدول topic اضافه می‌کند. مقادیر پیش‌فرض محافظه‌کارانه‌اند تا رکوردهای
+#: موجود بدون از دست دادن اطلاعات به مسیر درست نگاشت شوند.
+MIGRATION_6 = """
+ALTER TABLE topic ADD COLUMN konkur_stage TEXT NOT NULL DEFAULT 'conceptual';
+ALTER TABLE topic ADD COLUMN final_stage TEXT NOT NULL DEFAULT 'textbook_study';
+ALTER TABLE topic ADD COLUMN konkur_evidence_id INTEGER;
+ALTER TABLE topic ADD COLUMN final_evidence_id INTEGER;
+ALTER TABLE topic ADD COLUMN prerequisite_share REAL NOT NULL DEFAULT 0;
+ALTER TABLE topic ADD COLUMN final_exam_share REAL NOT NULL DEFAULT 0;
+ALTER TABLE topic ADD COLUMN estimated_minutes INTEGER;
+
+CREATE TABLE IF NOT EXISTS topic_deadline (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic_id       INTEGER NOT NULL REFERENCES topic(id) ON DELETE CASCADE,
+    subject_id     INTEGER REFERENCES subject(id) ON DELETE SET NULL,
+    kind           TEXT NOT NULL DEFAULT 'initial_learning',
+    target_date    TEXT,
+    target_percent REAL CHECK(target_percent IS NULL OR (target_percent >= 0 AND target_percent <= 100)),
+    target_level   TEXT,
+    target_track   TEXT NOT NULL DEFAULT 'konkur',
+    is_master      INTEGER NOT NULL DEFAULT 0,
+    note           TEXT NOT NULL DEFAULT '',
+    created_at     TEXT NOT NULL,
+    updated_at     TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_topic_deadline_unique
+    ON topic_deadline(topic_id, kind, target_track);
+CREATE INDEX IF NOT EXISTS idx_topic_deadline_date ON topic_deadline(target_date);
+
+CREATE TABLE IF NOT EXISTS study_session (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject_id     INTEGER REFERENCES subject(id) ON DELETE SET NULL,
+    topic_id       INTEGER REFERENCES topic(id) ON DELETE SET NULL,
+    activity_id    INTEGER REFERENCES activity(id) ON DELETE SET NULL,
+    kind           TEXT NOT NULL DEFAULT 'study',
+    mode           TEXT NOT NULL DEFAULT 'timer',
+    started_at     TEXT NOT NULL,
+    ended_at       TEXT,
+    paused_seconds INTEGER NOT NULL DEFAULT 0 CHECK(paused_seconds >= 0),
+    paused_at      TEXT,
+    minutes        INTEGER NOT NULL DEFAULT 0 CHECK(minutes >= 0),
+    note           TEXT NOT NULL DEFAULT '',
+    created_at     TEXT NOT NULL,
+    updated_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_study_session_started ON study_session(started_at);
+CREATE INDEX IF NOT EXISTS idx_study_session_topic ON study_session(topic_id, started_at);
+CREATE INDEX IF NOT EXISTS idx_study_session_kind ON study_session(kind, started_at);
+
+CREATE TABLE IF NOT EXISTS study_session_revision (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL REFERENCES study_session(id) ON DELETE CASCADE,
+    at         TEXT NOT NULL,
+    field_name TEXT NOT NULL,
+    old_value  TEXT NOT NULL DEFAULT '',
+    new_value  TEXT NOT NULL DEFAULT '',
+    reason     TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_session_revision_session
+    ON study_session_revision(session_id, at);
+
+CREATE TABLE IF NOT EXISTS learning_problem (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject_id      INTEGER REFERENCES subject(id) ON DELETE SET NULL,
+    topic_id        INTEGER REFERENCES topic(id) ON DELETE SET NULL,
+    kind            TEXT NOT NULL DEFAULT 'conceptual_gap',
+    title           TEXT NOT NULL,
+    description     TEXT NOT NULL DEFAULT '',
+    severity        INTEGER NOT NULL DEFAULT 3 CHECK(severity BETWEEN 1 AND 5),
+    status          TEXT NOT NULL DEFAULT 'open',
+    first_seen      TEXT,
+    last_seen       TEXT,
+    occurrences     INTEGER NOT NULL DEFAULT 0,
+    resolution_note TEXT NOT NULL DEFAULT '',
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_learning_problem_status ON learning_problem(status, severity);
+CREATE INDEX IF NOT EXISTS idx_learning_problem_topic ON learning_problem(topic_id);
+
+CREATE TABLE IF NOT EXISTS learning_problem_event (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    problem_id INTEGER NOT NULL REFERENCES learning_problem(id) ON DELETE CASCADE,
+    at         TEXT NOT NULL,
+    kind       TEXT NOT NULL DEFAULT 'progressed',
+    note       TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_problem_event_problem
+    ON learning_problem_event(problem_id, at);
+"""
+
 MIGRATIONS: list[tuple[int, str]] = [
     (1, MIGRATION_1),
     (2, MIGRATION_2),
     (3, MIGRATION_3),
     (4, MIGRATION_4),
     (5, MIGRATION_5),
+    (6, MIGRATION_6),
 ]

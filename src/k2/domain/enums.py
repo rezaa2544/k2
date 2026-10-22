@@ -206,3 +206,92 @@ class RoutineScope(StrEnum):
 
     DAILY = ("daily", "روزانه")
     ALTERNATE = ("alternate", "یک‌روزدرمیان")
+
+
+class DeadlineKind(StrEnum):
+    """مهلت‌های یک مبحث در بخش «مهلت‌های من» (بند ۱۲)."""
+
+    START = ("start", "مهلت شروع")
+    INITIAL_LEARNING = ("initial_learning", "مهلت یادگیری اولیه")
+    PRACTICE = ("practice", "مهلت تمرین/تست")
+    FINAL_CONSOLIDATION = ("final_consolidation", "مهلت تثبیت نهایی")
+
+
+class TrackKind(StrEnum):
+    """دو مسیر مستقل و همبستهٔ هر مبحث (بند ۱۳)."""
+
+    KONKUR = ("konkur", "مسیر کنکور")
+    FINAL = ("final", "مسیر نهایی/مدرک")
+
+
+class KonkurStage(StrEnum):
+    """پله‌های مسیر کنکور — ترتیب ثابت و هر پله نیازمند شاهد است."""
+
+    CONCEPTUAL = ("conceptual", "مطالعهٔ مفهومی")
+    TEACHING_TEST = ("teaching_test", "تست تدریس")
+    TIMED_TEST = ("timed_test", "تست زمان‌دار")
+    OPTION_ANALYSIS = ("option_analysis", "تحلیل گزینه‌ها")
+    ERROR_REVIEW = ("error_review", "مرور خطاها")
+    MIXED_EXAM = ("mixed_exam", "آزمون ترکیبی")
+
+
+class FinalStage(StrEnum):
+    """پله‌های مسیر نهایی/مدرک — مستقل از مسیر کنکور."""
+
+    TEXTBOOK_STUDY = ("textbook_study", "مطالعهٔ دقیق کتاب")
+    DEFINITIONS = ("definitions", "تعریف‌ها و روابط")
+    DETAIL_MAP = ("detail_map", "جزئیات و نقشهٔ محتوا")
+    DESCRIPTIVE_PRACTICE = ("descriptive_practice", "تمرین تشریحی")
+    SAMPLE_QUESTIONS = ("sample_questions", "سؤال‌های نمونهٔ معتبر")
+    COMPLETENESS_CHECK = ("completeness_check", "بررسی کامل‌بودن و نشانه‌گذاری")
+    MOCK_FINAL = ("mock_final", "آزمون جامع نهایی")
+
+
+class SessionKind(StrEnum):
+    """نوع جلسهٔ مطالعه در تایمر و ثبت دستی (بند ۱۵)."""
+
+    STUDY = ("study", "مطالعهٔ مستقل")
+    LIVE_CLASS = ("live_class", "کلاس حضوری/آنلاین")
+    RECORDED_CLASS = ("recorded_class", "کلاس ضبط‌شده")
+    TEST = ("test", "تست/آزمون")
+    ANALYSIS = ("analysis", "تحلیل")
+    REVIEW = ("review", "مرور")
+    CONSOLIDATION = ("consolidation", "تثبیت")
+    HOMEWORK = ("homework", "تکلیف")
+
+
+class ProblemKind(StrEnum):
+    """انواع مشکل یادگیری در بخش «مشکلات یادگیری» (بند ۱۷)."""
+
+    CONCEPTUAL_GAP = ("conceptual_gap", "شکاف مفهومی")
+    PREREQUISITE_GAP = ("prerequisite_gap", "پیش‌نیاز ندیده")
+    MEMORIZATION = ("memorization", "مشکل حفظ/یادآوری")
+    CALCULATION = ("calculation", "خطای محاسباتی")
+    SPEED = ("speed", "کمبود سرعت")
+    ACCURACY = ("accuracy", "بی‌دقتی")
+    RETENTION = ("retention", "فراموشی زودرس")
+    METHOD = ("method", "نمی‌دانم از کجا شروع کنم")
+    ATTENTION = ("attention", "تمرکز/حواس‌پرتی")
+    MOTIVATION = ("motivation", "انگیزه/کناره‌گیری")
+    TEST_ANXIETY = ("test_anxiety", "استرس آزمون")
+    EXAM_READING = ("exam_reading", "برداشت از سؤال")
+
+
+class ProblemStatus(StrEnum):
+    """وضعیت پیگیری یک مشکل یادگیری."""
+
+    OPEN = ("open", "باز")
+    IN_PROGRESS = ("in_progress", "در حال رفع")
+    RESOLVED = ("resolved", "رفع‌شده")
+    ACCEPTED = ("accepted", "پذیرفته‌شده (بدون اقدام)")
+
+
+class FeasibilityAction(StrEnum):
+    """پیشنهادهای امکان‌سنجی مهلت (بند ۱۲)."""
+
+    MORE_TIME = ("more_time", "مهلت را عقب بکش")
+    LESS_VOLUME = ("less_volume", "حجم را کم کن")
+    REPRIORITIZE = ("reprioritize", "اولویت‌ها را جابه‌جا کن")
+    MOVE_DEADLINE = ("move_deadline", "مهلت را جابه‌جا کن")
+    RAISE_CAPACITY = ("raise_capacity", "ظرفیت روزانه را بیشتر کن")
+
