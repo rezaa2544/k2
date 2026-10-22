@@ -81,6 +81,16 @@ def create_backup(
 
     stamp = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     target = target_dir / f"k2-backup-{stamp}{BACKUP_SUFFIX}"
+    # اگر در یک ثانیه دو پشتیبان گرفته شود، نام یکتا می‌سازیم تا پشتیبان
+    # قبلی بی‌صدا بازنویسی (و دادهٔ کاربر از دست) نشود.
+    if target.exists():
+        counter = 2
+        while True:
+            candidate = target_dir / f"k2-backup-{stamp}-{counter}{BACKUP_SUFFIX}"
+            if not candidate.exists():
+                target = candidate
+                break
+            counter += 1
 
     src_conn = connect(source)
     try:

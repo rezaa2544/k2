@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, is_dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -119,6 +120,23 @@ class DayContext:
     capacity: capacity.CapacityBreakdown
     plan: DayPlan
     backlog: backlog_mod.BacklogSummary
+
+
+def _jsonable(value: object) -> object:
+    """تبدیل مدل/انوم/تاریخ به ساختار قابل سریال‌سازی در JSON."""
+    if is_dataclass(value) and not isinstance(value, type):
+        return {k: _jsonable(v) for k, v in asdict(value).items()}
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, (_dt.date, _dt.datetime, _dt.time)):
+        return value.isoformat()
+    if isinstance(value, (frozenset, tuple, set)):
+        return [_jsonable(v) for v in value]
+    if isinstance(value, list):
+        return [_jsonable(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): _jsonable(v) for k, v in value.items()}
+    return value
 
 
 class AdvisorService:
@@ -1735,6 +1753,35 @@ class AdvisorService:
             deadline_risks=review.deadline_risks,
             open_problems=problems,
         )
+
+    def export_json(self, path: Path | str) -> Path:
+        """خروجی کامل داده‌ها به JSON — بدون شبکه و قابل بازگردانی (DATA-02).
+
+        همهٔ جدول‌های اصلی بیرون می‌آیند تا کاربر مالک داده‌هایش باشد؛
+        فایل پشتیبان SQLite جای این خروجی را نمی‌گیرد و برعکس.
+        """
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "app_version": _app_version(),
+            "exported_at": _dt.datetime.now().isoformat(timespec="seconds"),
+            "subjects": _jsonable(
+                self.repo.list_subjects(include_unselected=True)
+            ),
+            "topics": _jsonable(self.list_topics()),
+            "activities": _jsonable(self.list_activities()),
+            "attempts": _jsonable(self.list_attempts()),
+            "topic_deadlines": _jsonable(self.list_topic_deadlines()),
+            "study_sessions": _jsonable(self.list_study_sessions()),
+            "learning_problems": _jsonable(self.list_learning_problems()),
+            "fixed_events": _jsonable(self.repo.list_fixed_events()),
+            "routines": _jsonable(self.repo.list_routines()),
+            "review_items": _jsonable(self.list_review_items()),
+        }
+        target.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        return target
 
     def backup(self, backup_dir: Optional[Path | str] = None):
         self.conn.commit()
