@@ -93,7 +93,7 @@ jobs:
           if ($builtCommit -ne $currentMain) { throw "main advanced during build; refusing to publish a stale bundle" }
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add downloads/K2-windows-x64.zip README.md docs/RELEASE_AND_WINDOWS_PACKAGING.md preview/K2-preview.html
+          git add downloads/K2-windows-x64.zip downloads/K2-preview-html.zip README.md docs/RELEASE_AND_WINDOWS_PACKAGING.md preview/K2-preview.html
           git diff --cached --quiet
           if ($LASTEXITCODE -ne 0) {
             git commit -m "build: refresh Windows download bundle"

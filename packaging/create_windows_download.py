@@ -167,6 +167,43 @@ def update_release_metadata(
     return exe_hash, archive_hash
 
 
+def refresh_preview_download_bundle() -> tuple[Path, str]:
+    """بستهٔ ZIP پیش‌نمایش HTML را با نسخهٔ جاری همگام و هش README را تازه می‌کند.
+
+    چرا لازم است: ``update_release_metadata`` هش نسخهٔ سورس را داخل
+    ``preview/K2-preview.html`` مهر می‌زند. اگر ZIP دانلود بازسازی نشود،
+    ``downloads/K2-preview-html.zip`` و ``preview/K2-preview.html`` از هم
+    جدا می‌افتند؛ لینک دانلود README کهنه می‌شود و
+    ``test_preview_zip_bundle_is_current_and_reproducible`` شکست می‌خورد.
+    """
+    import importlib.util
+
+    script = ROOT / "preview" / "build_preview_zip.py"
+    spec = importlib.util.spec_from_file_location("k2_build_preview_zip", script)
+    assert spec and spec.loader, "build_preview_zip.py پیدا نشد"
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    html = (ROOT / "preview" / "K2-preview.html").read_bytes()
+    payload = module.build_zip(html)
+    zip_path = ROOT / "downloads" / "K2-preview-html.zip"
+    zip_path.parent.mkdir(parents=True, exist_ok=True)
+    zip_path.write_bytes(payload)
+    digest = hashlib.sha256(payload).hexdigest()
+
+    readme_path = ROOT / "README.md"
+    readme = readme_path.read_text(encoding="utf-8")
+    readme = _replace_once(
+        readme,
+        r"^SHA-256 فایل ZIP: `[0-9a-f]{64}`$",
+        f"SHA-256 فایل ZIP: `{digest}`",
+        path=readme_path,
+    )
+    readme_path.write_text(readme, encoding="utf-8", newline="\n")
+    return zip_path, digest
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True, help="پوشهٔ PyInstaller شامل K2.exe و _internal")
@@ -182,6 +219,11 @@ def main() -> int:
         exe_hash, archive_hash = update_release_metadata(
             exe_path, args.destination, source_revision=args.source_revision
         )
+        # پس از مهر کردن هش نسخه در پیش‌نمایش، بستهٔ ZIP دانلود را هم
+        # همگام می‌کنیم؛ وگرنه ZIP و HTML از هم جدا می‌افتند.
+        preview_zip, preview_sha = refresh_preview_download_bundle()
+        print(f"PREVIEW_ZIP_SIZE={preview_zip.stat().st_size}")
+        print(f"PREVIEW_ZIP_SHA256={preview_sha}")
     print(f"EXE_SIZE={exe_path.stat().st_size}")
     print(f"EXE_SHA256={exe_hash}")
     print(f"ZIP_SIZE={args.destination.stat().st_size}")

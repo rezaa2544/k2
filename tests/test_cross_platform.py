@@ -171,3 +171,36 @@ def test_product_code_has_no_posix_only_absolute_paths() -> None:
     assert not offenders, (
         "مسیر مطلق یونیکسی در کد محصول: " + "; ".join(offenders)
     )
+
+
+# ---------------------------------------------------------------------------
+# ۴) اسکریپت‌های ساخت artifact باید خروجی قطعی و مستقل از پلتفرم بدهند
+# ---------------------------------------------------------------------------
+
+#: اسکریپت‌هایی که خروجی‌شان در مخزن کامیت و بایت‌به‌بایت مقایسه می‌شود.
+_ARTIFACT_SCRIPTS = ("preview", "packaging")
+
+
+def test_artifact_scripts_pin_newline_on_every_write() -> None:
+    """خروجی artifact‌ها باید روی همهٔ پلتفرم یکسان باشد.
+
+    ``Path.write_text`` با ``newline=None`` روی ویندوز CRLF می‌نویسد و روی
+    لینوکس LF. چون این فایل‌ها در مخزن کامیت شده و بازتولیدپذیری‌شان تست
+    می‌شود، پایان‌خط باید صریح تثبیت شود.
+    """
+    offenders: list[str] = []
+    for folder in _ARTIFACT_SCRIPTS:
+        for path in sorted((ROOT / folder).rglob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call) or _has_star_kwargs(node):
+                    continue
+                func = node.func
+                if not (isinstance(func, ast.Attribute) and func.attr == "write_text"):
+                    continue
+                newline = _keyword_value(node, "newline")
+                if not (isinstance(newline, ast.Constant) and newline.value == "\n"):
+                    offenders.append(f"{path.relative_to(ROOT)}:{node.lineno}")
+    assert not offenders, (
+        'نوشتن artifact باید newline="\\n" صریح داشته باشد: ' + "; ".join(offenders)
+    )
