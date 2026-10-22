@@ -34,19 +34,28 @@ def test_preview_is_reproducible_single_file_and_offline():
 def test_preview_exposes_core_pages_and_persistent_data_controls():
     html = PREVIEW.read_text(encoding="utf-8")
     for label in (
-        "داشبورد", "برنامهٔ امروز", "فعالیت‌ها", "آزمون و تحلیل", "مرور تطبیقی",
-        "تثبیت حافظه", "گزارش‌ها", "تنظیمات", "مباحث و تسلط", "انتخاب همهٔ درس‌ها",
-        "انتخاب همهٔ کتاب‌ها", "خروجی HTML داده‌دار", "پشتیبان JSON", "بازیابی فایل",
+        "داشبورد امروز", "برنامه هفتگی", "بانک دروس", "عقب‌افتادگی‌ها",
+        "کلاس‌های من", "مشکلات یادگیری", "تست و تحلیل", "مرورهای من",
+        "آزمون‌های جامع", "مهلت‌های من", "ساعت مطالعه", "گزارش مشاور",
+        "تنظیمات", "انتخاب همهٔ درس‌ها", "انتخاب همهٔ کتاب‌ها",
+        "خروجی HTML داده‌دار", "پشتیبان JSON", "بازیابی فایل",
         "ساخت مسیر پیشنهادی", "کارهای تثبیت فعال",
+        # زیربخش‌هایی که در صفحه‌های سیزده‌گانه حفظ شده‌اند
+        "مباحث و تسلط", "تثبیت حافظه", "فعالیت‌ها و صف کارها",
     ):
-        assert label in html
+        assert label in html, label
     for implementation_marker in (
         "localStorage", "showSaveFilePicker", "backupJSON", "restoreFile",
         "wizard-finish", "subjectWeightsForm", "detectConflicts", "learningEvidence",
         "masteryMinSpacingDays", "addTopicEvidenceForm", "generateTopicPathway",
         "consolidationPage", "ladderState",
+        # نشانه‌های پیاده‌سازی قابلیت‌های تازه
+        "timer-start", "timer-pause", "timer-stop", "addDeadlineForm",
+        "addSessionForm", "addProblemForm", "nightlyReviewDialog", "backCalculate",
+        "KONKUR_STAGES", "FINAL_STAGES", "sessionTotals", "weeklyPage",
     ):
-        assert implementation_marker in html
+        assert implementation_marker in html, implementation_marker
+    assert html.count('class="nav-item') == 13
     assert "checked>" not in html
 
 
@@ -102,4 +111,12 @@ def test_preview_javascript_parses_when_node_is_available(tmp_path: Path):
         "\n".join((ROOT / "preview" / name).read_text(encoding="utf-8") for name in ("core.js", "forms.js", "app.js")),
         encoding="utf-8",
     )
-    subprocess.run([node, "--check", str(combined)], cwd=ROOT, check=True, capture_output=True, text=True)
+    subprocess.run(
+        [node, "--check", str(combined)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )

@@ -63,6 +63,39 @@ class PriorityScore:
     total: float = 0.0
     components: tuple[tuple[str, float], ...] = ()
 
+    def component(self, name: str) -> float:
+        for label, value in self.components:
+            if label == name:
+                return value
+        return 0.0
+
+
+@dataclass
+class TopicFactors:
+    """فاکتورهای مبحثیِ اولویت که از فعالیت به‌تنهایی خوانده نمی‌شوند (بند ۱۴).
+
+    همهٔ مقادیر اختیاری‌اند تا با دادهٔ ناقص هم اولویت‌دهی کار کند؛ فاکتورِ
+    ناشناخته صفر شمرده می‌شود و در رابط کاربری به‌صورت «نامشخص» نشان داده
+    می‌شود، نه اینکه برنامه خطا بدهد.
+    """
+
+    #: این مبحث پیش‌نیاز چند مبحث دیگر است (۰..۱).
+    prerequisite_share: float = 0.0
+    #: سهم لازم در سؤال‌های تشریحی/نهایی (۰..۱).
+    final_exam_share: float = 0.0
+    #: سرعت فراموشی (۰..۱) — از مدل حافظه.
+    forgetting_rate: float = 0.0
+    #: فاصلهٔ روز تا مهلت اختصاصی خود مبحث (None = مهلتی ثبت نشده).
+    topic_deadline_days: Optional[float] = None
+    #: کار باقی‌ماندهٔ مبحث (دقیقه).
+    remaining_minutes: float = 0.0
+    #: ظرفیت باقی‌مانده تا آن مهلت (دقیقه).
+    available_minutes: float = 0.0
+    #: وزن اهمیت مبحث در آزمون هدف (برای محافظت از حذف).
+    importance: float = 1.0
+    #: ضعف ثبت‌شده در آزمون (۰..۱).
+    exam_weakness: float = 0.0
+
 
 # ---------------------------------------------------------------------------
 # کمک‌کننده‌ها
@@ -106,16 +139,38 @@ def _days_until(deadline: Optional[_dt.datetime], today: _dt.date) -> Optional[f
     return delta.days
 
 
+def progress_probability(
+    remaining_minutes: float, available_minutes: float
+) -> float:
+    """احتمال پیشرفت معنادار در زمان باقی‌مانده (بند ۱۴، فاکتور نهم).
+
+    نسبت کار باقی‌مانده به ظرفیت باقی‌مانده؛ اگر کار بیشتر از ظرفیت باشد
+    احتمال پایین می‌آید و آن مبحث در برنامهٔ روز اولویت کمتری می‌گیرد —
+    اما **حذف نمی‌شود** (به ``protect_reason`` نگاه کن).
+    """
+    if remaining_minutes <= 0:
+        return 1.0
+    if available_minutes <= 0:
+        return 0.0
+    ratio = available_minutes / remaining_minutes
+    return max(0.0, min(1.0, ratio))
+
+
 def compute_priority(
     activity: Activity,
     *,
     today: _dt.date,
     settings: Settings,
     debt_age_days: float = 0.0,
+    topic_factors: Optional[TopicFactors] = None,
 ) -> PriorityScore:
     """امتیاز اولویت یک فعالیت (سند تحقیق ۲، بخش ۷).
 
     همهٔ وزن‌ها فرضیهٔ محصول [H] و از تنظیمات خوانده می‌شوند.
+
+    یازده فاکتور: مهلت فعالیت، فعالیت‌های مسدود، ضعف مبحث × اهمیت، مرور
+    سررسید، سن بدهی، هزینهٔ زمان، پیش‌نیاز بودن، سهم آزمون نهایی، سرعت
+    فراموشی، نزدیکی مهلت اختصاصی مبحث و احتمال پیشرفت در زمان موجود.
     """
     w = settings.scheduler
     components: list[tuple[str, float]] = []
@@ -150,8 +205,121 @@ def compute_priority(
     cost = float(activity.effective_minutes) / 60.0
     components.append(("هزینهٔ زمان", -cost * w.w_time_cost))
 
+    factors = topic_factors or TopicFactors()
+
+    # 7) پیش‌نیاز بودن برای مباحث دیگر
+    components.append(
+        ("پیش‌نیاز بودن", float(factors.prerequisite_share) * w.w_prerequisite)
+    )
+
+    # 8) سهم لازم در سؤال‌های نهایی/تشریحی
+    components.append(
+        ("سهم آزمون نهایی", float(factors.final_exam_share) * w.w_final_exam_share)
+    )
+
+    # 9) سرعت فراموشی — مبحث‌های زودفراموش‌شونده جلوتر می‌آیند
+    components.append(
+        ("سرعت فراموشی", float(factors.forgetting_rate) * w.w_forgetting_rate)
+    )
+
+    # 10) نزدیکی مهلت اختصاصی خود مبحث
+    if factors.topic_deadline_days is None:
+        components.append(("مهلت مبحث", 0.0))
+    else:
+        closeness = 1.0 / max(0.5, float(factors.topic_deadline_days))
+        components.append(("مهلت مبحث", closeness * w.w_topic_deadline))
+
+    # 11) احتمال پیشرفت معنادار در زمان باقی‌مانده
+    probability = progress_probability(
+        factors.remaining_minutes, factors.available_minutes
+    )
+    components.append(
+        ("احتمال پیشرفت", probability * w.w_progress_probability)
+    )
+
     total = sum(value for _, value in components)
     return PriorityScore(total=total, components=tuple(components))
+
+
+# ---------------------------------------------------------------------------
+# محافظ حذف‌نشدن (بند ۱۴)
+# ---------------------------------------------------------------------------
+
+
+def protect_reason(
+    activity: Activity,
+    topic_factors: Optional[TopicFactors] = None,
+    *,
+    settings: Optional[Settings] = None,
+) -> str:
+    """چرا این فعالیت **نباید** فقط به‌خاطر سخت‌بودن کنار گذاشته شود.
+
+    خروجی رشتهٔ خالی یعنی استثنایی در کار ندارد؛ رشتهٔ پرشده یعنی این
+    فعالیت در برنامهٔ روز «محافظ‌شده» است و اگر جا نشود باید دلیلش در
+    بازبینی شبانه ثبت شود، نه اینکه بی‌صدا حذف شود.
+    """
+    factors = topic_factors or TopicFactors()
+    w = (settings or Settings()).scheduler
+    reasons: list[str] = []
+    if factors.prerequisite_share > 0:
+        reasons.append("پیش‌نیاز مباحث دیگر است")
+    if factors.final_exam_share > 0:
+        reasons.append("سهم مشخصی در سؤال‌های نهایی دارد")
+    if float(factors.importance) >= 1.0 and float(factors.exam_weakness) > 0.4:
+        reasons.append("در آزمون ضعف ثبت‌شده دارد ولی مهم است")
+    if activity.deadline_type == DeadlineType.HARD:
+        reasons.append("مهلت سخت دارد")
+    if not reasons:
+        return ""
+    return "؛ ".join(reasons) + (
+        f" (کف محافظت: {w.hard_topic_floor_ratio:.0%} ظرفیت روز)"
+    )
+
+
+def protected_minutes(
+    activities: Sequence[Activity],
+    topic_factors_by_id: dict[int, TopicFactors],
+    capacity_minutes: int,
+    *,
+    settings: Optional[Settings] = None,
+) -> int:
+    """حداقل دقیقه‌ای که باید به مباحث سخت/مهم اختصاص یابد.
+
+    این تابع برنامهٔ روز را وادار نمی‌کند ظرفیت را پرکند؛ فقط **کف** را
+    مشخص می‌کند تا اگر تصمیمی به حذف گرفته شد، حداقل این مقدار به این
+    دسته اختصاص یابد.
+    """
+    ratio = (settings or Settings()).scheduler.hard_topic_floor_ratio
+    if capacity_minutes <= 0 or not activities:
+        return 0
+    guarded = [
+        a
+        for a in activities
+        if protect_reason(a, topic_factors_by_id.get(a.topic_id or -1), settings=settings)
+    ]
+    if not guarded:
+        return 0
+    floor = int(capacity_minutes * ratio)
+    needed = sum(a.effective_minutes for a in guarded)
+    return max(0, min(needed, floor))
+
+
+def drop_order(
+    activities: Sequence[Activity],
+    scores: dict[int, PriorityScore],
+) -> list[Activity]:
+    """ترتیب اولویت **کنارگذاشتن** کارها وقتی ظرفیت کم است.
+
+    قاعده: کار کم‌اهمیت و کم‌فوریت اول کنار می‌رود؛ سختی یا ضعف مبحث هرگز
+    دلیل کنارگذاشتن نیست.
+    """
+    return sorted(
+        activities,
+        key=lambda a: (
+            scores.get(a.id or -1, PriorityScore()).total,
+            a.effective_minutes,
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------

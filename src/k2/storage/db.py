@@ -106,6 +106,11 @@ def table_counts(conn: sqlite3.Connection) -> dict[str, int]:
         "exam_attempt",
         "exam_question",
         "error_record",
+        "topic_deadline",
+        "study_session",
+        "study_session_revision",
+        "learning_problem",
+        "learning_problem_event",
         "onboarding_step",
     ]
     counts: dict[str, int] = {}

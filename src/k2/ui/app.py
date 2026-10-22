@@ -25,29 +25,40 @@ from PySide6.QtWidgets import (
 from ..jdate import format_jalali_long
 from ..service import AdvisorService
 from .views import (
-    ActivitiesPage,
+    BacklogsPage,
+    ClassesPage,
+    ComprehensiveExamsPage,
     ConsolidationPage,
+    CourseBankPage,
     DashboardPage,
-    ExamsPage,
+    DeadlinesPage,
+    LearningProblemsPage,
     OnboardingWizard,
     ReportsPage,
     ReviewPage,
     SettingsPage,
+    StudyTimerPage,
+    TestsPage,
     TodayPlanPage,
-    TopicsPage,
+    WeeklyPlanPage,
 )
 
 APP_TITLE = "مشاور هوشمند کنکور"
+#: سیزده صفحهٔ اصلی برنامه (بند ۱۷).
 NAV_ITEMS = [
-    ("⌂   داشبورد", "داشبورد", "نمای کلی روز و ظرفیت"),
-    ("◷   برنامهٔ امروز", "برنامهٔ امروز", "کارهای امروز و زمان‌بندی"),
-    ("▦   فعالیت‌ها", "فعالیت‌ها", "ثبت و پیگیری مطالعه"),
-    ("◇   مباحث و تسلط", "مباحث و تسلط", "سنجش تأخیری، روش یادگیری و مسیر مبحث"),
-    ("◎   آزمون و تحلیل", "آزمون و تحلیل", "نتیجه و تحلیل سؤال‌ها"),
-    ("↻   مرور تطبیقی", "مرور تطبیقی", "مرور بر اساس یادگیری"),
-    ("▨   تثبیت حافظه", "تثبیت حافظه", "نردبان تثبیت، پیش‌بینی ماندگاری و برنامهٔ سه‌مسیره"),
-    ("▤   گزارش‌ها", "گزارش‌ها", "گزارش روزانه و هفتگی"),
-    ("⚙   تنظیمات", "تنظیمات", "ترجیحات و پشتیبان‌گیری"),
+    ("⌂   داشبورد امروز", "داشبورد امروز", "نمای کلی روز، ظرفیت و قدم بعدی"),
+    ("▤   برنامه هفتگی", "برنامه هفتگی", "بازهٔ هفت روز، بازبینی شبانه و بازسازی"),
+    ("▦   بانک دروس", "بانک دروس", "درس‌ها، مباحث و مسیر دوگانهٔ هر مبحث"),
+    ("◱   عقب‌افتادگی‌ها", "عقب‌افتادگی‌ها", "بدهی مطالعه، تریاژ و روز حداقلی"),
+    ("◷   کلاس‌های من", "کلاس‌های من", "کلاس‌ها و روال‌های ثابت؛ ظرفیت واقعی"),
+    ("✶   مشکلات یادگیری", "مشکلات یادگیری", "ثبت، پیگیری و رفع مشکل"),
+    ("◈   تست و تحلیل", "تست و تحلیل", "تست‌ها، علت خطا و اقدام اصلاحی"),
+    ("↻   مرورهای من", "مرورهای من", "مرور تطبیقی و نردبان تثبیت حافظه"),
+    ("◉   آزمون‌های جامع", "آزمون‌های جامع", "سنجش سراسری و روند درصد"),
+    ("⏱   مهلت‌های من", "مهلت‌های من", "مهلت هر مبحث، بازمحاسبه و امکان‌سنجی"),
+    ("◔   ساعت مطالعه", "ساعت مطالعه", "تایمر واقعی و جمع خالص کلاس/مطالعه"),
+    ("▣   گزارش مشاور", "گزارش مشاور", "گزارش روزانه و هفتگی با دلیل تغییرها"),
+    ("⚙   تنظیمات", "تنظیمات", "ترجیحات، ضریب‌ها و پشتیبان‌گیری"),
 ]
 
 
@@ -178,18 +189,27 @@ class MainWindow(QMainWindow):
         self.stack.setObjectName("pageStack")
         self.dashboard = DashboardPage(self.service)
         self.today = TodayPlanPage(self.service)
-        self.activities = ActivitiesPage(self.service)
-        self.topics = TopicsPage(self.service)
-        self.exams = ExamsPage(self.service)
+        self.weekly = WeeklyPlanPage(self.service)
+        self.courses = CourseBankPage(self.service)
+        self.backlogs = BacklogsPage(self.service)
+        self.classes = ClassesPage(self.service)
+        self.problems = LearningProblemsPage(self.service)
+        self.tests = TestsPage(self.service)
         self.review = ReviewPage(self.service)
-        self.consolidation = ConsolidationPage(self.service)
+        self.comprehensive = ComprehensiveExamsPage(self.service)
+        self.deadlines = DeadlinesPage(self.service)
+        self.timer = StudyTimerPage(self.service)
         self.reports = ReportsPage(self.service)
         self.settings = SettingsPage(self.service)
         for page in (
-            self.dashboard, self.today, self.activities, self.topics, self.exams,
-            self.review, self.consolidation, self.reports, self.settings,
+            self.dashboard, self.weekly, self.courses, self.backlogs, self.classes,
+            self.problems, self.tests, self.review, self.comprehensive,
+            self.deadlines, self.timer, self.reports, self.settings,
         ):
             self.stack.addWidget(page)
+        # صفحهٔ «برنامهٔ امروز» زیرمجموعهٔ داشبورد است و از همان‌جا باز می‌شود.
+        self.stack.addWidget(self.today)
+        self._extra_pages = {"today": self.stack.indexOf(self.today)}
         content.addWidget(self.stack, 1)
         root.addWidget(host, 1)
         self.nav.setCurrentRow(0)
@@ -234,12 +254,27 @@ class MainWindow(QMainWindow):
     def _on_nav(self, row: int) -> None:
         if row < 0 or not hasattr(self, "stack"):
             return
+        if row >= len(NAV_ITEMS):
+            return
         self.stack.setCurrentIndex(row)
         _, title, hint = NAV_ITEMS[row]
         self.page_title.setText(title)
         self.page_hint.setText(hint)
         self.date_label.setText(format_jalali_long(_dt.date.today()))
         page = self.stack.currentWidget()
+        if hasattr(page, "refresh"):
+            page.refresh()
+
+    def open_page(self, key: str) -> None:
+        """بازکردن یک صفحهٔ فرعی (مثلاً «برنامهٔ امروز» از داشبورد)."""
+        index = getattr(self, "_extra_pages", {}).get(key)
+        if index is None:
+            return
+        self.stack.setCurrentIndex(index)
+        self.nav.setCurrentRow(-1)
+        page = self.stack.currentWidget()
+        self.page_title.setText("برنامهٔ امروز")
+        self.page_hint.setText("کارهای امروز و زمان‌بندی")
         if hasattr(page, "refresh"):
             page.refresh()
 

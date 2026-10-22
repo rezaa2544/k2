@@ -44,9 +44,21 @@ def test_persian_font_is_loaded(qapp):
 
 
 def test_main_window_has_all_navigation_pages(window: MainWindow):
-    assert window.nav.count() == 9
-    assert window.stack.count() == 9
+    """دقیقاً سیزده صفحهٔ خواسته‌شده در ناوبری هستند (بند ۱۷)."""
+    from k2.ui.app import NAV_ITEMS
+
+    assert len(NAV_ITEMS) == 13
+    assert window.nav.count() == 13
+    assert window.stack.count() == 14  # ۱۳ صفحهٔ ناوبری + «برنامهٔ امروز» فرعی
     assert window.windowTitle() == APP_TITLE
+    titles = [title for _, title, _ in NAV_ITEMS]
+    for expected in (
+        "داشبورد امروز", "برنامه هفتگی", "بانک دروس", "عقب‌افتادگی‌ها",
+        "کلاس‌های من", "مشکلات یادگیری", "تست و تحلیل", "مرورهای من",
+        "آزمون‌های جامع", "مهلت‌های من", "ساعت مطالعه", "گزارش مشاور",
+        "تنظیمات",
+    ):
+        assert expected in titles
 
 
 def test_window_has_reasonable_default_size(window: MainWindow):
@@ -59,8 +71,10 @@ def test_window_has_reasonable_default_size(window: MainWindow):
 def test_navigation_and_dashboard_have_clear_visual_hierarchy(window: MainWindow):
     assert window.nav.objectName() == "navigation"
     assert window.nav.item(0).toolTip()
-    assert window.nav.item(0).data(Qt.AccessibleTextRole) == "داشبورد؛ نمای کلی روز و ظرفیت"
-    assert window.page_title.text() == "داشبورد"
+    assert window.nav.item(0).data(Qt.AccessibleTextRole) == (
+        "داشبورد امروز؛ نمای کلی روز، ظرفیت و قدم بعدی"
+    )
+    assert window.page_title.text() == "داشبورد امروز"
     assert window.dashboard.hero.objectName() == "heroCard"
     assert window.dashboard.next_title.text()
     assert window.dashboard.btn_plan.objectName() == "primary"
@@ -74,9 +88,16 @@ def test_navigation_and_dashboard_have_clear_visual_hierarchy(window: MainWindow
 
 
 def test_navigation_switches_pages(window: MainWindow):
-    for index in range(window.stack.count()):
+    for index in range(window.nav.count()):
         window.nav.setCurrentRow(index)
         assert window.stack.currentIndex() == index
+        assert window.page_title.text()
+
+
+def test_subpage_today_is_reachable_from_dashboard(window: MainWindow):
+    window.open_page("today")
+    assert window.page_title.text() == "برنامهٔ امروز"
+    assert window.stack.currentIndex() == window._extra_pages["today"]
 
 
 def test_persian_text_input_in_line_edit(qapp):
@@ -174,7 +195,7 @@ def test_consolidation_page_renders_three_streams_and_ladder(qapp, tmp_path: Pat
         )
     window = MainWindow(service)
     window.refresh_all()
-    page = window.consolidation
+    page = window.review.consolidation
     page.refresh()
     assert page.table.rowCount() >= 1
     assert page.streams_summary.text().startswith("ظرفیت")

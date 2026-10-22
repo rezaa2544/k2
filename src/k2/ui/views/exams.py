@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -37,6 +38,7 @@ class RecordAttemptDialog(QDialog):
         self.service = service
         self.setWindowTitle("ثبت نوبت آزمون")
         self.setLayoutDirection(Qt.RightToLeft)
+        self.attachment_path: str | None = None
 
         form = QFormLayout(self)
         self.name_edit = QLineEdit()
@@ -80,12 +82,37 @@ class RecordAttemptDialog(QDialog):
             self.error_combo.addItem(f"{code.value} — {code.label}", code.value)
         form.addRow("کد خطا (اختیاری):", self.error_combo)
 
+        self.attachment_label = QLabel("پیوستی انتخاب نشده")
+        self.attachment_label.setObjectName("fieldHint")
+        btn_attach = QPushButton("انتخاب تصویر/فایل نتیجهٔ آزمون")
+        btn_attach.setToolTip(
+            "تصویر کارت پاسخ یا فایل نتیجه را به پوشهٔ محلی برنامه کپی می‌کند. "
+            "برنامه تصویر را نمی‌خوانَد؛ اعداد را خودت وارد می‌کنی و پیوست فقط "
+            "منبع اعداد را نگه می‌دارد."
+        )
+        btn_attach.clicked.connect(self._pick_attachment)
+        form.addRow("پیوست (اختیاری):", self.attachment_label)
+        form.addRow("", btn_attach)
+
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText("ثبت")
         buttons.button(QDialogButtonBox.Cancel).setText("انصراف")
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
+
+    def _pick_attachment(self) -> None:
+        from PySide6.QtWidgets import QFileDialog
+
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "انتخاب تصویر یا فایل نتیجهٔ آزمون",
+            "",
+            "تصویر یا سند (*.png *.jpg *.jpeg *.webp *.pdf *.txt *.csv)",
+        )
+        if path:
+            self.attachment_label.setText(Path(path).name)
+            self.attachment_path = path
 
     def _accept(self) -> None:
         from ...domain.models import ExamQuestion
@@ -120,7 +147,7 @@ class RecordAttemptDialog(QDialog):
                 )
             )
 
-        self.service.record_attempt(
+        self.attempt_id = self.service.record_attempt(
             name=name,
             total=total,
             correct=correct,

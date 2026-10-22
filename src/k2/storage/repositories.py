@@ -16,16 +16,23 @@ from ..domain.enums import (
     ActivityType,
     ContentType,
     DateStatus,
+    DeadlineKind,
     DeadlineType,
     EnergyNeed,
     ErrorCode,
     ExamKind,
     FixedEventKind,
+    KonkurStage,
+    FinalStage,
     MasteryLevel,
+    ProblemKind,
+    ProblemStatus,
     ReviewState,
     RoutineKind,
     RoutineScope,
     ScopeStatus,
+    SessionKind,
+    TrackKind,
 )
 from ..domain.models import (
     Activity,
@@ -36,12 +43,17 @@ from ..domain.models import (
     ExamProfile,
     ExamQuestion,
     FixedEvent,
+    LearningProblem,
+    LearningProblemEvent,
     LearningEvidence,
     ReviewItem,
     ReviewLog,
     Routine,
+    StudySession,
+    StudySessionRevision,
     Subject,
     Topic,
+    TopicDeadline,
     Textbook,
 )
 from ..domain.state_machine import validate_transition
@@ -79,6 +91,14 @@ def _parse_datetime(value: Optional[str]) -> Optional[_dt.datetime]:
 
 def _now() -> _dt.datetime:
     return _dt.datetime.now().replace(microsecond=0)
+
+
+def _clamp01(value: Optional[float]) -> float:
+    """سهم‌ها را در بازهٔ ۰..۱ نگه می‌دارد تا دادهٔ خراب اولویت را نشکند."""
+    try:
+        return max(0.0, min(1.0, float(value or 0.0)))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -325,7 +345,8 @@ class Repository:
     def create_topic(self, topic: Topic) -> int:
         cursor = self.conn.execute(
             "INSERT INTO topic (subject_id, name, content_type, scope_status, mastery, "
-            "self_assessed, notes) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "self_assessed, notes, konkur_stage, final_stage, prerequisite_share, "
+            "final_exam_share, estimated_minutes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 topic.subject_id,
                 topic.name,
@@ -334,10 +355,42 @@ class Repository:
                 topic.mastery.name,
                 topic.self_assessed,
                 topic.notes,
+                topic.konkur_stage,
+                topic.final_stage,
+                _clamp01(topic.prerequisite_share),
+                _clamp01(topic.final_exam_share),
+                topic.estimated_minutes,
             ),
         )
         topic.id = cursor.lastrowid
         return topic.id
+
+    def update_topic(self, topic: Topic) -> None:
+        """همهٔ فیلدهای قابل ویرایش مبحث را ذخیره می‌کند."""
+        if topic.id is None:
+            raise ValueError("برای ویرایش، مبحث باید شناسهٔ ذخیره‌شده داشته باشد.")
+        self.conn.execute(
+            "UPDATE topic SET name = ?, content_type = ?, scope_status = ?, mastery = ?, "
+            "self_assessed = ?, notes = ?, konkur_stage = ?, final_stage = ?, "
+            "konkur_evidence_id = ?, final_evidence_id = ?, prerequisite_share = ?, "
+            "final_exam_share = ?, estimated_minutes = ? WHERE id = ?",
+            (
+                topic.name,
+                topic.content_type.value,
+                topic.scope_status.value,
+                topic.mastery.name,
+                topic.self_assessed,
+                topic.notes,
+                topic.konkur_stage,
+                topic.final_stage,
+                topic.konkur_evidence_id,
+                topic.final_evidence_id,
+                _clamp01(topic.prerequisite_share),
+                _clamp01(topic.final_exam_share),
+                topic.estimated_minutes,
+                topic.id,
+            ),
+        )
 
     def list_topics(self, subject_id: Optional[int] = None) -> list[Topic]:
         if subject_id is None:
@@ -358,6 +411,13 @@ class Repository:
                 mastery=MasteryLevel[row["mastery"]],
                 self_assessed=row["self_assessed"],
                 notes=row["notes"],
+                konkur_stage=row["konkur_stage"] or KonkurStage.CONCEPTUAL.value,
+                final_stage=row["final_stage"] or FinalStage.TEXTBOOK_STUDY.value,
+                konkur_evidence_id=row["konkur_evidence_id"],
+                final_evidence_id=row["final_evidence_id"],
+                prerequisite_share=float(row["prerequisite_share"] or 0.0),
+                final_exam_share=float(row["final_exam_share"] or 0.0),
+                estimated_minutes=row["estimated_minutes"],
             )
             for row in rows
         ]
@@ -924,8 +984,9 @@ class Repository:
     def create_attempt(self, attempt: ExamAttempt) -> int:
         cursor = self.conn.execute(
             "INSERT INTO exam_attempt (exam_profile_id, name, kind, taken_at, subject_id, "
-            "total, correct, wrong, blank, duration_minutes, raw_score, percentage, note) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "total, correct, wrong, blank, duration_minutes, raw_score, percentage, note, "
+            "attachment_path, attachment_name, attachment_sha256, attachment_bytes, "
+            "attachment_note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 attempt.exam_profile_id,
                 attempt.name,
@@ -940,6 +1001,11 @@ class Repository:
                 attempt.raw_score,
                 attempt.percentage,
                 attempt.note,
+                attempt.attachment_path,
+                attempt.attachment_name,
+                attempt.attachment_sha256,
+                attempt.attachment_bytes,
+                attempt.attachment_note,
             ),
         )
         attempt.id = cursor.lastrowid
@@ -965,9 +1031,34 @@ class Repository:
                 raw_score=row["raw_score"],
                 percentage=row["percentage"],
                 note=row["note"],
+                attachment_path=row["attachment_path"],
+                attachment_name=row["attachment_name"] or "",
+                attachment_sha256=row["attachment_sha256"],
+                attachment_bytes=row["attachment_bytes"] or 0,
+                attachment_note=row["attachment_note"] or "",
             )
             for row in rows
         ]
+
+    def update_attempt(self, attempt: ExamAttempt) -> None:
+        """به‌روزرسانی یک نوبت آزمون (برای پیوست نتیجهٔ آزمون)."""
+        if attempt.id is None:
+            raise ValueError("برای به‌روزرسانی، شناسهٔ نوبت آزمون لازم است.")
+        self.conn.execute(
+            "UPDATE exam_attempt SET attachment_path=?, attachment_name=?, "
+            "attachment_sha256=?, attachment_bytes=?, attachment_note=?, note=? "
+            "WHERE id=?",
+            (
+                attempt.attachment_path,
+                attempt.attachment_name,
+                attempt.attachment_sha256,
+                attempt.attachment_bytes,
+                attempt.attachment_note,
+                attempt.note,
+                attempt.id,
+            ),
+        )
+        self.conn.commit()
 
     def create_question(self, question: ExamQuestion) -> int:
         cursor = self.conn.execute(
@@ -1083,6 +1174,474 @@ class Repository:
             "SELECT COUNT(*) AS c FROM onboarding_step WHERE completed = 1"
         ).fetchone()
         return bool(row and row["c"] > 0)
+
+
+    # ---- مهلت‌های مبحث (بند ۱۲) ----
+
+    def create_topic_deadline(self, deadline: TopicDeadline) -> int:
+        if deadline.topic_id is None:
+            raise ValueError("مهلت باید به یک مبحث وصل باشد.")
+        if deadline.target_date is None:
+            raise ValueError("تاریخ مهلت لازم است.")
+        if deadline.target_percent is not None and not 0 <= float(deadline.target_percent) <= 100:
+            raise ValueError("درصد هدف باید بین صفر و صد باشد.")
+        now = _now()
+        cursor = self.conn.execute(
+            "INSERT INTO topic_deadline (topic_id, subject_id, kind, target_date, "
+            "target_percent, target_level, target_track, is_master, note, created_at, "
+            "updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                deadline.topic_id,
+                deadline.subject_id,
+                deadline.kind.value,
+                _date_str(deadline.target_date),
+                deadline.target_percent,
+                deadline.target_level,
+                deadline.target_track.value,
+                1 if deadline.is_master else 0,
+                deadline.note,
+                _datetime_str(now),
+                _datetime_str(now),
+            ),
+        )
+        deadline.id = cursor.lastrowid
+        deadline.created_at = now
+        deadline.updated_at = now
+        return deadline.id
+
+    def update_topic_deadline(self, deadline: TopicDeadline) -> None:
+        if deadline.id is None:
+            raise ValueError("برای ویرایش مهلت، شناسه لازم است.")
+        if deadline.target_percent is not None and not 0 <= float(deadline.target_percent) <= 100:
+            raise ValueError("درصد هدف باید بین صفر و صد باشد.")
+        now = _now()
+        self.conn.execute(
+            "UPDATE topic_deadline SET target_date = ?, target_percent = ?, "
+            "target_level = ?, target_track = ?, is_master = ?, note = ?, "
+            "updated_at = ? WHERE id = ?",
+            (
+                _date_str(deadline.target_date),
+                deadline.target_percent,
+                deadline.target_level,
+                deadline.target_track.value,
+                1 if deadline.is_master else 0,
+                deadline.note,
+                _datetime_str(now),
+                deadline.id,
+            ),
+        )
+        deadline.updated_at = now
+
+    def delete_topic_deadline(self, deadline_id: int) -> None:
+        self.conn.execute("DELETE FROM topic_deadline WHERE id = ?", (deadline_id,))
+
+    def set_master_deadline(self, topic_id: int, deadline_id: int) -> None:
+        """یک مهلت را به‌عنوان مهلت مادرِ بازمحاسبه انتخاب می‌کند."""
+        self.conn.execute(
+            "UPDATE topic_deadline SET is_master = 0 WHERE topic_id = ?", (topic_id,)
+        )
+        self.conn.execute(
+            "UPDATE topic_deadline SET is_master = 1 WHERE id = ? AND topic_id = ?",
+            (deadline_id, topic_id),
+        )
+
+    def list_topic_deadlines(
+        self, topic_id: Optional[int] = None
+    ) -> list[TopicDeadline]:
+        if topic_id is None:
+            rows = self.conn.execute(
+                "SELECT d.*, t.name AS topic_name, s.name AS subject_name "
+                "FROM topic_deadline d "
+                "LEFT JOIN topic t ON t.id = d.topic_id "
+                "LEFT JOIN subject s ON s.id = d.subject_id "
+                "ORDER BY d.target_date, d.id"
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT d.*, t.name AS topic_name, s.name AS subject_name "
+                "FROM topic_deadline d "
+                "LEFT JOIN topic t ON t.id = d.topic_id "
+                "LEFT JOIN subject s ON s.id = d.subject_id "
+                "WHERE d.topic_id = ? ORDER BY d.target_date, d.id",
+                (topic_id,),
+            ).fetchall()
+        return [self._topic_deadline_from_row(row) for row in rows]
+
+    def _topic_deadline_from_row(self, row: sqlite3.Row) -> TopicDeadline:
+        try:
+            kind = DeadlineKind(row["kind"])
+        except ValueError:
+            kind = DeadlineKind.INITIAL_LEARNING
+        try:
+            track = TrackKind(row["target_track"])
+        except ValueError:
+            track = TrackKind.KONKUR
+        return TopicDeadline(
+            id=row["id"],
+            topic_id=row["topic_id"],
+            subject_id=row["subject_id"],
+            topic_name=row["topic_name"] or "",
+            subject_name=row["subject_name"] or "",
+            kind=kind,
+            target_date=_parse_date(row["target_date"]),
+            target_percent=row["target_percent"],
+            target_level=row["target_level"],
+            target_track=track,
+            is_master=bool(row["is_master"]),
+            note=row["note"],
+            created_at=_parse_datetime(row["created_at"]),
+            updated_at=_parse_datetime(row["updated_at"]),
+        )
+
+    # ---- ساعت مطالعه (بند ۱۵) ----
+
+    def create_study_session(self, session: StudySession) -> int:
+        if session.started_at is None:
+            raise ValueError("زمان شروع جلسه لازم است.")
+        if session.minutes < 0:
+            raise ValueError("دقیقهٔ جلسه نمی‌تواند منفی باشد.")
+        now = _now()
+        cursor = self.conn.execute(
+            "INSERT INTO study_session (subject_id, topic_id, activity_id, kind, mode, "
+            "started_at, ended_at, paused_seconds, paused_at, minutes, note, "
+            "created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                session.subject_id,
+                session.topic_id,
+                session.activity_id,
+                session.kind.value,
+                session.mode,
+                _datetime_str(session.started_at),
+                _datetime_str(session.ended_at),
+                max(0, int(session.paused_seconds)),
+                _datetime_str(session.paused_at),
+                max(0, int(session.minutes)),
+                session.note,
+                _datetime_str(now),
+                _datetime_str(now),
+            ),
+        )
+        session.id = cursor.lastrowid
+        session.created_at = now
+        session.updated_at = now
+        return session.id
+
+    def update_study_session(self, session: StudySession) -> None:
+        if session.id is None:
+            raise ValueError("برای ویرایش جلسه، شناسه لازم است.")
+        if session.minutes < 0:
+            raise ValueError("دقیقهٔ جلسه نمی‌تواند منفی باشد.")
+        now = _now()
+        self.conn.execute(
+            "UPDATE study_session SET subject_id = ?, topic_id = ?, activity_id = ?, "
+            "kind = ?, mode = ?, started_at = ?, ended_at = ?, paused_seconds = ?, "
+            "paused_at = ?, minutes = ?, note = ?, updated_at = ? WHERE id = ?",
+            (
+                session.subject_id,
+                session.topic_id,
+                session.activity_id,
+                session.kind.value,
+                session.mode,
+                _datetime_str(session.started_at),
+                _datetime_str(session.ended_at),
+                max(0, int(session.paused_seconds)),
+                _datetime_str(session.paused_at),
+                max(0, int(session.minutes)),
+                session.note,
+                _datetime_str(now),
+                session.id,
+            ),
+        )
+        session.updated_at = now
+
+    def delete_study_session(self, session_id: int) -> None:
+        self.conn.execute("DELETE FROM study_session WHERE id = ?", (session_id,))
+
+    def list_study_sessions(
+        self,
+        start: Optional[_dt.date] = None,
+        end: Optional[_dt.date] = None,
+        topic_id: Optional[int] = None,
+    ) -> list[StudySession]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if start is not None:
+            clauses.append("date(s.started_at) >= date(?)")
+            params.append(start.isoformat())
+        if end is not None:
+            clauses.append("date(s.started_at) <= date(?)")
+            params.append(end.isoformat())
+        if topic_id is not None:
+            clauses.append("s.topic_id = ?")
+            params.append(topic_id)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = self.conn.execute(
+            "SELECT s.*, t.name AS topic_name, su.name AS subject_name "
+            f"FROM study_session s "
+            "LEFT JOIN topic t ON t.id = s.topic_id "
+            "LEFT JOIN subject su ON su.id = s.subject_id "
+            f"{where} ORDER BY s.started_at DESC, s.id DESC",
+            params,
+        ).fetchall()
+        return [self._study_session_from_row(row) for row in rows]
+
+    def get_study_session(self, session_id: int) -> Optional[StudySession]:
+        row = self.conn.execute(
+            "SELECT s.*, t.name AS topic_name, su.name AS subject_name "
+            "FROM study_session s "
+            "LEFT JOIN topic t ON t.id = s.topic_id "
+            "LEFT JOIN subject su ON su.id = s.subject_id "
+            "WHERE s.id = ?",
+            (session_id,),
+        ).fetchone()
+        return self._study_session_from_row(row) if row else None
+
+    def running_study_session(self) -> Optional[StudySession]:
+        """جلسهٔ ناتمام را برمی‌گرداند — پس از بستن برنامه هم حفظ می‌شود."""
+        row = self.conn.execute(
+            "SELECT s.*, t.name AS topic_name, su.name AS subject_name "
+            "FROM study_session s "
+            "LEFT JOIN topic t ON t.id = s.topic_id "
+            "LEFT JOIN subject su ON su.id = s.subject_id "
+            "WHERE s.ended_at IS NULL ORDER BY s.started_at DESC LIMIT 1"
+        ).fetchone()
+        return self._study_session_from_row(row) if row else None
+
+    def _study_session_from_row(self, row: sqlite3.Row) -> StudySession:
+        try:
+            kind = SessionKind(row["kind"])
+        except ValueError:
+            kind = SessionKind.STUDY
+        return StudySession(
+            id=row["id"],
+            subject_id=row["subject_id"],
+            subject_name=row["subject_name"] or "",
+            topic_id=row["topic_id"],
+            topic_name=row["topic_name"] or "",
+            activity_id=row["activity_id"],
+            kind=kind,
+            mode=row["mode"],
+            started_at=_parse_datetime(row["started_at"]),
+            ended_at=_parse_datetime(row["ended_at"]),
+            paused_seconds=int(row["paused_seconds"] or 0),
+            paused_at=_parse_datetime(row["paused_at"]),
+            minutes=int(row["minutes"] or 0),
+            note=row["note"],
+            created_at=_parse_datetime(row["created_at"]),
+            updated_at=_parse_datetime(row["updated_at"]),
+        )
+
+    def add_session_revision(self, revision: StudySessionRevision) -> int:
+        if revision.session_id is None:
+            raise ValueError("تاریخچهٔ اصلاح باید به یک جلسه وصل باشد.")
+        cursor = self.conn.execute(
+            "INSERT INTO study_session_revision (session_id, at, field_name, "
+            "old_value, new_value, reason) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                revision.session_id,
+                _datetime_str(revision.at or _now()),
+                revision.field_name,
+                revision.old_value,
+                revision.new_value,
+                revision.reason,
+            ),
+        )
+        revision.id = cursor.lastrowid
+        return revision.id
+
+    def list_session_revisions(self, session_id: int) -> list[StudySessionRevision]:
+        rows = self.conn.execute(
+            "SELECT * FROM study_session_revision WHERE session_id = ? "
+            "ORDER BY at, id",
+            (session_id,),
+        ).fetchall()
+        return [
+            StudySessionRevision(
+                id=row["id"],
+                session_id=row["session_id"],
+                at=_parse_datetime(row["at"]),
+                field_name=row["field_name"],
+                old_value=row["old_value"],
+                new_value=row["new_value"],
+                reason=row["reason"],
+            )
+            for row in rows
+        ]
+
+    # ---- مشکلات یادگیری (بند ۱۷) ----
+
+    def create_learning_problem(self, problem: LearningProblem) -> int:
+        title = problem.title.strip()
+        if not title:
+            raise ValueError("عنوان مشکل یادگیری لازم است.")
+        if not 1 <= int(problem.severity) <= 5:
+            raise ValueError("شدت باید بین ۱ تا ۵ باشد.")
+        now = _now()
+        cursor = self.conn.execute(
+            "INSERT INTO learning_problem (subject_id, topic_id, kind, title, "
+            "description, severity, status, first_seen, last_seen, occurrences, "
+            "resolution_note, created_at, updated_at, attachment_path, "
+            "attachment_name, attachment_sha256, attachment_bytes) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                problem.subject_id,
+                problem.topic_id,
+                problem.kind.value,
+                title,
+                problem.description,
+                int(problem.severity),
+                problem.status.value,
+                _date_str(problem.first_seen or _dt.date.today()),
+                _date_str(problem.last_seen or problem.first_seen or _dt.date.today()),
+                max(0, int(problem.occurrences)),
+                problem.resolution_note,
+                _datetime_str(now),
+                _datetime_str(now),
+                problem.attachment_path,
+                problem.attachment_name,
+                problem.attachment_sha256,
+                problem.attachment_bytes,
+            ),
+        )
+        problem.id = cursor.lastrowid
+        problem.created_at = now
+        problem.updated_at = now
+        if problem.first_seen is None:
+            problem.first_seen = _dt.date.today()
+        if problem.last_seen is None:
+            problem.last_seen = problem.first_seen
+        self.add_problem_event(
+            LearningProblemEvent(
+                problem_id=problem.id, kind="opened", note="ثبت مشکل یادگیری"
+            )
+        )
+        return problem.id
+
+    def update_learning_problem(self, problem: LearningProblem) -> None:
+        if problem.id is None:
+            raise ValueError("برای ویرایش مشکل، شناسه لازم است.")
+        if not problem.title.strip():
+            raise ValueError("عنوان مشکل یادگیری لازم است.")
+        if not 1 <= int(problem.severity) <= 5:
+            raise ValueError("شدت باید بین ۱ تا ۵ باشد.")
+        now = _now()
+        self.conn.execute(
+            "UPDATE learning_problem SET subject_id = ?, topic_id = ?, kind = ?, "
+            "title = ?, description = ?, severity = ?, status = ?, first_seen = ?, "
+            "last_seen = ?, occurrences = ?, resolution_note = ?, updated_at = ?, "
+            "attachment_path = ?, attachment_name = ?, attachment_sha256 = ?, "
+            "attachment_bytes = ? WHERE id = ?",
+            (
+                problem.subject_id,
+                problem.topic_id,
+                problem.kind.value,
+                problem.title.strip(),
+                problem.description,
+                int(problem.severity),
+                problem.status.value,
+                _date_str(problem.first_seen),
+                _date_str(problem.last_seen),
+                max(0, int(problem.occurrences)),
+                problem.resolution_note,
+                _datetime_str(now),
+                problem.attachment_path,
+                problem.attachment_name,
+                problem.attachment_sha256,
+                problem.attachment_bytes,
+                problem.id,
+            ),
+        )
+        problem.updated_at = now
+
+    def delete_learning_problem(self, problem_id: int) -> None:
+        self.conn.execute("DELETE FROM learning_problem WHERE id = ?", (problem_id,))
+
+    def list_learning_problems(
+        self, status: Optional[ProblemStatus] = None, topic_id: Optional[int] = None
+    ) -> list[LearningProblem]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if status is not None:
+            clauses.append("p.status = ?")
+            params.append(status.value)
+        if topic_id is not None:
+            clauses.append("p.topic_id = ?")
+            params.append(topic_id)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = self.conn.execute(
+            "SELECT p.*, t.name AS topic_name, s.name AS subject_name "
+            "FROM learning_problem p "
+            "LEFT JOIN topic t ON t.id = p.topic_id "
+            "LEFT JOIN subject s ON s.id = p.subject_id "
+            f"{where} ORDER BY p.severity DESC, p.updated_at DESC, p.id DESC",
+            params,
+        ).fetchall()
+        return [self._learning_problem_from_row(row) for row in rows]
+
+    def _learning_problem_from_row(self, row: sqlite3.Row) -> LearningProblem:
+        try:
+            kind = ProblemKind(row["kind"])
+        except ValueError:
+            kind = ProblemKind.CONCEPTUAL_GAP
+        try:
+            status = ProblemStatus(row["status"])
+        except ValueError:
+            status = ProblemStatus.OPEN
+        return LearningProblem(
+            id=row["id"],
+            subject_id=row["subject_id"],
+            subject_name=row["subject_name"] or "",
+            topic_id=row["topic_id"],
+            topic_name=row["topic_name"] or "",
+            kind=kind,
+            title=row["title"],
+            description=row["description"],
+            severity=int(row["severity"]),
+            status=status,
+            first_seen=_parse_date(row["first_seen"]),
+            last_seen=_parse_date(row["last_seen"]),
+            occurrences=int(row["occurrences"] or 0),
+            resolution_note=row["resolution_note"],
+            attachment_path=row["attachment_path"],
+            attachment_name=row["attachment_name"] or "",
+            attachment_sha256=row["attachment_sha256"],
+            attachment_bytes=row["attachment_bytes"] or 0,
+            created_at=_parse_datetime(row["created_at"]),
+            updated_at=_parse_datetime(row["updated_at"]),
+        )
+
+    def add_problem_event(self, event: LearningProblemEvent) -> int:
+        if event.problem_id is None:
+            raise ValueError("رویداد مشکل باید به یک مشکل وصل باشد.")
+        cursor = self.conn.execute(
+            "INSERT INTO learning_problem_event (problem_id, at, kind, note) "
+            "VALUES (?, ?, ?, ?)",
+            (
+                event.problem_id,
+                _datetime_str(event.at or _now()),
+                event.kind,
+                event.note,
+            ),
+        )
+        event.id = cursor.lastrowid
+        return event.id
+
+    def list_problem_events(self, problem_id: int) -> list[LearningProblemEvent]:
+        rows = self.conn.execute(
+            "SELECT * FROM learning_problem_event WHERE problem_id = ? ORDER BY at, id",
+            (problem_id,),
+        ).fetchall()
+        return [
+            LearningProblemEvent(
+                id=row["id"],
+                problem_id=row["problem_id"],
+                at=_parse_datetime(row["at"]),
+                kind=row["kind"],
+                note=row["note"],
+            )
+            for row in rows
+        ]
 
     # ---- تنظیمات کلید/مقدار ----
 

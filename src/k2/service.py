@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
-from dataclasses import dataclass
+import re
+from dataclasses import asdict, dataclass, is_dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -18,9 +20,13 @@ from . import (
     backlog as backlog_mod,
     capacity,
     consolidation,
+    deadline_planner,
+    dual_track,
+    nightly_replan,
+    study_timer,
 )
 from . import exam_analysis, konkur_catalog, onboarding, reporting, review_engine, streams
-from .config import Settings, database_path
+from .config import Settings, app_data_dir, database_path
 from .domain.enums import (
     ActivityState,
     DateStatus,
@@ -37,18 +43,36 @@ from .domain.models import (
     ActivityType,
     AdvisorSuggestion,
     DayPlan,
+    DeadlineSuggestion,
     ErrorRecord,
     ExamAttempt,
     ExamProfile,
     ExamQuestion,
     LearningEvidence,
+    LearningProblem,
+    LearningProblemEvent,
+    NightlyReview,
+    ProblemStatus,
     ReviewItem,
     ReviewLog,
+    SessionTotals,
+    StudySession,
+    StudySessionRevision,
     Subject,
     Topic,
+    TopicDeadline,
+    TopicDeadlinePlan,
     WeeklyReport,
 )
+from .domain.enums import (
+    DeadlineKind,
+    FinalStage,
+    KonkurStage,
+    SessionKind,
+    TrackKind,
+)
 from .estimation import EstimationModel, calibrate
+from . import scheduler
 from .scheduler import Scheduler, SchedulingContext
 from .storage import Repository, create_backup, initialize, restore_backup
 
@@ -97,6 +121,23 @@ class DayContext:
     capacity: capacity.CapacityBreakdown
     plan: DayPlan
     backlog: backlog_mod.BacklogSummary
+
+
+def _jsonable(value: object) -> object:
+    """تبدیل مدل/انوم/تاریخ به ساختار قابل سریال‌سازی در JSON."""
+    if is_dataclass(value) and not isinstance(value, type):
+        return {k: _jsonable(v) for k, v in asdict(value).items()}
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, (_dt.date, _dt.datetime, _dt.time)):
+        return value.isoformat()
+    if isinstance(value, (frozenset, tuple, set)):
+        return [_jsonable(v) for v in value]
+    if isinstance(value, list):
+        return [_jsonable(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): _jsonable(v) for k, v in value.items()}
+    return value
 
 
 class AdvisorService:
@@ -1207,6 +1248,616 @@ class AdvisorService:
     # ------------------------------------------------------------------
     # پشتیبان‌گیری
     # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # مهلت‌های من (بند ۱۲)
+    # ------------------------------------------------------------------
+
+    def list_topic_deadlines(
+        self, topic_id: Optional[int] = None
+    ) -> list[TopicDeadline]:
+        return self.repo.list_topic_deadlines(topic_id)
+
+    def save_topic_deadline(self, deadline: TopicDeadline) -> int:
+        """مهلت را ذخیره یا به‌روز می‌کند و بازمحاسبه را برمی‌گرداند."""
+        if deadline.topic_id is None:
+            raise ValueError("مهلت باید به یک مبحث وصل باشد.")
+        if deadline.target_date is None:
+            raise ValueError("تاریخ مهلت لازم است.")
+        topic = next(
+            (t for t in self.repo.list_topics() if t.id == deadline.topic_id), None
+        )
+        if topic is None:
+            raise ValueError("مبحث این مهلت یافت نشد.")
+        if deadline.subject_id is None:
+            deadline.subject_id = topic.subject_id
+        if deadline.id is None:
+            # اگر برای همین مبحث/نوع/مسیر مهلتی هست، به‌روز می‌شود تا
+            # رکورد تکراری ساخته نشود (و کلید یکتا نقض نشود).
+            existing = next(
+                (
+                    d
+                    for d in self.repo.list_topic_deadlines(deadline.topic_id)
+                    if d.kind == deadline.kind
+                    and d.target_track == deadline.target_track
+                ),
+                None,
+            )
+            if existing is not None:
+                deadline.id = existing.id
+        if deadline.id is None:
+            deadline_id = self.repo.create_topic_deadline(deadline)
+        else:
+            self.repo.update_topic_deadline(deadline)
+            deadline_id = deadline.id
+        if deadline.is_master:
+            self.repo.set_master_deadline(deadline.topic_id, deadline_id)
+        self.conn.commit()
+        return deadline_id
+
+    def delete_topic_deadline(self, deadline_id: int) -> None:
+        self.repo.delete_topic_deadline(deadline_id)
+        self.conn.commit()
+
+    def topic_deadline_plan(
+        self, topic_id: int, *, today: Optional[_dt.date] = None
+    ) -> TopicDeadlinePlan:
+        """بازمحاسبهٔ تاریخ‌های یک مبحث از مهلت تثبیت نهایی به عقب."""
+        today = today or _dt.date.today()
+        topics = {t.id: t for t in self.repo.list_topics()}
+        topic = topics.get(topic_id)
+        if topic is None:
+            raise ValueError("مبحث یافت نشد.")
+        deadlines = self.repo.list_topic_deadlines(topic_id)
+        master = next((d for d in deadlines if d.is_master), None)
+        if master is None:
+            master = next(
+                (d for d in deadlines
+                 if d.kind == DeadlineKind.FINAL_CONSOLIDATION),
+                None,
+            )
+        breakdown = self.build_context(today).capacity_for(today)
+        capacity_minutes = breakdown.capacity_minutes
+        profile = self.active_exam_profile()
+        track = (
+            master.target_track if master is not None else TrackKind.KONKUR
+        )
+        stage_minutes: dict[DeadlineKind, int] = {}
+        if topic.estimated_minutes:
+            stage_minutes[DeadlineKind.INITIAL_LEARNING] = int(
+                topic.estimated_minutes * 0.5
+            )
+            stage_minutes[DeadlineKind.PRACTICE] = int(topic.estimated_minutes * 0.3)
+            stage_minutes[DeadlineKind.FINAL_CONSOLIDATION] = int(
+                topic.estimated_minutes * 0.2
+            )
+        plan = deadline_planner.back_calculate(
+            deadline_planner.DeadlineInput(
+                topic_id=topic_id,
+                topic_name=topic.name,
+                subject_name=topic.subject_name,
+                consolidation_date=master.target_date if master else None,
+                exam_date=profile.target_date if profile else None,
+                track=track,
+                stage_minutes=stage_minutes,
+                mastery_level=int(getattr(topic.mastery, "value", 0) or 0),
+                daily_capacity_minutes=capacity_minutes,
+                today=today,
+                target_percent=master.target_percent if master else None,
+                target_level=master.target_level if master else None,
+            )
+        )
+        return plan
+
+    def all_deadline_plans(
+        self, *, today: Optional[_dt.date] = None
+    ) -> list[TopicDeadlinePlan]:
+        """بازمحاسبهٔ همهٔ مباحثی که مهلت ثبت کرده‌اند."""
+        today = today or _dt.date.today()
+        topic_ids = {
+            d.topic_id for d in self.repo.list_topic_deadlines() if d.topic_id
+        }
+        plans = []
+        for topic_id in sorted(topic_ids):
+            try:
+                plans.append(self.topic_deadline_plan(topic_id, today=today))
+            except ValueError:  # pragma: no cover - مبحث حذف‌شده
+                continue
+        return plans
+
+    def deadline_suggestions(
+        self, topic_id: int, *, today: Optional[_dt.date] = None
+    ) -> list[DeadlineSuggestion]:
+        return self.topic_deadline_plan(topic_id, today=today).suggestions
+
+    def deadline_evidence_status(
+        self, topic_id: int
+    ) -> dict[str, object]:
+        """آیا مهلت با «شاهد» تکمیل شده یا فقط تقویم جلو رفته است؟"""
+        plan = self.topic_deadline_plan(topic_id)
+        deadline = next(
+            (
+                d
+                for d in self.repo.list_topic_deadlines(topic_id)
+                if d.is_master
+                or d.kind == DeadlineKind.FINAL_CONSOLIDATION
+            ),
+            None,
+        )
+        evidences = self.repo.list_learning_evidence(topic_id)
+        if deadline is None:
+            return {"proven": False, "reason": "مهلتی ثبت نشده است."}
+        if not deadline.has_measurable_target:
+            return {
+                "proven": False,
+                "reason": (
+                    "برای این مهلت هدف درصد یا سطح تسلط ثبت نشده است؛ "
+                    "بدون هدف سنجش‌شدنی، تکمیل قابل اثبات نیست."
+                ),
+            }
+        if not evidences:
+            return {
+                "proven": False,
+                "reason": "هیچ شاهد عملکردی (سنجش/تست) برای این مبحث ثبت نشده است.",
+            }
+        best = max(e.score for e in evidences)
+        target = (
+            (deadline.target_percent or 0.0) / 100.0
+            if deadline.target_percent is not None
+            else 0.8
+        )
+        if best >= target:
+            return {
+                "proven": True,
+                "reason": (
+                    f"بهترین شاهد ثبت‌شده {best:.0%} است و به هدف "
+                    f"{target:.0%} رسیده است."
+                ),
+            }
+        return {
+            "proven": False,
+            "reason": (
+                f"بهترین شاهد {best:.0%} است؛ هدف {target:.0%} هنوز محقق نشده."
+            ),
+        }
+
+    # ------------------------------------------------------------------
+    # ساعت مطالعه (بند ۱۵)
+    # ------------------------------------------------------------------
+
+    def list_study_sessions(
+        self,
+        start: Optional[_dt.date] = None,
+        end: Optional[_dt.date] = None,
+        topic_id: Optional[int] = None,
+    ) -> list[StudySession]:
+        return self.repo.list_study_sessions(start, end, topic_id)
+
+    def save_study_session(self, session: StudySession) -> int:
+        if session.id is None:
+            session_id = self.repo.create_study_session(session)
+        else:
+            self.repo.update_study_session(session)
+            session_id = session.id
+        self.conn.commit()
+        return session_id
+
+    def correct_study_session(
+        self,
+        session_id: int,
+        *,
+        field_name: str,
+        new_value: object,
+        reason: str,
+    ) -> StudySessionRevision:
+        """اصلاح یک جلسه با تاریخچهٔ تغییر — بدون بازنویسی بی‌صدا."""
+        session = self.repo.get_study_session(session_id)
+        if session is None:
+            raise ValueError("جلسهٔ مطالعه یافت نشد.")
+        revision = study_timer.revise_session(
+            session, field_name=field_name, new_value=new_value, reason=reason
+        )
+        self.repo.update_study_session(session)
+        self.repo.add_session_revision(revision)
+        self.conn.commit()
+        return revision
+
+    def delete_study_session(self, session_id: int) -> None:
+        self.repo.delete_study_session(session_id)
+        self.conn.commit()
+
+    def running_session(self) -> Optional[StudySession]:
+        return self.repo.running_study_session()
+
+    def session_revisions(self, session_id: int) -> list[StudySessionRevision]:
+        return self.repo.list_session_revisions(session_id)
+
+    def session_totals(
+        self,
+        start: Optional[_dt.date] = None,
+        end: Optional[_dt.date] = None,
+        label: str = "",
+    ) -> SessionTotals:
+        sessions = self.repo.list_study_sessions(start, end)
+        return study_timer.totals_for(sessions, label)
+
+    def weekly_session_totals(
+        self, day: Optional[_dt.date] = None
+    ) -> SessionTotals:
+        return study_timer.weekly_totals(
+            self.repo.list_study_sessions(), day
+        )
+
+    def planned_vs_actual(
+        self, start: Optional[_dt.date] = None, end: Optional[_dt.date] = None
+    ) -> dict[str, object]:
+        """مقایسهٔ برنامه‌ریزی‌شده با اجراشده در یک بازه."""
+        start = start or _dt.date.today()
+        end = end or start
+        plans = self.plan_range(start, (end - start).days + 1)
+        planned = sum(p.planned_minutes for p in plans)
+        sessions = self.repo.list_study_sessions(start, end)
+        return study_timer.planned_vs_actual(planned, sessions)
+
+    # ------------------------------------------------------------------
+    # مشکلات یادگیری (بند ۱۷)
+    # ------------------------------------------------------------------
+
+    def list_learning_problems(
+        self,
+        status: Optional[ProblemStatus] = None,
+        topic_id: Optional[int] = None,
+    ) -> list[LearningProblem]:
+        return self.repo.list_learning_problems(status, topic_id)
+
+    def save_learning_problem(self, problem: LearningProblem) -> int:
+        if not problem.title.strip():
+            raise ValueError("عنوان مشکل یادگیری لازم است.")
+        if problem.id is None:
+            problem_id = self.repo.create_learning_problem(problem)
+        else:
+            self.repo.update_learning_problem(problem)
+            problem_id = problem.id
+        self.conn.commit()
+        return problem_id
+
+    def set_problem_status(
+        self, problem_id: int, status: ProblemStatus, note: str = ""
+    ) -> None:
+        problem = next(
+            (p for p in self.repo.list_learning_problems() if p.id == problem_id),
+            None,
+        )
+        if problem is None:
+            raise ValueError("مشکل یادگیری یافت نشد.")
+        previous = problem.status
+        problem.status = status
+        if status == ProblemStatus.RESOLVED and note:
+            problem.resolution_note = note
+        self.repo.update_learning_problem(problem)
+        kind = {
+            ProblemStatus.OPEN: "progressed",
+            ProblemStatus.IN_PROGRESS: "progressed",
+            ProblemStatus.RESOLVED: "resolved",
+            ProblemStatus.ACCEPTED: "progressed",
+        }[status]
+        self.repo.add_problem_event(
+            LearningProblemEvent(
+                problem_id=problem_id,
+                kind=kind,
+                note=note or f"وضعیت از {previous.label} به {status.label} تغییر کرد.",
+            )
+        )
+        self.conn.commit()
+
+    def delete_learning_problem(self, problem_id: int) -> None:
+        self.repo.delete_learning_problem(problem_id)
+        self.conn.commit()
+
+    def problem_events(self, problem_id: int) -> list[LearningProblemEvent]:
+        return self.repo.list_problem_events(problem_id)
+
+    # ------------------------------------------------------------------
+    # مسیر دوگانه (بند ۱۳)
+    # ------------------------------------------------------------------
+
+    def topic_dual_track(self, topic_id: int) -> dual_track.DualTrackView:
+        topic = next(
+            (t for t in self.repo.list_topics() if t.id == topic_id), None
+        )
+        if topic is None:
+            raise ValueError("مبحث یافت نشد.")
+        evidences = self.repo.list_learning_evidence(topic_id)
+        return dual_track.dual_track_view(
+            topic, evidences,
+            min_score=self.settings.consolidation.stage_evidence_score,
+        )
+
+    def record_track_evidence(
+        self, topic_id: int, track: TrackKind | str, evidence: LearningEvidence
+    ) -> tuple[bool, str]:
+        """شاهد جدید را ثبت می‌کند و در صورت کفایت، پله را جلو می‌برد."""
+        track = TrackKind(track)
+        topic = next(
+            (t for t in self.repo.list_topics() if t.id == topic_id), None
+        )
+        if topic is None:
+            raise ValueError("مبحث یافت نشد.")
+        evidence.topic_id = topic_id
+        if evidence.observed_on is None:
+            evidence.observed_on = _dt.date.today()
+        self.repo.create_learning_evidence(evidence)
+        changed, message = dual_track.advance_stage(
+            topic,
+            track,
+            evidence,
+            min_score=self.settings.consolidation.stage_evidence_score,
+        )
+        if changed:
+            if track == TrackKind.KONKUR:
+                topic.konkur_evidence_id = evidence.id
+            else:
+                topic.final_evidence_id = evidence.id
+            self.repo.update_topic(topic)
+        self.conn.commit()
+        return changed, message
+
+    def set_topic_stage(
+        self, topic_id: int, track: TrackKind | str, stage: str
+    ) -> None:
+        """تنظیم دستی پله — فقط برای اصلاح اشتباه، بدون شاهد خودکار."""
+        track = TrackKind(track)
+        topic = next(
+            (t for t in self.repo.list_topics() if t.id == topic_id), None
+        )
+        if topic is None:
+            raise ValueError("مبحث یافت نشد.")
+        if track == TrackKind.KONKUR:
+            try:
+                topic.konkur_stage = KonkurStage(stage).value
+            except ValueError as exc:
+                raise ValueError("پلهٔ مسیر کنکور شناخته نشد.") from exc
+        else:
+            try:
+                topic.final_stage = FinalStage(stage).value
+            except ValueError as exc:
+                raise ValueError("پلهٔ مسیر نهایی شناخته نشد.") from exc
+        self.repo.update_topic(topic)
+        self.conn.commit()
+
+    def update_topic(self, topic: Topic) -> None:
+        """ویرایش کامل مبحث (شامل سهم پیش‌نیاز، سهم آزمون نهایی و برآورد)."""
+        if topic.id is None:
+            raise ValueError("برای ویرایش، مبحث باید ذخیره‌شده باشد.")
+        self.repo.update_topic(topic)
+        self.conn.commit()
+
+    # ------------------------------------------------------------------
+    # بازبینی شبانه (بند ۱۶)
+    # ------------------------------------------------------------------
+
+    def nightly_review(
+        self, date: Optional[_dt.date] = None
+    ) -> NightlyReview:
+        """بازبینی یک روز: انجام‌شده، ناقص، بهتر/بدتر، ریسک مهلت و ظرفیت."""
+        day = date or _dt.date.today()
+        plan = self.plan_day(day)
+        activities = self.list_activities()
+        sessions = self.repo.list_study_sessions(day, day)
+        review = nightly_replan.classify_day(plan, activities, sessions, date=day)
+        review.deadline_risks = nightly_replan.deadline_risk_notes(
+            self.all_deadline_plans(today=day),
+            today=day,
+            warning_window_days=self.settings.deadline.warning_window_days,
+        )
+        return review
+
+    def replan_forward(
+        self, *, horizon_days: int = 7, today: Optional[_dt.date] = None
+    ) -> nightly_replan.ReplanReport:
+        """برنامهٔ روزهای بعد را با حفظ کلاس‌های ثابت بازسازی می‌کند."""
+        today = today or _dt.date.today()
+        plans = self.plan_range(today, horizon_days + 1)
+        activities = self._schedulable_activities(today)
+        scores: dict[int, float] = {}
+        factors: dict[int, scheduler.TopicFactors] = {}
+        for activity in activities:
+            scores[activity.id or -1] = scheduler.compute_priority(
+                activity,
+                today=today,
+                settings=self.settings,
+                topic_factors=self._topic_factors(activity.topic_id, today),
+            ).total
+            factors[activity.topic_id or -1] = self._topic_factors(
+                activity.topic_id, today
+            )
+        protected = {
+            topic_id
+            for topic_id, factor in factors.items()
+            if scheduler.protect_reason(
+                next((a for a in activities if a.topic_id == topic_id), None)
+                or Activity(title=""),
+                factor,
+                settings=self.settings,
+            )
+        }
+        return nightly_replan.replan_forward(
+            activities=activities,
+            day_plans=plans,
+            today=today,
+            settings=self.settings,
+            horizon_days=horizon_days,
+            scores=scores,
+            protected_ids=protected,
+        )
+
+    def _topic_factors(
+        self, topic_id: Optional[int], today: _dt.date
+    ) -> scheduler.TopicFactors:
+        """فاکتورهای مبحثی برای اولویت‌دهی (بند ۱۴)."""
+        if topic_id is None:
+            return scheduler.TopicFactors()
+        topics = {t.id: t for t in self.repo.list_topics()}
+        topic = topics.get(topic_id)
+        if topic is None:
+            return scheduler.TopicFactors()
+        deadlines = [
+            d for d in self.repo.list_topic_deadlines(topic_id) if d.target_date
+        ]
+        master = next((d for d in deadlines if d.is_master), None) or (
+            deadlines[0] if deadlines else None
+        )
+        review_items = self.repo.list_review_items()
+        forgetting = 0.0
+        for item in review_items:
+            if item.topic_id == topic_id and item.stability_days > 0:
+                forgetting = max(
+                    forgetting, max(0.0, 1.0 - item.retrievability)
+                )
+        weakness = self._topic_weakness().get(topic_id, 0.0)
+        remaining = float(topic.estimated_minutes or 0)
+        available = 0.0
+        if master and master.target_date:
+            days_left = max(0, (master.target_date - today).days)
+            breakdown = self.build_context(today).capacity_for(today)
+            available = days_left * breakdown.capacity_minutes
+        subjects = {
+            s.id: s for s in self.repo.list_subjects(include_unselected=True)
+        }
+        subject = subjects.get(topic.subject_id)
+        return scheduler.TopicFactors(
+            prerequisite_share=topic.prerequisite_share,
+            final_exam_share=topic.final_exam_share,
+            forgetting_rate=forgetting,
+            topic_deadline_days=(
+                (master.target_date - today).days if master else None
+            ),
+            remaining_minutes=remaining,
+            available_minutes=available,
+            importance=float(subject.effective_weight) if subject else 1.0,
+            exam_weakness=weakness,
+        )
+
+    def night_summary(
+        self, date: Optional[_dt.date] = None
+    ) -> str:
+        """متن فارسی مشاور برای صفحهٔ «گزارش مشاور» و «برنامهٔ هفتگی»."""
+        day = date or _dt.date.today()
+        review = self.nightly_review(day)
+        replan = self.replan_forward(today=day)
+        problems = [
+            p for p in self.repo.list_learning_problems() if p.is_open
+        ]
+        return nightly_replan.summarize_review(
+            review,
+            replan,
+            deadline_risks=review.deadline_risks,
+            open_problems=problems,
+        )
+
+    # ------------------------------------------------------------------
+    # پیوست نتیجهٔ آزمون / مشکل یادگیری (بند ۱۱)
+    # ------------------------------------------------------------------
+
+    def attach_file(
+        self, source: Path | str, *, owner: str, owner_id: int, note: str = ""
+    ) -> Path:
+        """فایل نتیجهٔ آزمون یا مشکل یادگیری را محلی کپی و به رکورد وصل می‌کند.
+
+        نکتهٔ صادقانه: برنامه محتوای تصویر/فایل را «نمی‌خوانَد» (OCR یا
+        سرویس آنلاین ندارد). کاری که می‌کند این است: فایل را در پوشهٔ
+        پیوست‌های همین برنامه نگه می‌دارد، اثر انگشت SHA-256 آن را ثبت
+        می‌کند تا در بازیابی پشتیبان سالم‌بودنش قابل بررسی باشد، و منبع
+        «اعدادی که خودت وارد کرده‌ای» را قابل ردیابی می‌کند.
+        """
+        import hashlib
+        import shutil
+
+        src_path = Path(source)
+        if not src_path.exists():
+            raise ValueError(f"فایل یافت نشد: {src_path}")
+        if src_path.stat().st_size <= 0:
+            raise ValueError("فایل خالی است.")
+
+        target_dir = self.attachments_dir
+        target_dir.mkdir(parents=True, exist_ok=True)
+        digest = hashlib.sha256(src_path.read_bytes()).hexdigest()
+        safe_name = re.sub(r"[^\w.\-]", "_", src_path.name)[:80] or "attachment"
+        target = target_dir / f"{owner}-{owner_id}-{digest[:12]}-{safe_name}"
+
+        if not target.exists():
+            shutil.copyfile(src_path, target)
+        stat = target.stat()
+
+        if owner == "attempt":
+            attempt = next(
+                (a for a in self.list_attempts() if a.id == owner_id), None
+            )
+            if attempt is None:
+                raise ValueError("نوبت آزمون یافت نشد.")
+            attempt.attachment_path = str(target)
+            attempt.attachment_name = src_path.name
+            attempt.attachment_sha256 = digest
+            attempt.attachment_bytes = stat.st_size
+            attempt.attachment_note = note or attempt.attachment_note
+            self.repo.update_attempt(attempt)
+            return target
+        if owner == "problem":
+            problem = next(
+                (p for p in self.list_learning_problems() if p.id == owner_id), None
+            )
+            if problem is None:
+                raise ValueError("مشکل یادگیری یافت نشد.")
+            problem.attachment_path = str(target)
+            problem.attachment_name = src_path.name
+            problem.attachment_sha256 = digest
+            problem.attachment_bytes = stat.st_size
+            self.repo.update_learning_problem(problem)
+            return target
+        raise ValueError(f"نوع پیوست ناشناخته: {owner}")
+
+    def attachment_status(self, path: str | None) -> dict:
+        """وضعیت یک پیوست: هست/نیست و آیا اثر انگشتش با ثبت‌شده می‌خواند."""
+        if not path:
+            return {"exists": False, "verified": False, "reason": "پیوستی ثبت نشده"}
+        target = Path(path)
+        if not target.exists():
+            return {"exists": False, "verified": False, "reason": "فایل پیوست یافت نشد"}
+        return {"exists": True, "verified": True, "reason": target.name}
+
+    def export_json(self, path: Path | str) -> Path:
+        """خروجی کامل داده‌ها به JSON — بدون شبکه و قابل بازگردانی (DATA-02).
+
+        همهٔ جدول‌های اصلی بیرون می‌آیند تا کاربر مالک داده‌هایش باشد؛
+        فایل پشتیبان SQLite جای این خروجی را نمی‌گیرد و برعکس.
+        """
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "app_version": _app_version(),
+            "exported_at": _dt.datetime.now().isoformat(timespec="seconds"),
+            "subjects": _jsonable(
+                self.repo.list_subjects(include_unselected=True)
+            ),
+            "topics": _jsonable(self.list_topics()),
+            "activities": _jsonable(self.list_activities()),
+            "attempts": _jsonable(self.list_attempts()),
+            "topic_deadlines": _jsonable(self.list_topic_deadlines()),
+            "study_sessions": _jsonable(self.list_study_sessions()),
+            "learning_problems": _jsonable(self.list_learning_problems()),
+            "fixed_events": _jsonable(self.repo.list_fixed_events()),
+            "routines": _jsonable(self.repo.list_routines()),
+            "review_items": _jsonable(self.list_review_items()),
+        }
+        target.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        return target
+
+    @property
+    def attachments_dir(self) -> Path:
+        """پوشهٔ پیوست‌های محلی (داخل داده‌های برنامه، بیرون از پایگاه داده)."""
+        return app_data_dir() / "attachments"
 
     def backup(self, backup_dir: Optional[Path | str] = None):
         self.conn.commit()
