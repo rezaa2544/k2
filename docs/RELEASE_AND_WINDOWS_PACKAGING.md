@@ -38,11 +38,11 @@ packaging/output/K2/
 SHA-256:
 
 ```
-68a18feb0323e291f1cf38e4e5b3d6dbd8517a985121c651c1c8cc7dafbdd6f7  K2.exe
-3fcb29bf22aef62b0fe4fcf0e66bf771671c1a0b6a770d2ee14bab150d961cee  K2-windows-x64.zip
+2a93858e2cf5880b37072b41c364aeea6df49b0fbf8f7c740cf3318ef629c5a6  K2.exe
+0bfa905a22c65ff7fc45ade2e7da2ad9c2e4e368ae63530ea2ec8ac1c19d891d  K2-windows-x64.zip
 ```
 
-نسخهٔ ساخت محلی در `release/K2-windows-x64.zip` می‌ماند (خروجی در `.gitignore` است). برای درخواست دانلود مستقیم کاربر، همان بسته در `downloads/K2-windows-x64.zip` نیز در مخزن ثبت شده است (۴۹٬۹۶۹٬۵۰۱ بایت؛ حدود ۴۵ MiB). این آرشیو شامل `K2.exe` و `_internal/` است؛ فایل EXE به‌تنهایی اجراشدنی نیست.
+نسخهٔ ساخت محلی در `release/K2-windows-x64.zip` می‌ماند (خروجی در `.gitignore` است). برای درخواست دانلود مستقیم کاربر، همان بسته در `downloads/K2-windows-x64.zip` نیز در مخزن ثبت شده است (۴۹٬۹۶۸٬۵۴۷ بایت؛ حدود ۴۵ MiB). این آرشیو شامل `K2.exe` و `_internal/` است؛ فایل EXE به‌تنهایی اجراشدنی نیست.
 
 ---
 
