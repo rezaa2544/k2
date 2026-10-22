@@ -152,12 +152,20 @@ def test_preview_pages_and_interactive_flows_run(preview_js, tmp_path):
         ),
         encoding="utf-8",
     )
+    # روی ویندوز رمزگذاری پیش‌فرض متنِ خروجی زیرفروندها cp1252 است و
+    # فارسیِ خروجی node را نمی‌خواند؛ رمزگذاری را صریح می‌کنیم.
     result = subprocess.run(
         [NODE, str(harness)],
-        capture_output=True, text=True, timeout=120, cwd=str(ROOT),
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=120,
+        cwd=str(ROOT),
     )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "FAIL" not in result.stdout, result.stdout
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    assert result.returncode == 0, stdout + stderr
+    assert "FAIL" not in stdout, stdout
 
 
 def test_preview_has_no_network_calls_in_js():

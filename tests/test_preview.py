@@ -111,4 +111,12 @@ def test_preview_javascript_parses_when_node_is_available(tmp_path: Path):
         "\n".join((ROOT / "preview" / name).read_text(encoding="utf-8") for name in ("core.js", "forms.js", "app.js")),
         encoding="utf-8",
     )
-    subprocess.run([node, "--check", str(combined)], cwd=ROOT, check=True, capture_output=True, text=True)
+    subprocess.run(
+        [node, "--check", str(combined)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
