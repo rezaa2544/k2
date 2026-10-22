@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import re
 from dataclasses import asdict, dataclass, is_dataclass
 from enum import Enum
 from pathlib import Path
@@ -25,7 +26,7 @@ from . import (
     study_timer,
 )
 from . import exam_analysis, konkur_catalog, onboarding, reporting, review_engine, streams
-from .config import Settings, database_path
+from .config import Settings, app_data_dir, database_path
 from .domain.enums import (
     ActivityState,
     DateStatus,
@@ -1754,6 +1755,76 @@ class AdvisorService:
             open_problems=problems,
         )
 
+    # ------------------------------------------------------------------
+    # پیوست نتیجهٔ آزمون / مشکل یادگیری (بند ۱۱)
+    # ------------------------------------------------------------------
+
+    def attach_file(
+        self, source: Path | str, *, owner: str, owner_id: int, note: str = ""
+    ) -> Path:
+        """فایل نتیجهٔ آزمون یا مشکل یادگیری را محلی کپی و به رکورد وصل می‌کند.
+
+        نکتهٔ صادقانه: برنامه محتوای تصویر/فایل را «نمی‌خوانَد» (OCR یا
+        سرویس آنلاین ندارد). کاری که می‌کند این است: فایل را در پوشهٔ
+        پیوست‌های همین برنامه نگه می‌دارد، اثر انگشت SHA-256 آن را ثبت
+        می‌کند تا در بازیابی پشتیبان سالم‌بودنش قابل بررسی باشد، و منبع
+        «اعدادی که خودت وارد کرده‌ای» را قابل ردیابی می‌کند.
+        """
+        import hashlib
+        import shutil
+
+        src_path = Path(source)
+        if not src_path.exists():
+            raise ValueError(f"فایل یافت نشد: {src_path}")
+        if src_path.stat().st_size <= 0:
+            raise ValueError("فایل خالی است.")
+
+        target_dir = self.attachments_dir
+        target_dir.mkdir(parents=True, exist_ok=True)
+        digest = hashlib.sha256(src_path.read_bytes()).hexdigest()
+        safe_name = re.sub(r"[^\w.\-]", "_", src_path.name)[:80] or "attachment"
+        target = target_dir / f"{owner}-{owner_id}-{digest[:12]}-{safe_name}"
+
+        if not target.exists():
+            shutil.copyfile(src_path, target)
+        stat = target.stat()
+
+        if owner == "attempt":
+            attempt = next(
+                (a for a in self.list_attempts() if a.id == owner_id), None
+            )
+            if attempt is None:
+                raise ValueError("نوبت آزمون یافت نشد.")
+            attempt.attachment_path = str(target)
+            attempt.attachment_name = src_path.name
+            attempt.attachment_sha256 = digest
+            attempt.attachment_bytes = stat.st_size
+            attempt.attachment_note = note or attempt.attachment_note
+            self.repo.update_attempt(attempt)
+            return target
+        if owner == "problem":
+            problem = next(
+                (p for p in self.list_learning_problems() if p.id == owner_id), None
+            )
+            if problem is None:
+                raise ValueError("مشکل یادگیری یافت نشد.")
+            problem.attachment_path = str(target)
+            problem.attachment_name = src_path.name
+            problem.attachment_sha256 = digest
+            problem.attachment_bytes = stat.st_size
+            self.repo.update_learning_problem(problem)
+            return target
+        raise ValueError(f"نوع پیوست ناشناخته: {owner}")
+
+    def attachment_status(self, path: str | None) -> dict:
+        """وضعیت یک پیوست: هست/نیست و آیا اثر انگشتش با ثبت‌شده می‌خواند."""
+        if not path:
+            return {"exists": False, "verified": False, "reason": "پیوستی ثبت نشده"}
+        target = Path(path)
+        if not target.exists():
+            return {"exists": False, "verified": False, "reason": "فایل پیوست یافت نشد"}
+        return {"exists": True, "verified": True, "reason": target.name}
+
     def export_json(self, path: Path | str) -> Path:
         """خروجی کامل داده‌ها به JSON — بدون شبکه و قابل بازگردانی (DATA-02).
 
@@ -1782,6 +1853,11 @@ class AdvisorService:
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         return target
+
+    @property
+    def attachments_dir(self) -> Path:
+        """پوشهٔ پیوست‌های محلی (داخل داده‌های برنامه، بیرون از پایگاه داده)."""
+        return app_data_dir() / "attachments"
 
     def backup(self, backup_dir: Optional[Path | str] = None):
         self.conn.commit()

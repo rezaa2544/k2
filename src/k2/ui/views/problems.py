@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import datetime as _dt
+from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
@@ -56,6 +58,7 @@ class ProblemDialog(QDialog):
         self.problem = problem
         self.setWindowTitle("ثبت مشکل یادگیری" if problem is None else "ویرایش مشکل")
         self.setLayoutDirection(Qt.RightToLeft)
+        self.attachment_path: str | None = None
         form = QFormLayout(self)
 
         self.kind_combo = QComboBox()
@@ -106,6 +109,17 @@ class ProblemDialog(QDialog):
         for status in STATUSES:
             self.status_combo.addItem(status.label, status.value)
         form.addRow("وضعیت:", self.status_combo)
+
+        self.attachment_label = QLabel("پیوستی انتخاب نشده")
+        self.attachment_label.setObjectName("fieldHint")
+        btn_attach = QPushButton("انتخاب تصویر/فایل (اختیاری)")
+        btn_attach.setToolTip(
+            "عکس از دفتر یا تصویر سؤال را محلی نگه می‌دارد. برنامه تصویر را "
+            "نمی‌خوانَد؛ توضیح را خودت وارد می‌کنی."
+        )
+        btn_attach.clicked.connect(self._pick_attachment)
+        form.addRow("پیوست:", self.attachment_label)
+        form.addRow("", btn_attach)
         if problem is not None:
             index = self.status_combo.findData(problem.status)
             if index >= 0:
@@ -117,6 +131,17 @@ class ProblemDialog(QDialog):
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
+
+    def _pick_attachment(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "انتخاب تصویر یا فایل",
+            "",
+            "تصویر یا سند (*.png *.jpg *.jpeg *.webp *.pdf *.txt)",
+        )
+        if path:
+            self.attachment_label.setText(Path(path).name)
+            self.attachment_path = path
 
     def _accept(self) -> None:
         title = self.title_edit.text().strip()
@@ -312,6 +337,13 @@ class LearningProblemsPage(QWidget):
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "ذخیره نشد", str(exc))
             return
+        if dialog.attachment_path and updated.id:
+            try:
+                self.service.attach_file(
+                    dialog.attachment_path, owner="problem", owner_id=updated.id
+                )
+            except ValueError as exc:
+                QMessageBox.warning(self, "پیوست نشد", str(exc))
         self.refresh()
 
     def _resolve(self) -> None:

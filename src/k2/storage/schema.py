@@ -7,7 +7,7 @@ migration انجام نمی‌شود.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 #: اسکریپت نسخهٔ ۱ — اسکیمای اولیه.
 MIGRATION_1 = """
@@ -377,6 +377,19 @@ CREATE INDEX IF NOT EXISTS idx_problem_event_problem
     ON learning_problem_event(problem_id, at);
 """
 
+MIGRATION_7 = """
+ALTER TABLE exam_attempt ADD COLUMN attachment_path TEXT;
+ALTER TABLE exam_attempt ADD COLUMN attachment_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE exam_attempt ADD COLUMN attachment_sha256 TEXT;
+ALTER TABLE exam_attempt ADD COLUMN attachment_bytes INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE exam_attempt ADD COLUMN attachment_note TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE learning_problem ADD COLUMN attachment_path TEXT;
+ALTER TABLE learning_problem ADD COLUMN attachment_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE learning_problem ADD COLUMN attachment_sha256 TEXT;
+ALTER TABLE learning_problem ADD COLUMN attachment_bytes INTEGER NOT NULL DEFAULT 0;
+"""
+
 MIGRATIONS: list[tuple[int, str]] = [
     (1, MIGRATION_1),
     (2, MIGRATION_2),
@@ -384,4 +397,5 @@ MIGRATIONS: list[tuple[int, str]] = [
     (4, MIGRATION_4),
     (5, MIGRATION_5),
     (6, MIGRATION_6),
+    (7, MIGRATION_7),
 ]

@@ -8,6 +8,7 @@ import pytest
 
 from k2.storage.db import connect, current_version, initialize
 from k2.storage.repositories import Repository
+from k2.storage import schema
 from k2.storage.schema import SCHEMA_VERSION
 from k2.domain.models import (
     LearningProblem,
@@ -41,8 +42,8 @@ def _topic(repo: Repository, subject: Subject) -> Topic:
     return topic
 
 
-def test_schema_version_is_six():
-    assert SCHEMA_VERSION == 6
+def test_schema_version_is_current():
+    assert SCHEMA_VERSION == 7  # نسخهٔ جاری شامل پیوست نتیجهٔ آزمون
 
 
 def test_fresh_database_reaches_current_version(tmp_path):
@@ -76,7 +77,7 @@ def test_migration_from_version_five_preserves_existing_rows(tmp_path):
     conn.commit()
 
     apply_migrations(conn)
-    assert current_version(conn) == 6
+    assert current_version(conn) == schema.SCHEMA_VERSION
     repo = Repository(conn)
     topics = repo.list_topics()
     assert topics[0].name == "دانسی"
@@ -331,3 +332,123 @@ def test_shares_are_clamped_to_zero_one(repo):
     stored = repo.list_topics(subject.id)[0]
     assert stored.prerequisite_share == 1.0
     assert stored.final_exam_share == 0.0
+
+
+# ---------------------------------------------------------------------------
+# نسخهٔ ۷: پیوست نتیجهٔ آزمون / مشکل یادگیری (بند ۱۱)
+# ---------------------------------------------------------------------------
+
+
+def test_migration_from_six_preserves_attachment_free_rows(tmp_path):
+    """پایگاه دادهٔ نسخهٔ ۶ بدون داده‌های پیوست هم مهاجرت می‌کند."""
+    conn = connect(tmp_path / "v6.db")
+    from k2.storage.db import apply_migrations
+    from k2.storage.schema import MIGRATIONS
+
+    for version, script in MIGRATIONS:
+        if version > 6:
+            continue
+        conn.executescript(script)
+        conn.execute(f"PRAGMA user_version = {version}")
+        conn.commit()
+    conn.execute(
+        "INSERT INTO subject (id, name, coefficient) VALUES (1, 'شیمی', 1.0)"
+    )
+    conn.execute(
+        "INSERT INTO exam_attempt (id, name, kind, taken_at, total, correct) "
+        "VALUES (1, 'آزمون', 'mock', '2026-10-01T00:00:00', 10, 6)"
+    )
+    conn.commit()
+
+    apply_migrations(conn)
+    assert current_version(conn) == schema.SCHEMA_VERSION == 7
+    row = conn.execute(
+        "SELECT attachment_name, attachment_bytes FROM exam_attempt WHERE id = 1"
+    ).fetchone()
+    assert row["attachment_name"] == ""
+    assert row["attachment_bytes"] == 0
+    conn.close()
+
+
+def test_attach_file_is_local_and_verifiable(tmp_path, monkeypatch):
+    """پیوست محلی کپی می‌شود و با اثر انگشت قابل راستی‌آزمایی است."""
+    monkeypatch.setenv("K2_DATA_DIR", str(tmp_path / "data"))
+    from k2.domain.enums import ExamKind
+    from k2.domain.models import ExamAttempt
+    from k2.service import AdvisorService
+
+    service = AdvisorService(tmp_path / "a.db")
+    try:
+        attempt_id = service.repo.create_attempt(
+            ExamAttempt(name="آزمون", kind=ExamKind.MOCK, taken_at=None, total=10)
+        )
+        service.conn.commit()
+        source = tmp_path / "kart.png"
+        source.write_bytes(b"\x89PNG fake result card")
+        target = service.attach_file(
+            source, owner="attempt", owner_id=attempt_id, note="کارت پاسخ"
+        )
+        assert target.exists()
+        # فایل اصلی جابه‌جا یا حذف نشده است
+        assert source.exists()
+
+        stored = next(
+            a for a in service.list_attempts() if a.id == attempt_id
+        )
+        assert stored.attachment_name == "kart.png"
+        assert stored.attachment_bytes == source.stat().st_size
+        assert stored.attachment_sha256
+        assert stored.attachment_note == "کارت پاسخ"
+        status = service.attachment_status(stored.attachment_path)
+        assert status["exists"] is True and status["verified"] is True
+    finally:
+        service.close()
+
+
+def test_attach_file_rejects_missing_and_empty_files(tmp_path, monkeypatch):
+    monkeypatch.setenv("K2_DATA_DIR", str(tmp_path / "data"))
+    from k2.domain.enums import ExamKind
+    from k2.domain.models import ExamAttempt
+    from k2.service import AdvisorService
+
+    service = AdvisorService(tmp_path / "b.db")
+    try:
+        attempt_id = service.repo.create_attempt(
+            ExamAttempt(name="آزمون", kind=ExamKind.MOCK, taken_at=None, total=10)
+        )
+        service.conn.commit()
+        with pytest.raises(ValueError):
+            service.attach_file(
+                tmp_path / "nope.png", owner="attempt", owner_id=attempt_id
+            )
+        empty = tmp_path / "empty.png"
+        empty.write_bytes(b"")
+        with pytest.raises(ValueError):
+            service.attach_file(empty, owner="attempt", owner_id=attempt_id)
+    finally:
+        service.close()
+
+
+def test_learning_problem_attachment_round_trip(tmp_path, monkeypatch):
+    monkeypatch.setenv("K2_DATA_DIR", str(tmp_path / "data"))
+    from k2.domain.models import LearningProblem
+    from k2.service import AdvisorService
+
+    service = AdvisorService(tmp_path / "c.db")
+    try:
+        problem_id = service.repo.create_learning_problem(
+            LearningProblem(title="بی‌دقتی", severity=3)
+        )
+        service.conn.commit()
+        source = tmp_path / "daftar.jpg"
+        source.write_bytes(b"jpeg bytes")
+        service.attach_file(
+            source, owner="problem", owner_id=problem_id, note="عکس دفتر"
+        )
+        stored = next(
+            p for p in service.list_learning_problems() if p.id == problem_id
+        )
+        assert stored.attachment_name == "daftar.jpg"
+        assert stored.attachment_bytes == len(b"jpeg bytes")
+    finally:
+        service.close()

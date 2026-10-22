@@ -435,6 +435,13 @@ class ExamAttempt:
     raw_score: float = 0.0
     percentage: float = 0.0
     note: str = ""
+    #: پیوست نتیجهٔ آزمون (تصویر کارت پاسخ یا فایل) — فقط نگه‌داری می‌شود؛
+    #: برنامه تصویر را «نمی‌خوانَد» و اعداد را کاربر وارد می‌کند.
+    attachment_path: Optional[str] = None
+    attachment_name: str = ""
+    attachment_sha256: Optional[str] = None
+    attachment_bytes: int = 0
+    attachment_note: str = ""
 
 
 @dataclass
@@ -729,6 +736,12 @@ class LearningProblem:
     #: شدت خودگزارشی ۱..۵ — از عملکرد محاسبه نمی‌شود.
     severity: int = 3
     status: ProblemStatus = ProblemStatus.OPEN
+    #: پیوست اختیاری (عکس از دفتر، تصویر سؤال) — نگه‌داری می‌شود، خوانده
+    #: نمی‌شود؛ اعداد و توضیح را خودت وارد می‌کنی.
+    attachment_path: Optional[str] = None
+    attachment_name: str = ""
+    attachment_sha256: Optional[str] = None
+    attachment_bytes: int = 0
     first_seen: Optional[_dt.date] = None
     last_seen: Optional[_dt.date] = None
     #: تعداد دفعاتی که این مشکل در آزمون‌ها دیده شده است.

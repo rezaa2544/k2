@@ -416,3 +416,38 @@ def test_export_json_contains_every_entity_group(tmp_path, no_network):
         assert payload["study_sessions"][0]["kind"] == SessionKind.STUDY.value
     finally:
         service.close()
+
+
+def test_exam_result_attachment_works_with_network_off(tmp_path, no_network):
+    """پیوست نتیجهٔ آزمون (تصویر کارت پاسخ) کاملاً محلی کار می‌کند."""
+    service = AdvisorService(tmp_path / "att.db")
+    try:
+        _seed(service)
+        service.record_attempt(
+            name="آزمون جامع", total=20, correct=15, wrong=5, blank=0,
+            duration_minutes=30,
+        )
+        attempt = service.list_attempts()[-1]
+        card = tmp_path / "kart-pasokh.png"
+        card.write_bytes(b"PNG\x89 card image bytes")
+        target = service.attach_file(
+            card, owner="attempt", owner_id=int(attempt.id or 0),
+            note="کارت پاسخ آزمون",
+        )
+        assert target.exists()
+        stored = service.list_attempts()[-1]
+        assert stored.attachment_name == "kart-pasokh.png"
+        assert stored.attachment_sha256
+        assert stored.attachment_note == "کارت پاسخ آزمون"
+        assert service.attachment_status(stored.attachment_path)["verified"] is True
+
+        # پس از بستن و بازکردن، پیوست هنوز ثبت است
+        service.close()
+        reopened = AdvisorService(tmp_path / "att.db")
+        try:
+            again = reopened.list_attempts()[-1]
+            assert again.attachment_name == "kart-pasokh.png"
+        finally:
+            reopened.close()
+    finally:
+        service.close()

@@ -289,7 +289,17 @@ class TestsPage(QWidget):
         dialog = RecordAttemptDialog(self.service, self)
         if dialog.exec() != QDialog.Accepted:
             return
-        # دیالوگ خودش آزمون را ثبت می‌کند؛ اینجا فقط نما تازه می‌شود.
+        # دیالوگ خودش آزمون را ثبت می‌کند؛ پیوست را بعد از داشتن شناسه
+        # وصل می‌کنیم تا اعداد و منبعشان کنار هم بمانند.
+        if dialog.attachment_path and dialog.attempt_id:
+            try:
+                self.service.attach_file(
+                    dialog.attachment_path,
+                    owner="attempt",
+                    owner_id=dialog.attempt_id,
+                )
+            except ValueError as exc:
+                QMessageBox.warning(self, "پیوست نشد", str(exc))
         self.refresh()
 
     def _add_question(self) -> None:

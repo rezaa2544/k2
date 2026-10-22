@@ -984,8 +984,9 @@ class Repository:
     def create_attempt(self, attempt: ExamAttempt) -> int:
         cursor = self.conn.execute(
             "INSERT INTO exam_attempt (exam_profile_id, name, kind, taken_at, subject_id, "
-            "total, correct, wrong, blank, duration_minutes, raw_score, percentage, note) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "total, correct, wrong, blank, duration_minutes, raw_score, percentage, note, "
+            "attachment_path, attachment_name, attachment_sha256, attachment_bytes, "
+            "attachment_note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 attempt.exam_profile_id,
                 attempt.name,
@@ -1000,6 +1001,11 @@ class Repository:
                 attempt.raw_score,
                 attempt.percentage,
                 attempt.note,
+                attempt.attachment_path,
+                attempt.attachment_name,
+                attempt.attachment_sha256,
+                attempt.attachment_bytes,
+                attempt.attachment_note,
             ),
         )
         attempt.id = cursor.lastrowid
@@ -1025,9 +1031,34 @@ class Repository:
                 raw_score=row["raw_score"],
                 percentage=row["percentage"],
                 note=row["note"],
+                attachment_path=row["attachment_path"],
+                attachment_name=row["attachment_name"] or "",
+                attachment_sha256=row["attachment_sha256"],
+                attachment_bytes=row["attachment_bytes"] or 0,
+                attachment_note=row["attachment_note"] or "",
             )
             for row in rows
         ]
+
+    def update_attempt(self, attempt: ExamAttempt) -> None:
+        """به‌روزرسانی یک نوبت آزمون (برای پیوست نتیجهٔ آزمون)."""
+        if attempt.id is None:
+            raise ValueError("برای به‌روزرسانی، شناسهٔ نوبت آزمون لازم است.")
+        self.conn.execute(
+            "UPDATE exam_attempt SET attachment_path=?, attachment_name=?, "
+            "attachment_sha256=?, attachment_bytes=?, attachment_note=?, note=? "
+            "WHERE id=?",
+            (
+                attempt.attachment_path,
+                attempt.attachment_name,
+                attempt.attachment_sha256,
+                attempt.attachment_bytes,
+                attempt.attachment_note,
+                attempt.note,
+                attempt.id,
+            ),
+        )
+        self.conn.commit()
 
     def create_question(self, question: ExamQuestion) -> int:
         cursor = self.conn.execute(
@@ -1450,8 +1481,9 @@ class Repository:
         cursor = self.conn.execute(
             "INSERT INTO learning_problem (subject_id, topic_id, kind, title, "
             "description, severity, status, first_seen, last_seen, occurrences, "
-            "resolution_note, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "resolution_note, created_at, updated_at, attachment_path, "
+            "attachment_name, attachment_sha256, attachment_bytes) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 problem.subject_id,
                 problem.topic_id,
@@ -1466,6 +1498,10 @@ class Repository:
                 problem.resolution_note,
                 _datetime_str(now),
                 _datetime_str(now),
+                problem.attachment_path,
+                problem.attachment_name,
+                problem.attachment_sha256,
+                problem.attachment_bytes,
             ),
         )
         problem.id = cursor.lastrowid
@@ -1493,8 +1529,9 @@ class Repository:
         self.conn.execute(
             "UPDATE learning_problem SET subject_id = ?, topic_id = ?, kind = ?, "
             "title = ?, description = ?, severity = ?, status = ?, first_seen = ?, "
-            "last_seen = ?, occurrences = ?, resolution_note = ?, updated_at = ? "
-            "WHERE id = ?",
+            "last_seen = ?, occurrences = ?, resolution_note = ?, updated_at = ?, "
+            "attachment_path = ?, attachment_name = ?, attachment_sha256 = ?, "
+            "attachment_bytes = ? WHERE id = ?",
             (
                 problem.subject_id,
                 problem.topic_id,
@@ -1508,6 +1545,10 @@ class Repository:
                 max(0, int(problem.occurrences)),
                 problem.resolution_note,
                 _datetime_str(now),
+                problem.attachment_path,
+                problem.attachment_name,
+                problem.attachment_sha256,
+                problem.attachment_bytes,
                 problem.id,
             ),
         )
@@ -1562,6 +1603,10 @@ class Repository:
             last_seen=_parse_date(row["last_seen"]),
             occurrences=int(row["occurrences"] or 0),
             resolution_note=row["resolution_note"],
+            attachment_path=row["attachment_path"],
+            attachment_name=row["attachment_name"] or "",
+            attachment_sha256=row["attachment_sha256"],
+            attachment_bytes=row["attachment_bytes"] or 0,
             created_at=_parse_datetime(row["created_at"]),
             updated_at=_parse_datetime(row["updated_at"]),
         )
