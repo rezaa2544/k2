@@ -584,6 +584,9 @@ class TopicDeadlinePlan:
     capacity_minutes_per_day: int = 0
     required_days: float = 0.0
     available_days: int = 0
+    #: کمبود تقویمی: چند روز بیش از بازهٔ باقی‌مانده لازم است (جلوگیری از
+    #: برنامهٔ «شدنی» که فقط به‌خاطر ظرفیت بالا به نظر می‌رسد شدنی است).
+    missing_days: int = 0
     feasible: bool = True
     warnings: list[str] = field(default_factory=list)
     suggestions: list[DeadlineSuggestion] = field(default_factory=list)
@@ -604,10 +607,17 @@ class TopicDeadlinePlan:
 
     @property
     def overload_minutes(self) -> int:
-        """چقدر کار بیش از ظرفیت باقی‌مانده است (صفر = قابل اجرا)."""
-        if self.available_days <= 0:
+        """چقدر کار بیش از ظرفیت باقی‌مانده است (صفر = قابل اجرا).
+
+        دو منبع کمبود حساب می‌شود: حجم کار بیش از ظرفیت باقی‌مانده، و
+        کمبود تقویمی (پله‌ها با فاصلهٔ ایمن در بازهٔ باقی‌مانده جا نمی‌شوند).
+        """
+        if self.capacity_minutes_per_day <= 0:
             return max(0, self.total_minutes)
-        return max(0, self.total_minutes - self.available_days * self.capacity_minutes_per_day)
+        volume_shortfall = max(
+            0, self.total_minutes - self.available_days * self.capacity_minutes_per_day
+        )
+        return volume_shortfall + self.missing_days * self.capacity_minutes_per_day
 
 
 # ---------------------------------------------------------------------------

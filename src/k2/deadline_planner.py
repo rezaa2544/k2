@@ -178,6 +178,10 @@ def back_calculate(inp: DeadlineInput) -> TopicDeadlinePlan:
         # کمبود ظرفیت دیده شوند.
         effective_start = max(today, start)
         plan.available_days = max(0, (inp.consolidation_date - effective_start).days)
+        # بازهٔ تقویمیِ لازم: از شروع لازم تا مهلت تثبیت نهایی
+        plan.missing_days = max(
+            0, (inp.consolidation_date - start).days - plan.available_days
+        )
         if start < today:
             plan.feasible = False
             late_days = (today - start).days
