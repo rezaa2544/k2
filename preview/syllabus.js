@@ -571,6 +571,64 @@ function submitSylSection(form) {
   render();
 }
 
+/* ---------- ۶ب. ورود گروهی تعداد گفتارها ---------- */
+
+let sylCountsDraft = null;
+
+/**
+ * فرم گروهی تعداد گفتارها.
+ *
+ * چرا لازم است: دروسی مثل شیمی ۱۰ فصل دارند و هیچ‌کدام تعداد گفتار
+ * ثبت‌نشده‌اند. اگر کاربر مجبور باشد فصل‌به‌فصل وارد کند، عملاً هیچ‌وقت
+ * وارد نمی‌کند و برنامه روی دادهٔ خالی کار می‌کند. اینجا همهٔ فصل‌ها یک‌جا
+ * دیده می‌شوند و خالی گذاشتن یعنی «نامشخص»، نه صفر.
+ */
+function sylCountsForm(subject, grade) {
+  const chapters = syllabusChapters(subject, grade);
+  if (!chapters.length) { notify('برای این پایه فصلی ثبت نشده است'); return; }
+  sylCountsDraft = { subject, grade };
+  const rows = chapters.map((ch) => {
+    const count = chapterSectionCount(ch);
+    return `<tr><td>${ch.no}</td><td>${esc(ch.title)}</td>`
+      + `<td><input type="number" name="sec_${ch.no}" min="0" inputmode="numeric" value="${count === null ? '' : count}" placeholder="نامشخص = خالی"></td>`
+      + `<td>${count === null ? '<span class="pill warn">نامشخص</span>' : count}</td></tr>`;
+  }).join('');
+  const unknown = chapters.filter((c) => chapterSectionCount(c) === null).length;
+  dialog(`تعداد گفتارهای ${esc(subject)} · پایهٔ ${grade}`, `<form id="modalForm" data-modal-type="syl-counts">
+<p class="card-body">${unknown ? `${unknown} فصل از ${chapters.length} فصل عدد ثبت‌نشده دارند. این‌ها «نامشخص» می‌مانند و برنامه هیچ عددی حدس نمی‌زند.` : 'همهٔ فصل‌ها عدد دارند؛ اگر کتاب ۱۴۰۶ را تطبیق داده‌ای همین‌جا اصلاح کن.'}</p>
+<div class="table-wrap"><table><thead><tr><th>#</th><th>عنوان فصل</th><th>تعداد گفتار (خالی = نامشخص)</th><th>فعلی</th></tr></thead><tbody>${rows}</tbody></table></div>
+<p class="card-body">تعداد را از روی کتاب سال ۱۴۰۶ خودت بخوان. اگر مطمئن نیستی، خالی بگذار؛ «نامشخص» صادقانه‌تر از یک عدد غلط است.</p>
+<div class="modal-actions">${actionBtn('انصراف', 'close-dialog')}${actionBtn('ذخیرهٔ تعدادها', 'save-syl-counts', 'primary')}</div></form>`);
+}
+
+function submitSylCounts(form) {
+  const d = new FormData(form);
+  const { subject, grade } = sylCountsDraft;
+  const chapters = syllabusChapters(subject, grade);
+  state.syllabusEdits = state.syllabusEdits || {};
+  let entered = 0, stillUnknown = 0;
+  for (const ch of chapters) {
+    const raw = d.get(`sec_${ch.no}`);
+    const key = sylKey(subject, grade, ch.no);
+    const prev = state.syllabusEdits[key] || {};
+    if (raw === null || raw === undefined || String(raw).trim() === '') {
+      // خالی = نامشخص. اگر قبلاً تعدادی ثبت شده بود، همان می‌ماند.
+      stillUnknown += 1;
+      if (prev.sections !== undefined) {
+        state.syllabusEdits[key] = { ...prev, sections: null, confirmed: true };
+      }
+      continue;
+    }
+    state.syllabusEdits[key] = { ...prev, sections: Math.max(0, num(raw)), confirmed: true };
+    entered += 1;
+  }
+  closeDialog();
+  persist(entered
+    ? `${entered} فصل با تعداد گفتار ثبت شد${stillUnknown ? ` · ${stillUnknown} فصل نامشخص ماند` : ''}`
+    : 'هیچ تعدادی وارد نشد؛ همه «نامشخص» ماندند');
+  render();
+}
+
 /* ---------- ۱۰. نمای یکپارچهٔ سرفصل در صفحهٔ مباحث ---------- */
 
 function syllabusOverview() {
@@ -586,8 +644,11 @@ function syllabusOverview() {
     const known = chapters.filter((c) => chapterSectionCount(c) !== null);
     const totalSec = known.reduce((n, c) => n + chapterSectionCount(c), 0);
     const assessed = (state.sections ? Object.keys(state.sections) : []).filter((k) => k.startsWith(`${s.name}|${grade}|`)).length;
+    const allUnknown = chapters.length > 0 && known.length === 0;
     out += `<article class="card tone-exam"><div class="section-row"><h3 class="card-title">${esc(s.name)} · پایهٔ ${grade}</h3><span class="pill ${totalSec ? (assessed < totalSec ? 'warn' : 'ok') : 'gray'}">${totalSec ? `${assessed} از ${totalSec} گفتار ارزیابی‌شده` : 'تعداد گفتار نامشخص'}</span></div>`;
-    out += `<div class="button-row">${actionBtn('نمایش گفتارها', `syllabus-open:${esc(s.name)}:${grade}`, 'primary')} ${actionBtn('منابع این درس', `resource-subject:${esc(s.name)}`)}</div></article>`;
+    out += `<div class="button-row">${actionBtn('نمایش گفتارها', `syllabus-open:${esc(s.name)}:${grade}`, 'primary')} ${actionBtn('منابع این درس', `resource-subject:${esc(s.name)}`)}${allUnknown ? ` ${actionBtn('ورود تعداد گفتارها', `syl-counts:${esc(s.name)}:${grade}`, 'primary')}` : ''}</div>`;
+    if (allUnknown) out += `<div class="advice warning"><span class="advice-mark">!</span><span>تعداد گفتارهای این درس در اطلاعات اولیه ثبت نشده (${chapters.length} فصل، همه نامشخص). برنامه هیچ عددی حدس نمی‌زند و صفر فرض نمی‌کند؛ تا وقتی خودت از کتاب سال ۱۴۰۶ بخوانی و وارد کنی، ارزیابی گفتاربه‌گفتار برای این درس ممکن نیست.</span></div>`;
+    out += `</article>`;
   }
   return out;
 }

@@ -59,6 +59,8 @@ if(action==='topic-fields'){priorityFactorForm((state.topics||[])[0]);return;}
       if(action.startsWith('syl-add-section:')){const [,subject,grade,chapter]=action.split(':');sylAddSectionForm(subject,Number(grade),Number(chapter));return;}
       if(action==='save-syl-chapter'){submitSylChapter($('#modalForm'));return;}
       if(action==='save-syl-section'){submitSylSection($('#modalForm'));return;}
+      if(action.startsWith('syl-counts:')){const [,subject,grade]=action.split(':');sylCountsForm(subject,Number(grade));return;}
+      if(action==='save-syl-counts'){submitSylCounts($('#modalForm'));return;}
       if(action==='go-syllabus'){currentPage='topics';render();return;}
       if(action.startsWith('syllabus-open:')){const [,subject,grade]=action.split(':');syllabusOpen={subject,grade:Number(grade)};render();return;}
       if(action==='syllabus-close'){syllabusOpen=null;render();return;}
@@ -97,7 +99,12 @@ if(action.startsWith('problem-act:')){const pr=(state.problems||[]).find(x=>x.id
   topicFactor:(topic,key)=>topicFactor(topic,key),
   priorityFactorForm:(topic)=>priorityFactorForm(topic),
   submitPriorityFactors:(form)=>submitPriorityFactors(form),
-  factorValueText:(f)=>factorValueText(f)};
+  factorValueText:(f)=>factorValueText(f),
+  // سرفصل: فصل‌ها و ورود گروهی تعداد گفتارها (برای راستی‌آزمایی)
+  syllabusChapters:(subject,grade)=>syllabusChapters(subject,grade),
+  chapterSectionCount:(ch)=>chapterSectionCount(ch),
+  sylCountsForm:(subject,grade)=>sylCountsForm(subject,grade),
+  submitSylCounts:(form)=>submitSylCounts(form)};
   ensureExamSeries();
   syncExamSeries();
   render();

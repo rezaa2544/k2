@@ -1066,3 +1066,132 @@ def test_priority_factors_show_source_and_confidence(preview_js, tmp_path):
     stderr = result.stderr or ""
     assert result.returncode == 0, stdout + stderr
     assert "FAIL" not in stdout, stdout
+
+_SECTIONCOUNTS_SCRIPT = r"""
+// ===== ورود تعداد گفتارهای درس نامشخص (مورد شیمی) =====
+function g12Count() { return preview.syllabusChapters('شیمی', 12).length }
+// چرا مهم است: شیمی ۱۰ فصل دارد و هیچ‌کدام عدد ندارند. اگر برنامه صفر
+// بگذارد، کاربر فکر می‌کند ۱۰ گفتار بیشتر ندارد؛ اگر عددی حدس بزند، داده
+// جعل شده است. راه حل: «نامشخص» صریح + ورود گروهی توسط کاربر.
+
+try {
+  // شیمی در سه پایه تقسیم است؛ پایهٔ دوازدهم ۴ فصل دارد و جمع کل ۱۰ فصل.
+  const g12 = preview.syllabusChapters('شیمی', 12);
+  ok(g12.length === 4, 'شیمی پایهٔ ۱۲ چهار فصل دارد، یافت: ' + g12.length);
+  const counts = g12.map(c => preview.chapterSectionCount(c));
+  ok(counts.every(c => c === null),
+     'همهٔ فصل‌های شیمی نامشخص باشند (هیچ عدد جعلی)، یافت: ' + JSON.stringify(counts));
+  const total = ['10', '11', '12']
+    .reduce((n, g) => n + preview.syllabusChapters('شیمی', Number(g)).length, 0);
+  ok(total === 10, 'جمع فصل‌های شیمی در سه پایه ۱۰ باشد، یافت: ' + total);
+  // درسی که عدد دارد با شیمی فرق دارد
+  const bio = preview.syllabusChapters('زیست‌شناسی', 10);
+  ok(bio.length > 0 && bio.every(c => preview.chapterSectionCount(c) !== null),
+     'زیست‌شناسی عدد دارد و با شیمی یکی نیست');
+} catch (e) { failures++; console.log('FAIL chem unknown: ' + e.message) }
+
+// ۱) نمای کلی برای درس نامشخص هشدار و دکمهٔ ورود می‌دهد
+try {
+  const st0 = preview.getState();
+  st0.subjects = st0.subjects.map(s => ({ ...s, selected: true }));
+  st0.syllabusEdits = {};
+  persistSilently(st0);
+  clickNav('topics');
+  let html = pageHtml();
+  if (!html.includes('تعداد گفتار نامشخص')) {
+    // در صورت باز بودن نمای درخت، به فهرست برمی‌گردیم
+    clickAction('syllabus-close');
+    html = pageHtml();
+  }
+  ok(html.includes('تعداد گفتار نامشخص'), 'درس نامشخص با برچسب صریح دیده شود');
+  ok(html.includes('ورود تعداد گفتارها'), 'دکمهٔ ورود تعداد گفتارها موجود باشد');
+  ok(html.includes('هیچ عددی حدس نمی‌زند'), 'متن صداقت دربارهٔ حدس زدن عدد بیاید');
+  ok(html.includes('شیمی'), 'درس شیمی در فهرست باشد');
+} catch (e) { failures++; console.log('FAIL overview prompt: ' + e.message) }
+
+// ۲) ورود گروهی: عددها ذخیره می‌شوند و خالی «نامشخص» می‌ماند
+try {
+  const st0 = preview.getState();
+  st0.syllabusEdits = {};
+  persistSilently(st0);
+  // فرم گروهی باز می‌شود
+  preview.sylCountsForm('شیمی', 12);
+  const form = makeEl('form');
+  form.id = 'modalForm';
+  // کاربر ۶ فصل را وارد می‌کند و ۴ فصل را خالی می‌گذارد
+  const N = g12Count();
+  const fd = new Map();
+  for (let i = 1; i <= N; i += 1) fd.set('sec_' + i, i <= 2 ? String(i * 3) : '');
+  global.__fd = fd;
+  preview.submitSylCounts(form);
+  const st = preview.getState();
+  const edits = st.syllabusEdits || {};
+  const saved = [];
+  for (let i = 1; i <= N; i += 1) saved.push(edits[`شیمی|12|${i}`]?.sections ?? null);
+  ok(saved.slice(0, 2).every(v => v !== null), 'فصل‌های وارد‌شده عدد بگیرند، یافت: ' + JSON.stringify(saved));
+  ok(saved[0] === 3 && saved[1] === 6, 'اعداد وارد‌شده درست ذخیره شوند، یافت: ' + JSON.stringify(saved));
+  ok(saved.slice(2).every(v => v === null),
+     'فصل‌های خالی null بمانند نه صفر، یافت: ' + JSON.stringify(saved.slice(2)));
+  const after = preview.syllabusChapters('شیمی', 12).map(c => preview.chapterSectionCount(c));
+  ok(after[0] === 3 && after[2] === null, 'خواندن پس از ذخیره درست باشد، یافت: ' + JSON.stringify(after));
+  // ارزیابی گفتار برای فصل وارد‌شده ممکن است
+  const secs = after.filter(c => c !== null).reduce((n, c) => n + c, 0);
+  ok(secs > 0, 'گفتارهای فصل‌های وارد‌شده ساخته شوند: ' + secs);
+} catch (e) { failures++; console.log('FAIL counts save: ' + e.message) }
+
+// ۳) تغییر بعدی: مقدار قبلی عوض می‌شود و پاک‌کردن ممکن است
+try {
+  preview.sylCountsForm('شیمی', 12);
+  const form = makeEl('form');
+  form.id = 'modalForm';
+  const N2 = g12Count();
+  const fd = new Map();
+  for (let i = 1; i <= N2; i += 1) fd.set('sec_' + i, i === 1 ? '5' : (i <= 2 ? String(i * 3) : ''));
+  global.__fd = fd;
+  preview.submitSylCounts(form);
+  const st = preview.getState();
+  ok((st.syllabusEdits['شیمی|12|1'] || {}).sections === 5,
+     'تعداد فصل ۱ از ۲ به ۵ عوض شود، یافت: ' + (st.syllabusEdits['شیمی|12|1'] || {}).sections);
+  // اکنون همه را خالی می‌کنیم: بازگشت به نامشخص، نه صفر
+  const fd2 = new Map();
+  for (let i = 1; i <= N2; i += 1) fd2.set('sec_' + i, '');
+  global.__fd = fd2;
+  preview.submitSylCounts(form);
+  const st2 = preview.getState();
+  const cleared = [];
+  for (let i = 1; i <= N2; i += 1) cleared.push((st2.syllabusEdits[`شیمی|12|${i}`] || {}).sections ?? 'absent');
+  ok(cleared.every(v => v === null || v === 'absent'),
+     'خالی کردن همه، نامشخص شود نه صفر، یافت: ' + JSON.stringify(cleared));
+} catch (e) { failures++; console.log('FAIL counts edit: ' + e.message) }
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node برای اجرای پیش‌نمایش لازم است")
+def test_unknown_section_counts_are_entered_not_invented(preview_js, tmp_path):
+    """درس با تعداد گفتار نامشخص (شیمی) عدد جعلی نمی‌سازد و کاربر وارد می‌کند."""
+    payload = tmp_path / "preview-bundle.js"
+    payload.write_text(preview_js, encoding="utf-8")
+    syllabus_json = tmp_path / "syllabus.json"
+    import json as _json
+
+    m = re.search(r'id="syllabusData"[^>]*>(.*?)</script>', PREVIEW.read_text(encoding="utf-8"), re.S)
+    syllabus_json.write_text(m.group(1).replace("\\u003c", "<"), encoding="utf-8")
+    seed = _seed_state()
+    harness = _harness(payload, seed, syllabus_json)
+    body = Path(harness).read_text(encoding="utf-8")
+    marker = "console.log(JSON.stringify({failures}));\nprocess.exit(failures ? 1 : 0);"
+    assert marker in body, "sectioncounts harness marker"
+    body = body.replace(marker, _SECTIONCOUNTS_SCRIPT.strip() + "\n", 1)
+    Path(harness).write_text(body, encoding="utf-8")
+    result = subprocess.run(
+        [NODE, harness],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=180,
+        cwd=str(ROOT),
+    )
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    assert result.returncode == 0, stdout + stderr
+    assert "FAIL" not in stdout, stdout
