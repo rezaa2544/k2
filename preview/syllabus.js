@@ -597,3 +597,64 @@ function syllabusDetail(subject, grade) {
 }
 
 let syllabusOpen = null;
+
+/* ---------- ۱۲. کلاس‌های ثابت اولیه (نیازمند تأیید) ---------- */
+
+//: برنامهٔ هفتگی اولیه که کاربر داده است. هرجا ساعت داده نشده یا نامطمئن
+//: بوده، ``start``/``end`` تهی است تا اپ ساعت قطعی نسازد؛ کاربر خودش وارد
+//: می‌کند. ``needsConfirmation`` یعنی پیش از استفاده باید تأیید شود.
+const FIXED_CLASSES_SEED = [
+  { weekday: 0, title: 'زیست‌شناسی', start: '15:00', end: '19:00', kind: 'class' },
+  { weekday: 0, title: 'فیزیک', start: '19:30', end: '22:45', kind: 'class' },
+  { weekday: 1, title: 'شیمی', start: '15:00', end: '19:00', kind: 'class' },
+  { weekday: 1, title: 'دینی و زبان', start: null, end: null, kind: 'class',
+    note: 'ساعت طبق تصمیم نهاییٔ کاربر — نامشخص' },
+  { weekday: 2, title: 'ریاضی', start: '19:30', end: '23:00', kind: 'class' },
+  { weekday: 2, title: 'زمین‌شناسی', start: null, end: null, kind: 'class',
+    note: 'حدود دو ساعت — ساعت نامشخص' },
+  { weekday: 3, title: 'زیست‌شناسی', start: '15:00', end: '19:00', kind: 'class' },
+  { weekday: 3, title: 'عربی', start: '19:15', end: '21:15', kind: 'class' },
+  { weekday: 4, title: 'فیزیک', start: '15:00', end: '19:15', kind: 'class' },
+  { weekday: 4, title: 'شیمی', start: '19:30', end: '22:45', kind: 'class' },
+  { weekday: 5, title: 'فارسی', start: '13:15', end: '14:45', kind: 'class' },
+  { weekday: 5, title: 'هویت اجتماعی', start: '15:00', end: '16:30', kind: 'class' },
+  { weekday: 6, title: 'ریاضی', start: '12:00', end: '15:00', kind: 'class' },
+  { weekday: 6, title: 'سلامت و بهداشت', start: null, end: null, kind: 'class',
+    note: 'حدود دو ساعت — ساعت نامشخص' },
+];
+
+/** کلاس‌های ثابت اولیه را با علامت «نیازمند تأیید» اضافه می‌کند. */
+function seedFixedClasses() {
+  state.events = state.events || [];
+  let added = 0;
+  for (const c of FIXED_CLASSES_SEED) {
+    const dup = state.events.some((e) => e.title === c.title && Number(e.weekday) === c.weekday);
+    if (dup) continue;
+    state.events.push({
+      id: id(), title: c.title, kind: c.kind, weekday: c.weekday,
+      start: c.start, end: c.end, recorded: false,
+      subjectId: '', subjectName: c.title,
+      note: c.note || 'ساعت اولیهٔ اعلام‌شده؛ پیش از استفاده تأیید کنید',
+      fromSeed: true, needsConfirmation: true,
+    });
+    added += 1;
+  }
+  persist(added
+    ? `${added} کلاس با علامت «نیازمند تأیید» اضافه شد`
+    : 'همهٔ کلاس‌های اولیه از قبل ثبت شده‌اند');
+  render();
+}
+
+/** برچسب وضعیت تأیید یک رویداد. */
+function eventConfirmBadge(e) {
+  if (!e.needsConfirmation) return '';
+  const unknownTime = !e.start || !e.end;
+  return `<span class="pill warn">${unknownTime ? 'ساعت نامشخص · نیازمند تأیید' : 'نیازمند تأیید'}</span>`;
+}
+
+/** هشدار کلاس‌های ساعت‌نامشخص: تا وارد نشوند اشغال‌شده شمرده نمی‌شوند. */
+function unknownClassNote() {
+  const unknown = (state.events || []).filter((e) => e.needsConfirmation && (!e.start || !e.end));
+  if (!unknown.length) return '';
+  return `<div class="advice warning"><span class="advice-mark">!</span><span>${unknown.length} کلاس «ساعت نامشخص» دارد. تا وارد نکنی، در برنامه اشغال‌شده شمرده نمی‌شود؛ ساعت قطعی از خودت ساخته نشده است.</span></div>`;
+}

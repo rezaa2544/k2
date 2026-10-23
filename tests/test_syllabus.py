@@ -358,3 +358,177 @@ def test_syllabus_data_is_structured_and_honest():
     assert data["courses"]["زیست‌شناسی"]["10"][0]["title"] == "دنیای زنده"
     # شیمی: تعداد گفتار نامشخص است و عدد ساخته نشده
     assert data["courses"]["شیمی"]["10"][0]["sections"] is None
+
+
+# ---------------------------------------------------------------------------
+# قواعد زمان‌بندی و کلاس‌های ثابت اولیه
+# ---------------------------------------------------------------------------
+#
+# این آزمون‌ها روی ساختار برنامه قضاوت می‌کنند (getPlan) نه روی متن رندرشده؛
+# چون متن شامل بلوک‌های غذا و تعهد هم می‌شود و مقایسهٔ آن‌ها با بلوک‌های
+# مطالعه معنای درستی ندارد.
+
+_PLAN_SCRIPT = r"""
+// کمکی‌های لازم برای تزریق state
+function persistSilently(st){ preview.setState(st); }
+function weekdayNow(){ return ((new Date().getDay()+1)%7) }
+const BASE_ACT = (id, title, subject, minutes) => ({ id, title, type: 'study',
+  subjectName: subject, estimate: minutes, remaining: minutes, minChunk: 20,
+  maxChunk: 90, splittable: true, state: 'open' });
+
+// ---- الف) مطالعه پیش از ساعت ۹ صبح شروع نمی‌شود ----
+try {
+  const st0 = preview.getState();
+  st0.settings.wake = '06:00';
+  st0.settings.studyStart = '09:00';
+  st0.activities = [BASE_ACT('a1', 'مطالعهٔ زیست', 'زیست‌شناسی', 120)];
+  st0.events = [];
+  persistSilently(st0);
+  const plan = preview.getPlan();
+  const before9 = plan.placements.filter(p => p.start < 9 * 60);
+  ok(before9.length === 0, 'هیچ بلوکی پیش از ساعت ۹ صبح برنامه‌ریزی نشود، یافت: '
+     + JSON.stringify(before9.map(p => p.start)));
+  ok(plan.placements.length > 0, 'باید حداقل یک بلوک برنامه‌ریزی شود');
+} catch (e) { failures++; console.log('FAIL 9am rule: ' + e.message) }
+
+// ---- ب) بین بلوک‌های مطالعه یکسان حداقل ۱۵ دقیقه استراحت است ----
+try {
+  const st0 = preview.getState();
+  st0.settings.breakMinutes = 15;
+  st0.activities = [
+    BASE_ACT('b1', 'کار یک', 'زیست‌شناسی', 90),
+    BASE_ACT('b2', 'کار دو', 'شیمی', 90),
+  ];
+  st0.events = [];
+  persistSilently(st0);
+  const plan = preview.getPlan();
+  const sorted = [...plan.placements].sort((a, b) => a.start - b.start);
+  let bad = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const gap = sorted[i].start - sorted[i-1].end;
+    if (gap < 15) bad.push({ gap, after: sorted[i].title });
+  }
+  ok(bad.length === 0, 'بین بلوک‌های مطالعه حداقل ۱۵ دقیقه استراحت باشد، یافت: ' + JSON.stringify(bad));
+  ok(sorted.length >= 2, 'باید دو بلوک برنامه‌ریزی شود');
+} catch (e) { failures++; console.log('FAIL break rule: ' + e.message) }
+
+// ---- ج) وعدهٔ غذا اشغال‌شده است و بلوک مطالعه روی آن نمی‌افتد ----
+try {
+  const st0 = preview.getState();
+  st0.activities = [BASE_ACT('m1', 'مطالعهٔ شیمی', 'شیمی', 300)];
+  st0.events = [];
+  persistSilently(st0);
+  const plan = preview.getPlan();
+  const lunch = plan.blocks.find(b => b.title === 'ناهار');
+  ok(!!lunch, 'بلوک ناهار باید در برنامه دیده شود');
+  if (lunch) {
+    const overlap = plan.placements.filter(p => p.start < lunch.end && p.end > lunch.start);
+    ok(overlap.length === 0, 'هیچ بلوک مطالعه روی وعدهٔ غذا نیفتد، یافت: ' + overlap.length);
+  }
+} catch (e) { failures++; console.log('FAIL meal rule: ' + e.message) }
+
+// ---- د) خواب کمتر از هدف، هشدار می‌دهد ----
+try {
+  const st0 = preview.getState();
+  st0.settings.wake = '05:00';
+  st0.settings.sleep = '23:30';   // ۵ ساعت و نیم — کمتر از هدف ۸ ساعت
+  st0.settings.sleepTargetMinutes = 480;
+  st0.activities = [BASE_ACT('s1', 'کار', 'شیمی', 60)];
+  st0.events = [];
+  persistSilently(st0);
+  const plan = preview.getPlan();
+  ok(plan.sleepWarning === true, 'خواب کمتر از هدف باید هشدار بدهد');
+  ok(plan.sleepMinutes < 480, 'مدت خواب باید کمتر از هدف باشد، یافت: ' + plan.sleepMinutes);
+} catch (e) { failures++; console.log('FAIL sleep warning: ' + e.message) }
+
+// ---- ه) کلاس‌های ثابت اولیه با علامت «نیازمند تأیید» ----
+try {
+  clickAction('seed-classes');
+  const st = preview.getState();
+  const seeded = (st.events || []).filter(e => e.fromSeed);
+  ok(seeded.length === 14, 'هر ۱۴ کلاس اولیه اضافه شود، یافت: ' + seeded.length);
+  const unknown = seeded.filter(e => !e.start || !e.end);
+  ok(unknown.length === 3, 'سه کلاس با ساعت نامشخص، یافت: ' + unknown.length);
+  ok(unknown.every(e => e.needsConfirmation === true), 'کلاس نامشخص باید «نیازمند تأیید» باشد');
+  ok(seeded.every(e => e.needsConfirmation === true), 'همهٔ کلاس‌های اولیه نیازمند تأییدند');
+  ok(seeded.every(e => e.fromSeed === true), 'کلاس‌های اولیه باید قابل تشخیص باشند');
+} catch (e) { failures++; console.log('FAIL seed classes: ' + e.message) }
+
+// ---- و) کلاس ساعت‌نامشخص ظرفیت را اشغال نمی‌کند ----
+try {
+  const st0 = preview.getState();
+  st0.events = [{ id: 'u1', title: 'دینی و زبان', kind: 'class', weekday: weekdayNow(),
+    start: null, end: null, needsConfirmation: true, fromSeed: true }];
+  st0.activities = [BASE_ACT('u2', 'مطالعهٔ ریاضی', 'ریاضی', 240)];
+  persistSilently(st0);
+  const plan = preview.getPlan();
+  const busy = plan.blocks.find(b => b.title === 'دینی و زبان');
+  ok(!busy, 'کلاس ساعت‌نامشخص نباید به‌عنوان بلوک اشغال‌شده دربیاید');
+  ok(plan.placements.length > 0, 'برنامه باید فضای آزاد را پر کند');
+} catch (e) { failures++; console.log('FAIL unknown-time class: ' + e.message) }
+
+// ---- ز) کلاس زمان‌دار ظرفیت را اشغال می‌کند ----
+try {
+  const st0 = preview.getState();
+  st0.events = [{ id: 'k1', title: 'زیست‌شناسی', kind: 'class', weekday: weekdayNow(),
+    start: '09:00', end: '12:00', needsConfirmation: true, fromSeed: true }];
+  st0.activities = [BASE_ACT('k2', 'مطالعهٔ زیست', 'زیست‌شناسی', 180)];
+  persistSilently(st0);
+  const plan = preview.getPlan();
+  const cls = plan.blocks.find(b => b.title === 'زیست‌شناسی');
+  ok(!!cls, 'کلاس زمان‌دار باید در بلوک‌های اشغال‌شده بیاید');
+  const overlap = plan.placements.filter(p => p.start < 12 * 60 && p.end > 9 * 60);
+  ok(overlap.length === 0, 'بلوک مطالعه نباید روی کلاس بیفتد، یافت: ' + overlap.length);
+} catch (e) { failures++; console.log('FAIL occupied class: ' + e.message) }
+
+// ---- ح) هیچ کاری بی‌صدا حذف نمی‌شود ----
+try {
+  const st0 = preview.getState();
+  st0.events = [{ id: 'h1', title: 'کلاس سنگین', kind: 'class', weekday: weekdayNow(),
+    start: '09:00', end: '23:00', recorded: false }];
+  st0.activities = [BASE_ACT('h2', 'کار جا‌نشده', 'شیمی', 180)];
+  persistSilently(st0);
+  const plan = preview.getPlan();
+  const st = preview.getState();
+  ok(st.activities.length === 1, 'فعالیت از state حذف نشود');
+  ok(plan.unplaced.length === 1, 'کار جا‌نشده باید گزارش شود، یافت: ' + plan.unplaced.length);
+  ok(plan.unplaced[0].title === 'کار جا‌نشده', 'عنوان کار جا‌نشده درست باشد');
+  ok(/کافی نماند/.test(plan.unplaced[0].reason), 'دلیل جا‌نشدن باید توضیح بدهد: ' + plan.unplaced[0].reason);
+} catch (e) { failures++; console.log('FAIL no silent drop: ' + e.message) }
+
+console.log(JSON.stringify({failures}));
+process.exit(failures ? 1 : 0);
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node برای اجرای پیش‌نمایش لازم است")
+def test_scheduling_rules_and_fixed_classes(preview_js, tmp_path):
+    """قواعد زمان‌بندی واقعاً رعایت می‌شوند و کاری بی‌صدا حذف نمی‌شود."""
+    payload = tmp_path / "preview-bundle.js"
+    payload.write_text(preview_js, encoding="utf-8")
+    import json as _json
+
+    m = re.search(r'id="syllabusData"[^>]*>(.*?)</script>', PREVIEW.read_text(encoding="utf-8"), re.S)
+    syllabus_json = tmp_path / "syllabus.json"
+    syllabus_json.write_text(m.group(1).replace("\\u003c", "<"), encoding="utf-8")
+    seed = _seed_state()
+    seed["settings"]["studyStart"] = "09:00"
+    seed["settings"]["breakMinutes"] = 15
+    harness = _harness(payload, seed, syllabus_json)
+    body = Path(harness).read_text(encoding="utf-8")
+    marker = "console.log(JSON.stringify({failures}));\nprocess.exit(failures ? 1 : 0);"
+    assert marker in body, "plan harness marker"
+    body = body.replace(marker, _PLAN_SCRIPT.strip() + "\n", 1)
+    Path(harness).write_text(body, encoding="utf-8")
+    result = subprocess.run(
+        [NODE, harness],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=180,
+        cwd=str(ROOT),
+    )
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    assert result.returncode == 0, stdout + stderr
+    assert "FAIL" not in stdout, stdout
