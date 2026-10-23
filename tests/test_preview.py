@@ -150,7 +150,7 @@ def test_preview_javascript_parses_when_node_is_available(tmp_path: Path):
         return
     combined = tmp_path / "preview.js"
     combined.write_text(
-        "\n".join((ROOT / "preview" / name).read_text(encoding="utf-8") for name in ("core.js", "syllabus.js", "backlog.js", "examseries.js", "forms.js", "app.js")),
+        "\n".join((ROOT / "preview" / name).read_text(encoding="utf-8") for name in ("core.js", "syllabus.js", "backlog.js", "examseries.js", "priority.js", "forms.js", "app.js")),
         encoding="utf-8",
     )
     subprocess.run(

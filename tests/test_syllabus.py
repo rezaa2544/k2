@@ -21,7 +21,7 @@ PREVIEW = PREVIEW_DIR / "K2-preview.html"
 
 NODE = shutil.which("node") or shutil.which("nodejs")
 
-JS_FILES = ("core.js", "syllabus.js", "backlog.js", "examseries.js", "forms.js", "app.js")
+JS_FILES = ("core.js", "syllabus.js", "backlog.js", "examseries.js", "priority.js", "forms.js", "app.js")
 
 
 @pytest.fixture(scope="module")
@@ -900,6 +900,159 @@ def test_comprehensive_exam_series_recurs_and_splits_analysis(preview_js, tmp_pa
     marker = "console.log(JSON.stringify({failures}));\nprocess.exit(failures ? 1 : 0);"
     assert marker in body, "examseries harness marker"
     body = body.replace(marker, _EXAMSERIES_SCRIPT.strip() + "\n", 1)
+    Path(harness).write_text(body, encoding="utf-8")
+    result = subprocess.run(
+        [NODE, harness],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=180,
+        cwd=str(ROOT),
+    )
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    assert result.returncode == 0, stdout + stderr
+    assert "FAIL" not in stdout, stdout
+
+_PRIORITY_SCRIPT = r"""
+// ===== منبع و اطمینان در اولویت‌بندی =====
+// قاعدهٔ مرکزی: عدد وارد‌نشده «نامشخص» است، نه صفر. صفر یک ادعاست.
+
+// ۱) مقدار نامشخص هرگز صفر نمایش داده نمی‌شود
+try {
+  const bare = { id: 't1', name: 'سلول', subjectName: 'زیست‌شناسی', stages: { konkur: 0, final: 0 } };
+  const f = preview.topicFactor(bare, 'prerequisiteShare');
+  ok(f.known === false, 'فاکتور وارد‌نشده نامشخص باشد');
+  ok(f.value === null, 'مقدار نامشخص null بماند، نه ۰؛ یافت: ' + f.value);
+  ok(f.source === 'unknown', 'منبع نامشخص «بدون منبع» باشد، یافت: ' + f.source);
+  ok(f.confidence === 'none', 'اطمینان نامشخص «بدون اطمینان» باشد');
+  ok(preview.factorValueText(f) === 'نامشخص', 'متن نمایشی «نامشخص» باشد، یافت: ' + preview.factorValueText(f));
+  // صفرِ صریح با نامشخص یکی نیست
+  const zero = preview.topicFactor({ ...bare, prerequisiteShare: 0 }, 'prerequisiteShare');
+  ok(zero.known === true && zero.value === 0, 'صفرِ وارد‌شده با نامشخص تفاوت داشته باشد');
+  ok(preview.factorValueText(zero) === '0.0', 'صفرِ صریح «۰٫۰» نمایش داده شود');
+} catch (e) { failures++; console.log('FAIL unknown factor: ' + e.message) }
+
+// ۲) منبع‌ها از هم قابل تشخیص‌اند
+try {
+  const base = { id: 't2', name: 'ژنتیک', subjectName: 'زیست‌شناسی', stages: { konkur: 0, final: 0 } };
+  const mk = (source, confidence) => ({
+    ...base,
+    prerequisiteShare: 0.7,
+    factorMeta: { prerequisiteShare: { source, confidence, overridden: false } }
+  });
+  const off = preview.topicFactor(mk('official', 'high'), 'prerequisiteShare');
+  const his = preview.topicFactor(mk('historical', 'medium'), 'prerequisiteShare');
+  const alg = preview.topicFactor(mk('algorithmic', 'medium'), 'prerequisiteShare');
+  const per = preview.topicFactor(mk('personal', 'low'), 'prerequisiteShare');
+  ok(off.source !== his.source && his.source !== alg.source && alg.source !== per.source,
+     'چهار منبع رسمی/سوابق/محاسباتی/نظر شخصی متمایز باشند');
+  ok(off.confidence === 'high' && his.confidence === 'medium' && per.confidence === 'low',
+     'سطوح اطمینان جدا از منبع ثبت شوند');
+  ok(preview.factorValueText(off) === '0.7', 'مقدار وارد‌شده نمایش داده شود');
+  // بازنویسی علامت می‌خورد
+  const ov = preview.topicFactor({ ...mk('official', 'high'), factorMeta: { prerequisiteShare: { source: 'official', confidence: 'high', overridden: true } } }, 'prerequisiteShare');
+  ok(ov.overridden === true, 'بازنویسی کاربر ثبت شود');
+} catch (e) { failures++; console.log('FAIL source distinguish: ' + e.message) }
+
+// ۳) صفحهٔ بانک دروس منبع و اطمینان را نشان می‌دهد و صفرِ جعلی نمی‌سازد
+try {
+  const st0 = preview.getState();
+  st0.topics = [
+    { id: 't3', name: 'مبحث بدون فاکتور', subjectName: 'زیست‌شناسی', stages: { konkur: 0, final: 0 } },
+    { id: 't4', name: 'مبحث با منبع رسمی', subjectName: 'زیست‌شناسی', stages: { konkur: 0, final: 0 },
+      prerequisiteShare: 0.7, finalExamShare: 0.4,
+      factorMeta: { prerequisiteShare: { source: 'official', confidence: 'high', overridden: false },
+                    finalExamShare: { source: 'personal', confidence: 'low', overridden: false } } }
+  ];
+  persistSilently(st0);
+  clickNav('courses');
+  const html = pageHtml();
+  ok(html.includes('منبع و اطمینان'), 'ستون منبع و اطمینان در جدول باشد');
+  ok(html.includes('اطلاعیه رسمی'), 'برچسب منبع رسمی دیده شود');
+  ok(html.includes('نظر یا برآورد خودت'), 'برچسب نظر شخصی دیده شود');
+  ok(html.includes('اطمینان بالا'), 'سطح اطمینان دیده شود');
+  ok(html.includes('نامشخص'), 'مقدار نامشخص صریحاً گفته شود');
+  ok(html.includes('منبع هر عدد کجا می‌آید؟'), 'کارت توضیح منبع‌ها باشد');
+  // مبحث بدون فاکتور نباید «۰٫۰» بگیرد
+  const rowStart = html.indexOf('مبحث بدون فاکتور');
+  const rowEnd = html.indexOf('</tr>', rowStart);
+  const row = html.slice(rowStart, rowEnd);
+  ok(row.includes('نامشخص'), 'سطر مبحث بدون فاکتور «نامشخص» داشته باشد');
+  ok(!/0\.0/.test(row), 'سطر مبحث بدون فاکتور صفرِ جعلی نگیرد؛ سطر: ' + row.replace(/<[^>]*>/g, ' '));
+} catch (e) { failures++; console.log('FAIL courses page: ' + e.message) }
+
+// ۴) ذخیرهٔ فاکتورها: خالی = نامشخص، پر = با منبع و اطمینان
+try {
+  const st0 = preview.getState();
+  st0.topics = [{ id: 't5', name: 'فتوسنتز', subjectName: 'زیست‌شناسی', stages: { konkur: 0, final: 0 } }];
+  persistSilently(st0);
+  const form = makeEl('form');
+  form.id = 'modalForm';
+  form.dataset.modalType = 'priorityFactors';
+  global.__fd = new Map([
+    ['topicId', 't5'],
+    ['val_estimatedMinutes', ''],       // خالی = نامشخص
+    ['src_estimatedMinutes', 'unknown'],
+    ['conf_estimatedMinutes', 'none'],
+    ['val_prerequisiteShare', '0.6'],
+    ['src_prerequisiteShare', 'historical'],
+    ['conf_prerequisiteShare', 'medium'],
+    ['val_finalExamShare', ''],
+    ['src_finalExamShare', 'unknown'],
+    ['conf_finalExamShare', 'none']
+  ]);
+  preview.submitPriorityFactors(form);
+  const st = preview.getState();
+  const t = st.topics.find(x => x.id === 't5');
+  ok(t.prerequisiteShare === 0.6, 'مقدار وارد‌شده ذخیره شود، یافت: ' + t.prerequisiteShare);
+  ok(t.factorMeta.prerequisiteShare.source === 'historical', 'منبع ذخیره شود');
+  ok(t.factorMeta.prerequisiteShare.confidence === 'medium', 'اطمینان ذخیره شود');
+  ok(t.estimatedMinutes === null, 'مقدار خالی null شود نه صفر، یافت: ' + t.estimatedMinutes);
+  ok(t.finalExamShare === null, 'سهم خالی null شود، یافت: ' + t.finalExamShare);
+  ok(preview.topicFactor(t, 'estimatedMinutes').known === false, 'خالی همچنان نامشخص بماند');
+
+  // بازنویسی: عوض کردن مقدار، پرچم بازنویسی را می‌سازد
+  global.__fd = new Map([
+    ['topicId', 't5'],
+    ['val_estimatedMinutes', '90'],
+    ['src_estimatedMinutes', 'personal'],
+    ['conf_estimatedMinutes', 'medium'],
+    ['val_prerequisiteShare', '0.3'],   // از ۰٫۶ به ۰٫۳ عوض شد
+    ['src_prerequisiteShare', 'personal'],
+    ['conf_prerequisiteShare', 'low'],
+    ['val_finalExamShare', '0.5'],
+    ['src_finalExamShare', 'algorithmic'],
+    ['conf_finalExamShare', 'medium']
+  ]);
+  preview.submitPriorityFactors(form);
+  const st2 = preview.getState();
+  const t2 = st2.topics.find(x => x.id === 't5');
+  ok(t2.estimatedMinutes === 90, 'مقدار تازه ذخیره شود');
+  ok(t2.factorMeta.prerequisiteShare.overridden === true,
+     'تغییر مقدار از ۰٫۶ به ۰٫۳ بازنویسی شمرده شود');
+  ok(t2.factorMeta.finalExamShare.overridden === false,
+     'پر کردن مقدار نامشخص بازنویسی نیست، یافت: ' + t2.factorMeta.finalExamShare.overridden);
+} catch (e) { failures++; console.log('FAIL priority save: ' + e.message) }
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node برای اجرای پیش‌نمایش لازم است")
+def test_priority_factors_show_source_and_confidence(preview_js, tmp_path):
+    """اولویت‌بندی منبع و اطمینان هر عدد را نشان می‌دهد و صفر جعلی نمی‌سازد."""
+    payload = tmp_path / "preview-bundle.js"
+    payload.write_text(preview_js, encoding="utf-8")
+    syllabus_json = tmp_path / "syllabus.json"
+    import json as _json
+
+    m = re.search(r'id="syllabusData"[^>]*>(.*?)</script>', PREVIEW.read_text(encoding="utf-8"), re.S)
+    syllabus_json.write_text(m.group(1).replace("\\u003c", "<"), encoding="utf-8")
+    seed = _seed_state()
+    harness = _harness(payload, seed, syllabus_json)
+    body = Path(harness).read_text(encoding="utf-8")
+    marker = "console.log(JSON.stringify({failures}));\nprocess.exit(failures ? 1 : 0);"
+    assert marker in body, "priority harness marker"
+    body = body.replace(marker, _PRIORITY_SCRIPT.strip() + "\n", 1)
     Path(harness).write_text(body, encoding="utf-8")
     result = subprocess.run(
         [NODE, harness],
