@@ -687,6 +687,17 @@ const ASSESS_QUESTIONS = [
       ['unknown', 'نمی‌دانم / نیاز به ارزیابی'],
     ],
   },
+  {
+    key: 'speed', title: 'سؤال ۸ از ۸ · سرعت پاسخ‌دهی زمان‌دار',
+    hint: 'مهارت در شرایط زمان‌دار؛ جدا از درست یا غلط بودن',
+    options: [
+      ['slow', 'درست حل می‌کنم ولی زمان زیادی می‌برد'],
+      ['partial_time', 'بعضی سؤال‌ها را در زمان لازم حل می‌کنم'],
+      ['timed_ok', 'در زمان لازم پاسخ می‌دهم'],
+      ['panic', 'زمان‌دار بودن استرس می‌سازد و کار را خراب می‌کند'],
+      ['unknown', 'نمی‌دانم / نیاز به ارزیابی'],
+    ],
+  },
 ];
 
 /* ---------- ۲. نگاشت پاسخ به نوع عقب‌افتادگی ---------- */
@@ -699,6 +710,9 @@ const ASSESS_TO_BACKLOG = [
   ['testing', ['not_tested', 'few', 'enough_errors', 'retake'], 'testing', 'تست‌نزدن'],
   ['analysis', ['not_analyzed', 'partial', 'known_not_fixed'], 'analysis', 'تحلیل‌نکردن آزمون'],
   ['essay', ['not_done', 'flawed'], 'essay', 'تمرین تشریحی انجام‌نشده'],
+  // «درست ولی کند» و «استرس زمان‌دار» نیاز واقعی‌اند و به تست زمان‌دار می‌روند؛
+  // «زمان کافی دارم» عمداً فهرست نشده چون چیزی برای جبران ندارد.
+  ['speed', ['slow', 'partial_time', 'panic'], 'testing', 'تمرین زمان‌دار ناکافی'],
 ];
 
 /* ---------- ۳. ابزارهای کلید و وضعیت ---------- */
@@ -854,15 +868,14 @@ function assessSave(closeAfter = true) {
   const key = secKey(d.subject, d.grade, d.chapter, d.section);
   state.sections = state.sections || {};
   const prev = state.sections[key] || {};
+  // پاسخ‌ها از خودِ فهرست سؤال‌ها ساخته می‌شوند، نه از فهرست دستی کلیدها.
+  // چرا: پیش‌تر هر سؤال تازه در سه جا باید ثبت می‌شد و اگر جا می‌ماند،
+  // بی‌صدا ذخیره نمی‌شد — کاربر پاسخ می‌داد و هیچ اتفاقی نمی‌افتاد.
+  const answers = Object.fromEntries(
+    ASSESS_QUESTIONS.map(q => [q.key, d.answers[q.key] ?? null]));
   state.sections[key] = {
     ...prev,
-    teaching: d.answers.teaching ?? null,
-    study: d.answers.study ?? null,
-    comprehension: d.answers.comprehension ?? null,
-    consolidation: d.answers.consolidation ?? null,
-    testing: d.answers.testing ?? null,
-    analysis: d.answers.analysis ?? null,
-    essay: d.answers.essay ?? null,
+    ...answers,
     mastery: d.masteryUnknown ? null : d.mastery,
     pagesTotal: d.pagesTotal === null || d.pagesTotal === undefined ? null : num(d.pagesTotal),
     pagesDone: d.pagesDone === null || d.pagesDone === undefined ? null : num(d.pagesDone),

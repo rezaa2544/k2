@@ -164,9 +164,13 @@ try {
 // ---- ج) هشت سؤال ارزیابی، مستقل ذخیره می‌شوند ----
 try {
   clickAction('assess:زیست‌شناسی:10:1:1');
-  const steps = ['teaching','study','comprehension','consolidation','testing','analysis','essay'];
+  // هشت سؤال؛ هر کدام با کلید خودش پاسخ داده می‌شود
+  const steps = ['teaching','study','comprehension','consolidation','testing','analysis','essay','speed'];
   const picks = { teaching:'taught', study:'started', comprehension:'partial',
-    consolidation:'initial', testing:'not_tested', analysis:'not_analyzed', essay:'not_done' };
+    consolidation:'initial', testing:'not_tested', analysis:'not_analyzed',
+    essay:'not_done', speed:'slow' };
+  ok(steps.length === 8, 'ارزیابی باید هشت سؤال داشته باشد، یافت: ' + steps.length);
+  ok(steps[7] === 'speed', 'سؤال هشتم سرعت پاسخ‌دهی زمان‌دار است');
   for (let i = 0; i < steps.length; i++) {
     global.__fd = new Map();
     clickAction('assess-pick:' + steps[i] + ':' + picks[steps[i]]);
@@ -183,6 +187,9 @@ try {
     ok(rec.testing === 'not_tested', 'پاسخ تست‌زنی باید مستقل ذخیره شود');
     ok(rec.mastery === null, 'اگر کاربر مطمئن نیست، تسلط null می‌ماند (عدد ساخته نمی‌شود)');
     ok(rec.updatedAt, 'زمان به‌روزرسانی ثبت می‌شود');
+    ok(rec.speed === 'slow', 'پاسخ سؤال ۸ (سرعت) باید مستقل ذخیره شود، یافت: ' + rec.speed);
+    ok(Object.keys(rec).filter(k => steps.includes(k)).length === 8,
+       'هر هشت پاسخ ذخیره شوند، یافت: ' + Object.keys(rec).filter(k => steps.includes(k)).length);
   }
 } catch (e) { failures++; console.log('FAIL assessment: ' + e.message) }
 
