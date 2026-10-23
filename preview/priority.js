@@ -98,7 +98,7 @@
       }[k];
       return `<tr><td>${esc(PRIORITY_SOURCES[k])}</td><td>${esc(desc)}</td></tr>`;
     }).join('');
-    return `<article class="card tone-study"><div class="section-row"><h3 class="card-title">منبع هر عدد کجا می‌آید؟</h3>${actionBtn('فاکتورهای اولویت', 'topic-fields')}</div><p class="card-body">هر عدد اولویت دو برچسب جدا دارد: <strong>منبع</strong> و <strong>اطمینان</strong>. منبع رسمی به‌تنهایی اطمینان بالا نیست؛ اطمینان یعنی چقدر به این عدد برای سال آزمون خودت اعتماد داری. عدد وارد‌نشده «نامشخص» می‌ماند و هرگز به صفر تبدیل نمی‌شود، چون صفر یک ادعاست.</p><div class="table-wrap"><table><thead><tr><th>منبع</th><th>معنا</th></tr></thead><tbody>${rows}</tbody></table></div><div class="advice"><span class="advice-mark">i</span><span>اگر عددی را خودت عوض کردی، برچسب «بازنویسی‌شده» می‌خورد تا در گزارش بعدی مشخص باشد چه چیزی از منبع آمده و چه چیزی نظر توست.</span></div></article>`;
+    return `<article class="card tone-study"><div class="section-row"><h3 class="card-title">منبع هر عدد کجا می‌آید؟</h3>${actionBtn('فاکتورهای اولویت', 'topic-fields')}</div><p class="card-body">هر عدد اولویت دو برچسب جدا دارد: <strong>منبع</strong> و <strong>اطمینان</strong>. منبع رسمی به‌تنهایی اطمینان بالا نیست؛ اطمینان یعنی چقدر به این عدد برای سال آزمون خودت اعتماد داری. عدد وارد‌نشده «نامشخص» می‌ماند و هرگز به صفر تبدیل نمی‌شود، چون صفر یک ادعاست.</p><div class="table-wrap"><table><thead><tr><th>منبع</th><th>معنا</th></tr></thead><tbody>${rows}</tbody></table></div><div class="advice"><span class="advice-mark">i</span><span>اگر عددی را خودت عوض کردی، برچسب «بازنویسی‌شده» می‌خورد تا در گزارش بعدی مشخص باشد چه چیزی از منبع آمده و چه چیزی نظر توست.</span></div><div class="advice"><span class="advice-mark">i</span><span>ترتیب ترجیحی درس‌ها (ترتیب دلخواه تو) یک <strong>پاداش کوچک</strong> است، حداکثر ${PREFERENCE_MAX_BONUS} واحد و فقط وقتی که دست‌کم دو درس ترتیب داشته باشند. مهلت سخت (+۲) و کار ناقص (+۱) بزرگ‌ترند، پس شاهد واقعی می‌تواند بر ترجیح تو پیشی بگیرد. ترجیح راهنماست، نه قانون.</span></div></article>`;
   }
 
   function priorityFactorForm(topic) {
@@ -149,4 +149,62 @@
     }
     closeDialog();
     saveAndRender('فاکتورهای اولویت با منبع و اطمینان ذخیره شد');
+  }
+
+  /**
+   * ترتیب ترجیحی درس‌ها.
+   *
+   * چرا لازم است: کاربر ترجیح خودش را می‌داند (مثلاً زیست پیش از شیمی پیش
+   * از ریاضی). این ترجیح باید در اولویت‌بندی اثر بگذارد، ولی «ترجیح» است
+   * نه «قانون»: مهلت سخت، کار ناقص و فوریت واقعی باید بتوانند بر آن پیشی
+   * بگیرند. پس اثر آن یک پاداش کوچک و متناسب با رتبه است، نه یک ضریب
+   * قدرتمند — و در توضیح اولویت هم همین گفته می‌شود.
+   */
+  const PREFERENCE_MAX_BONUS = 0.6;
+
+  function subjectPreferenceRank(subjectId) {
+    const order = (state.settings && state.settings.subjectOrder) || [];
+    const i = order.findIndex(x => x === subjectId);
+    return i < 0 ? null : i;
+  }
+
+  /** پاداش ترجیح: از بالا به پایین خطی کم می‌شود و به صفر می‌رسد. */
+  function preferenceBonus(subjectId) {
+    const order = (state.settings && state.settings.subjectOrder) || [];
+    const rank = subjectPreferenceRank(subjectId);
+    if (rank === null || order.length < 2) return 0;
+    return PREFERENCE_MAX_BONUS * (1 - rank / (order.length - 1));
+  }
+
+  function priorityOrderForm() {
+    const subjects = selectedSubjects();
+    if (subjects.length < 2) { notify('برای ترتیب‌دهی حداقل دو درس انتخاب‌شده لازم است'); return; }
+    const saved = (state.settings && state.settings.subjectOrder) || [];
+    // درس‌هایی که ترتیب ندارند آخر فهرست می‌آیند
+    const ordered = [...saved.filter(id => subjects.some(s => s.id === id)),
+      ...subjects.map(s => s.id).filter(id => !saved.includes(id))];
+    const rows = ordered.map((id, i) => {
+      const s = subjects.find(x => x.id === id) || {};
+      const bonus = preferenceBonus(id);
+      return `<tr><td>${i + 1}</td><td>${esc(s.name || id)}</td>`
+        + `<td>${bonus > 0 ? bonus.toFixed(2) : '—'}</td>`
+        + `<td><input type="number" name="rank_${esc(id)}" min="1" max="${subjects.length}" value="${i + 1}"></td></tr>`;
+    }).join('');
+    dialog('ترتیب ترجیحی درس‌ها', `<form id="modalForm"><p class="card-body">ترتیبی که اینجا می‌بندی یک <strong>ترجیح</strong> است، نه قانون. اثر آن یک پاداش کوچک (حداکثر ${PREFERENCE_MAX_BONUS} واحد) است که از رتبهٔ اول به آخر کم می‌شود؛ مهلت سخت، کار ناقص و فوریت واقعی می‌توانند بر آن پیشی بگیرند. اگر می‌خواهی یک درس کاملاً جلو بیافتد، وزن شخصی‌اش را در تنظیمات بالا ببر.</p><div class="table-wrap"><table><thead><tr><th>رتبه</th><th>درس</th><th>پاداش فعلی</th><th>رتبهٔ تازه</th></tr></thead><tbody>${rows}</tbody></table></div><p class="card-body">رتبه‌ها باید یکتا باشند؛ اگر دو درس یک عدد بگیرند، ترتیب قبلی برای همان‌ها حفظ می‌شود.</p><div class="modal-actions"><button class="btn" type="button" data-action="close">انصراف</button><button class="btn primary" type="submit">ذخیرهٔ ترتیب</button></div></form>`);
+    setModalType('priorityOrder');
+  }
+
+  function submitPriorityOrder(form) {
+    const d = new FormData(form), v = n => d.get(n);
+    const subjects = selectedSubjects();
+    const pairs = subjects.map(s => {
+      const raw = v('rank_' + s.id);
+      const n = raw === null || raw === undefined || String(raw).trim() === '' ? null : Math.round(num(raw));
+      return { id: s.id, rank: n };
+    }).filter(p => p.rank !== null);
+    if (!pairs.length) { notify('حداقل برای یک درس رتبه بده'); return; }
+    pairs.sort((a, b) => a.rank - b.rank);
+    state.settings.subjectOrder = pairs.map(p => p.id);
+    closeDialog();
+    saveAndRender(`ترتیب ترجیحی ${pairs.length} درس ذخیره شد؛ اثر آن پاداش کوچکی است نه قانون`);
   }

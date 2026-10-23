@@ -1151,6 +1151,217 @@ def test_priority_factors_show_source_and_confidence(preview_js, tmp_path):
     assert result.returncode == 0, stdout + stderr
     assert "FAIL" not in stdout, stdout
 
+_PREFERENCE_ORDER_SCRIPT = r"""
+// ===== ترتیب ترجیحی درس‌ها: ترجیح است، نه قانون =====
+// قاعدهٔ مرکزی: ترجیح فقط یک پاداش کوچک (حداکثر ۰٫۶ واحد) می‌دهد که با رتبه
+// کم و به صفر می‌رسد. مهلت سخت (+۲) و کار ناقص (+۱) بزرگ‌ترند، پس شاهد
+// واقعی باید بتواند بر ترجیح پیشی بگیرد.
+
+const ACT = (id, title, subjectId, subjectName, minutes, extra) => Object.assign({
+  id, title, type: 'study', subjectId, subjectName,
+  estimate: minutes, remaining: minutes, minChunk: 20, maxChunk: 90,
+  splittable: true, state: 'open', deadline: 'open'
+}, extra || {});
+
+// ---- الف) ریاضی پاداش: خطی از بیشینه به صفر ----
+try {
+  const st0 = preview.getState();
+  st0.settings.subjectOrder = [];
+  persistSilently(st0);
+  ok(preview.subjectPreferenceRank('s1') === null, 'درس بی‌رتبه null بگیرد');
+  ok(preview.preferenceBonus('s1') === 0,
+     'بدون ترتیب هیچ پاداشی نباشد، یافت: ' + preview.preferenceBonus('s1'));
+  st0.settings.subjectOrder = ['s1'];
+  persistSilently(st0);
+  ok(preview.subjectPreferenceRank('s1') === 0, 'رتبهٔ اول ثبت شود');
+  ok(preview.preferenceBonus('s1') === 0,
+     'با یک درس ترتیب‌شده پاداش صفر است؛ ترجیح بین دو چیز معنا دارد، یافت: '
+     + preview.preferenceBonus('s1'));
+  st0.settings.subjectOrder = ['s1', 's2'];
+  persistSilently(st0);
+  const b1 = preview.preferenceBonus('s1');
+  const b2 = preview.preferenceBonus('s2');
+  ok(Math.abs(b1 - 0.6) < 1e-9, 'بیشینهٔ پاداش ۰٫۶ باشد، یافت: ' + b1);
+  ok(b2 === 0, 'پاداش رتبهٔ آخر صفر باشد، یافت: ' + b2);
+  ok(b1 > b2, 'پاداش رتبهٔ اول بزرگ‌تر از رتبهٔ دوم باشد');
+  ok(preview.subjectPreferenceRank('s2') === 1, 'رتبهٔ دوم درس دوم باشد');
+  ok(preview.preferenceBonus('unknown-subject') === 0, 'درس ناشناس پاداش نگیرد');
+} catch (e) { failures++; console.log('FAIL bonus math: ' + e.message) }
+
+// ---- ب) صفحهٔ تنظیمات راه باز کردن فرم ترتیب را می‌دهد ----
+try {
+  const st0 = preview.getState();
+  st0.settings.subjectOrder = ['s1', 's2'];
+  persistSilently(st0);
+  clickNav('settings');
+  const html = pageHtml();
+  ok(html.includes('ترتیب ترجیحی درس‌ها'), 'دکمهٔ ترتیب ترجیحی در تنظیمات باشد');
+  ok(html.includes('data-action="priority-order"'), 'اقدام priority-order ثبت شده باشد');
+} catch (e) { failures++; console.log('FAIL settings button: ' + e.message) }
+
+// ---- ج) فرم ترتیب، ترجیح را «ترجیح» می‌گوید نه قانون ----
+try {
+  const st0 = preview.getState();
+  st0.settings.subjectOrder = ['s1', 's2'];
+  persistSilently(st0);
+  preview.priorityOrderForm();
+  const html = byId['#modalBody'].innerHTML || '';
+  const title = byId['#modalTitle'].textContent || '';
+  ok(title === 'ترتیب ترجیحی درس‌ها', 'عنوان فرم ترتیب باشد، یافت: ' + title);
+  ok(html.includes('ترجیح'), 'فرم ترجیح را صریحاً ترجیح بنامد');
+  ok(html.includes('نه قانون'), 'فرم بگوید ترتیب قانون نیست');
+  ok(html.includes('0.6'), 'بیشینهٔ پاداش در متن فرم گفته شود');
+  ok(html.includes('0.60'), 'پاداش رتبهٔ اول با دو رقم در جدول دیده شود');
+  ok(html.includes('زیست‌شناسی') && html.includes('شیمی'),
+     'هر دو درس انتخاب‌شده در فهرست باشند');
+  ok(html.includes('name="rank_s1"') && html.includes('name="rank_s2"'),
+     'برای هر درس یک ورودی رتبه ساخته شود');
+  ok(!/checked>/.test(html), 'فرم ترتیب هیچ گزینهٔ از پیش تیک‌خورده نداشته باشد');
+} catch (e) { failures++; console.log('FAIL order form: ' + e.message) }
+
+// ---- د) ذخیرهٔ ترتیب: در state و در حافظهٔ محلی می‌ماند ----
+try {
+  const st0 = preview.getState();
+  st0.settings.subjectOrder = [];
+  persistSilently(st0);
+  const form = makeEl('form');
+  form.id = 'modalForm';
+  form.dataset.modalType = 'priorityOrder';
+  // شیمی رتبهٔ یک، زیست رتبهٔ دو
+  global.__fd = new Map([['rank_s1', '2'], ['rank_s2', '1']]);
+  preview.submitPriorityOrder(form);
+  const st = preview.getState();
+  ok(JSON.stringify(st.settings.subjectOrder) === JSON.stringify(['s2', 's1']),
+     'ترتیب ذخیره‌شده شیمی پیش از زیست باشد، یافت: ' + JSON.stringify(st.settings.subjectOrder));
+  const saved = JSON.parse(localStorage.getItem('k2.preview.data.v1') || '{}');
+  ok(JSON.stringify(saved.settings.subjectOrder) === JSON.stringify(['s2', 's1']),
+     'ترتیب در حافظهٔ محلی هم بنشیند تا بعد از بازکردن بماند');
+  ok(preview.preferenceBonus('s2') > preview.preferenceBonus('s1'),
+     'پس از ذخیره، درس رتبهٔ اول پاداش بزرگ‌تری بگیرد');
+} catch (e) { failures++; console.log('FAIL order save: ' + e.message) }
+
+// ---- ه) رتبهٔ تکراری: ترتیب قبلی برای همان‌ها حفظ می‌شود ----
+try {
+  const st0 = preview.getState();
+  st0.settings.subjectOrder = ['s1', 's2'];
+  persistSilently(st0);
+  const form = makeEl('form');
+  form.id = 'modalForm';
+  form.dataset.modalType = 'priorityOrder';
+  global.__fd = new Map([['rank_s1', '1'], ['rank_s2', '1']]);
+  preview.submitPriorityOrder(form);
+  const st = preview.getState();
+  ok(JSON.stringify(st.settings.subjectOrder) === JSON.stringify(['s1', 's2']),
+     'رتبهٔ یکسان ترتیب قبلی را نبرد، یافت: ' + JSON.stringify(st.settings.subjectOrder));
+} catch (e) { failures++; console.log('FAIL duplicate rank: ' + e.message) }
+
+// ---- و) ترجیح واقعاً برنامه را عوض می‌کند ----
+try {
+  const st0 = preview.getState();
+  st0.events = [];
+  st0.activities = [
+    ACT('a1', 'کار زیست', 's1', 'زیست‌شناسی', 60),
+    ACT('a2', 'کار شیمی', 's2', 'شیمی', 60)
+  ];
+  st0.settings.subjectOrder = ['s1', 's2'];
+  persistSilently(st0);
+  const p1 = preview.getPlan();
+  const first1 = p1.placements[0];
+  ok(first1.subject === 'زیست‌شناسی',
+     'با ترتیب زیست‌شناسی پیش، بلوک اول زیست‌شناسی باشد، یافت: ' + first1.subject);
+
+  st0.settings.subjectOrder = ['s2', 's1'];
+  persistSilently(st0);
+  const p2 = preview.getPlan();
+  const first2 = p2.placements[0];
+  ok(first2.subject === 'شیمی',
+     'با ترتیب شیمی پیش، بلوک اول شیمی باشد، یافت: ' + first2.subject);
+
+  // بدون ترتیب، هیچ‌کدام پاداش ندارد و ترتیب برنامه ثابت می‌ماند
+  st0.settings.subjectOrder = [];
+  persistSilently(st0);
+  const p3 = preview.getPlan();
+  ok(preview.preferenceBonus('s1') === 0 && preview.preferenceBonus('s2') === 0,
+     'بدون ترتیب هیچ پاداشی در کار نباشد');
+  ok(p3.placements.length === 2, 'هر دو کار همچنان برنامه‌ریزی شوند');
+} catch (e) { failures++; console.log('FAIL plan reflects preference: ' + e.message) }
+
+// ---- ز) ترجیح قانون نیست: مهلت سخت بر آن پیشی می‌گیرد ----
+try {
+  const st0 = preview.getState();
+  st0.events = [];
+  st0.activities = [
+    ACT('h1', 'کار زیست ترجیحی', 's1', 'زیست‌شناسی', 60),
+    ACT('h2', 'کار شیمی مهلت سخت', 's2', 'شیمی', 60, { deadline: 'hard' })
+  ];
+  st0.settings.subjectOrder = ['s1', 's2'];
+  persistSilently(st0);
+  const plan = preview.getPlan();
+  const first = plan.placements[0];
+  ok(first.subject === 'شیمی',
+     'مهلت سخت (+۲) بر پاداش ترجیح (۰٫۶) پیشی بگیرد، یافت: ' + first.subject);
+  // کار ناقص هم باید بتواند بر ترجیح پیشی بگیرد
+  st0.activities = [
+    ACT('h3', 'کار زیست ترجیحی', 's1', 'زیست‌شناسی', 60),
+    ACT('h4', 'کار شیمی ناقص', 's2', 'شیمی', 60, { state: 'partial' })
+  ];
+  persistSilently(st0);
+  const plan2 = preview.getPlan();
+  ok(plan2.placements[0].subject === 'شیمی',
+     'کار ناقص (+۱) هم بر پاداش ترجیح پیشی بگیرد، یافت: ' + plan2.placements[0].subject);
+} catch (e) { failures++; console.log('FAIL preference is not law: ' + e.message) }
+
+// ---- ح) فرم ترتیب با کمتر از دو درس باز نمی‌شود ----
+try {
+  const st0 = preview.getState();
+  st0.subjects = [{ id: 's1', name: 'زیست‌شناسی', examCoefficient: 12, selected: true }];
+  persistSilently(st0);
+  byId['#toast'].textContent = '';
+  byId['#modalBody'].innerHTML = '';
+  preview.priorityOrderForm();
+  const note = byId['#toast'].textContent || '';
+  ok(note.includes('حداقل دو درس'),
+     'با یک درس پیام صریح بدهد به‌جای فرم بی‌معنا، یافت: ' + note);
+  ok((byId['#modalBody'].innerHTML || '') === '',
+     'با یک درس هیچ فرمی باز نشود');
+} catch (e) { failures++; console.log('FAIL needs two subjects: ' + e.message) }
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node برای اجرای پیش‌نمایش لازم است")
+def test_subject_preference_order_is_a_preference_not_a_law(preview_js, tmp_path):
+    """ترتیب ترجیحی درس‌ها ثبت می‌شود، برنامه را عوض می‌کند، ولی قانون نیست."""
+    payload = tmp_path / "preview-bundle.js"
+    payload.write_text(preview_js, encoding="utf-8")
+    syllabus_json = tmp_path / "syllabus.json"
+    import json as _json
+
+    m = re.search(
+        r'id="syllabusData"[^>]*>(.*?)</script>',
+        PREVIEW.read_text(encoding="utf-8"),
+        re.S,
+    )
+    syllabus_json.write_text(m.group(1).replace("\\u003c", "<"), encoding="utf-8")
+    harness = _harness(payload, _seed_state(), syllabus_json)
+    body = Path(harness).read_text(encoding="utf-8")
+    marker = "console.log(JSON.stringify({failures}));\nprocess.exit(failures ? 1 : 0);"
+    assert marker in body, "preference-order harness marker"
+    body = body.replace(marker, _PREFERENCE_ORDER_SCRIPT.strip() + "\n", 1)
+    Path(harness).write_text(body, encoding="utf-8")
+    result = subprocess.run(
+        [NODE, harness],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=180,
+        cwd=str(ROOT),
+    )
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    assert result.returncode == 0, stdout + stderr
+    assert "FAIL" not in stdout, stdout
+
+
 _SECTIONCOUNTS_SCRIPT = r"""
 // ===== ورود تعداد گفتارهای درس نامشخص (مورد شیمی) =====
 function g12Count() { return preview.syllabusChapters('شیمی', 12).length }
