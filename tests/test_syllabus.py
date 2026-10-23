@@ -1289,3 +1289,79 @@ def test_reports_show_daily_weekly_and_change_reasons(preview_js, tmp_path):
     stderr = result.stderr or ""
     assert result.returncode == 0, stdout + stderr
     assert "FAIL" not in stdout, stdout
+
+_STORAGE_SCRIPT = r"""
+// ===== توضیح محدودیت ذخیره‌سازی و نبود همگام‌سازی بین دستگاه‌ها =====
+
+// ۱) دیالوگ حریم خصوصی باید مرزها را صریح بگوید
+try {
+  clickAction('privacy');
+  const html = byId['#modalBody'].innerHTML || '';
+  ok(html.includes('داده کجا ذخیره می‌شود؟'), 'بخش محل ذخیره‌سازی باشد');
+  ok(html.includes('۵ مگابایت'), 'سقف تقریبی ذخیره‌سازی گفته شود');
+  ok(html.includes('ذخیره') && html.includes('نمی‌شود'), 'پیامد پر شدن سقف گفته شود');
+  ok(html.includes('همگام نمی‌شود'), 'نبود همگام‌سازی بین دستگاه‌ها صریح باشد');
+  ok(html.includes('پشتیبان JSON'), 'راه انتقال با پشتیبان JSON گفته شود');
+  ok(html.includes('HTML داده‌دار'), 'راه انتقال با HTML داده‌دار گفته شود');
+  ok(html.includes('نمی‌خوانَد'), 'محدودیت پیوست (برنامه فایل را نمی‌خواند) گفته شود');
+} catch (e) { failures++; console.log('FAIL privacy dialog: ' + e.message) }
+
+// ۲) پر شدن سقف: پیام صریح می‌دهد، نه خطای خاموش
+try {
+  const st0 = preview.getState();
+  st0.events = [];
+  persistSilently(st0);
+  const realSet = localStorage.setItem;
+  localStorage.setItem = (k, v) => {
+    const err = new Error('Quota exceeded');
+    err.name = 'QuotaExceededError';
+    err.code = 22;
+    throw err;
+  };
+  let threw = false;
+  try { clickAction('seed-classes'); } catch (e) { threw = true; }
+  localStorage.setItem = realSet;
+  ok(!threw, 'پر شدن سقف باعث خطای مدیریت‌نشده نشود');
+  const state = byId['#storageState'].textContent || '';
+  ok(state.includes('حافظهٔ مرورگر پر شد'),
+     'وضعیت ذخیره‌سازی سقف پر شده را بگوید، یافت: ' + state);
+  const toast = byId['#toast'].textContent || '';
+  ok(toast.includes('پشتیبان JSON'), 'پیام سقف پر، راه نجات را بگوید، یافت: ' + toast);
+  // پس از آزاد شدن سقف، ذخیره‌سازی دوباره کار کند
+  clickAction('seed-classes');
+  const after = byId['#storageState'].textContent || '';
+  ok(after.includes('ذخیرهٔ خودکار فعال'), 'پس از رفع اشکال، ذخیره‌سازی برگردد، یافت: ' + after);
+  ok((preview.getState().events || []).length > 0, 'دادهٔ ساخته‌شده حفظ شود');
+} catch (e) { failures++; console.log('FAIL quota: ' + e.message) }
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node برای اجرای پیش‌نمایش لازم است")
+def test_storage_limits_and_no_sync_are_explained(preview_js, tmp_path):
+    """محدودیت ذخیره‌سازی و نبود همگام‌سازی بین دستگاه‌ها توضیح داده می‌شود."""
+    payload = tmp_path / "preview-bundle.js"
+    payload.write_text(preview_js, encoding="utf-8")
+    syllabus_json = tmp_path / "syllabus.json"
+    import json as _json
+
+    m = re.search(r'id="syllabusData"[^>]*>(.*?)</script>', PREVIEW.read_text(encoding="utf-8"), re.S)
+    syllabus_json.write_text(m.group(1).replace("\\u003c", "<"), encoding="utf-8")
+    seed = _seed_state()
+    harness = _harness(payload, seed, syllabus_json)
+    body = Path(harness).read_text(encoding="utf-8")
+    marker = "console.log(JSON.stringify({failures}));\nprocess.exit(failures ? 1 : 0);"
+    assert marker in body, "storage harness marker"
+    body = body.replace(marker, _STORAGE_SCRIPT.strip() + "\n", 1)
+    Path(harness).write_text(body, encoding="utf-8")
+    result = subprocess.run(
+        [NODE, harness],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=180,
+        cwd=str(ROOT),
+    )
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    assert result.returncode == 0, stdout + stderr
+    assert "FAIL" not in stdout, stdout
