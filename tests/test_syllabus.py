@@ -21,7 +21,7 @@ PREVIEW = PREVIEW_DIR / "K2-preview.html"
 
 NODE = shutil.which("node") or shutil.which("nodejs")
 
-JS_FILES = ("core.js", "syllabus.js", "forms.js", "app.js")
+JS_FILES = ("core.js", "syllabus.js", "backlog.js", "forms.js", "app.js")
 
 
 @pytest.fixture(scope="module")
@@ -50,7 +50,9 @@ function makeEl(tag) {
     removeAttribute(k){delete this.attrs[k]}, append(...c){c.forEach(x=>this.children.push(x))},
     remove(){}, click(){},
     matches(sel){ if(sel==='.nav-item') return !!this.dataset.page;
-      if(sel && sel.indexOf('[data-action]')===0) return !!this.dataset.action; return false },
+      if(sel && sel.indexOf('[data-action]')===0) return !!this.dataset.action;
+      if(sel && sel.indexOf('[data-activity-action]')===0) return !!this.dataset.activityAction;
+      if(sel && sel.indexOf('[data-flow]')===0) return !!this.dataset.flow; return false },
     closest(sel){ let cur=this; while(cur){ if(cur.matches && cur.matches(sel)) return cur; cur=cur.parentNode } return null },
     querySelector(){return null}, querySelectorAll(){return []},
     getBoundingClientRect(){return {top:0,left:0,width:0,height:0}},
@@ -90,16 +92,22 @@ const factory_src = src;
 const SYL = JSON.parse(fs.readFileSync(SYLLABUS_JSON_PATH, 'utf8'));
 const window = { K2_CATALOG: {}, K2_GROUP_WEIGHTS: {}, K2_SYLLABUS: SYL.courses,
   K2_SYLLABUS_META: SYL.meta, showSaveFilePicker: null };
+const promptReply = { value: null };
+global.__setPrompt = (v) => { promptReply.value = v };
 const preview = new Function('document','localStorage','window','Intl','structuredClone','navigator',
-  'confirm','setTimeout','clearTimeout','URL','Blob','console','FormData',
+  'confirm','prompt','setTimeout','clearTimeout','URL','Blob','console','FormData',
   factory_src + '\nreturn window.K2Preview;')(document, localStorage, window, Intl,
-  o=>JSON.parse(JSON.stringify(o)), {userAgent:'node'}, ()=>true, ()=>0, ()=>{},
+  o=>JSON.parse(JSON.stringify(o)), {userAgent:'node'}, ()=>true,
+  (msg, def) => promptReply.value === null ? def : promptReply.value, ()=>0, ()=>{},
   {createObjectURL:()=>'', revokeObjectURL:()=>{}},
   class Blob { constructor(p){this.parts=p} }, console,
   class FormData { constructor(){ this._m = global.__fd || new Map() }
-    get(k){ return this._m.has(k) ? this._m.get(k) : null }
+    get(k){ const v = this._m.has(k) ? this._m.get(k) : null;
+      return Array.isArray(v) ? (v[0] === undefined ? null : v[0]) : v }
     has(k){ const v=this.get(k); return v!==null && v!=='' && v!==undefined }
-    getAll(k){ const v=this.get(k); return v===null?[]:[v] } });
+    getAll(k){ const v=this._m.has(k) ? this._m.get(k) : null;
+      if (v===null || v===undefined) return [];
+      return Array.isArray(v) ? v.slice() : [v] } });
 if (!preview) { console.log('FAIL: K2Preview missing'); process.exit(1) }
 const clicks = (document._listeners && document._listeners.click) || [];
 function clickNav(page){ const b = navItems.find(x=>x.dataset.page===page);
@@ -108,6 +116,8 @@ function clickNav(page){ const b = navItems.find(x=>x.dataset.page===page);
 function clickAction(action){ const b = makeEl('button'); b.dataset.action = action;
   for (const fn of clicks) fn({target:b, preventDefault(){}, stopPropagation(){}}) }
 function pageHtml(){ return document.querySelector('#pageContent').innerHTML || '' }
+function persistSilently(st){ preview.setState(st); }
+function weekdayNow(){ return ((new Date().getDay()+1)%7) }
 let failures = 0;
 const ok = (cond, msg) => { if (!cond) { failures++; console.log('FAIL: ' + msg) } };
 
@@ -369,9 +379,6 @@ def test_syllabus_data_is_structured_and_honest():
 # مطالعه معنای درستی ندارد.
 
 _PLAN_SCRIPT = r"""
-// کمکی‌های لازم برای تزریق state
-function persistSilently(st){ preview.setState(st); }
-function weekdayNow(){ return ((new Date().getDay()+1)%7) }
 const BASE_ACT = (id, title, subject, minutes) => ({ id, title, type: 'study',
   subjectName: subject, estimate: minutes, remaining: minutes, minChunk: 20,
   maxChunk: 90, splittable: true, state: 'open' });
@@ -519,6 +526,223 @@ def test_scheduling_rules_and_fixed_classes(preview_js, tmp_path):
     marker = "console.log(JSON.stringify({failures}));\nprocess.exit(failures ? 1 : 0);"
     assert marker in body, "plan harness marker"
     body = body.replace(marker, _PLAN_SCRIPT.strip() + "\n", 1)
+    Path(harness).write_text(body, encoding="utf-8")
+    result = subprocess.run(
+        [NODE, harness],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=180,
+        cwd=str(ROOT),
+    )
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    assert result.returncode == 0, stdout + stderr
+    assert "FAIL" not in stdout, stdout
+
+
+# ---------------------------------------------------------------------------
+# عقب‌افتادگی‌ها: سند پایدار با انتخاب چندگانهٔ نوع
+# ---------------------------------------------------------------------------
+
+_BACKLOG_SCRIPT = r"""
+const BASE_SETTINGS = { wake:'06:00', sleep:'23:00', studyStart:'09:00', breakMinutes:15,
+  sleepTargetMinutes:480, safetyMargin:.2, useExamCoefficients:true, coefficientFactor:1 };
+const mkAct = (id, title, subject, minutes, extra) => Object.assign({
+  id, title, type:'study', subjectName:subject, estimate:minutes, remaining:minutes,
+  minChunk:20, maxChunk:90, splittable:true, state:'open' }, extra || {});
+
+// ---- الف) ثبت عقب‌افتادگی با انتخاب هم‌زمان چند نوع ----
+try {
+  const st0 = preview.getState();
+  st0.settings = Object.assign({}, BASE_SETTINGS, st0.settings);
+  st0.events = []; st0.activities = []; st0.backlogs = [];
+  persistSilently(st0);
+  clickNav('backlogs');
+  clickAction('add-backlog');
+  global.__fd = new Map([
+    ['title','گفتار ۳ فصل ۲ زیست'], ['subject','زیست‌شناسی'],
+    ['chapter','2'], ['section','3'], ['estimate','135'], ['remaining','135'],
+    ['volume',''], ['volumeDone',''], ['importance','4'], ['due',''], ['notes',''],
+  ]);
+  global.__fd.set('types', ['study','concept','testing']);
+  clickAction('save-backlog');
+  const st = preview.getState();
+  ok(st.backlogs.length === 1, 'یک عقب‌افتادگی ثبت شود، یافت: ' + st.backlogs.length);
+  const b = st.backlogs[0];
+  ok(b.types.length === 3, 'هر سه نوع هم‌زمان ثبت شوند، یافت: ' + JSON.stringify(b.types));
+  ok(b.types.includes('study') && b.types.includes('concept') && b.types.includes('testing'),
+     'انواع انتخابی درست باشند');
+  ok(b.status === 'open', 'وضعیت اولیه «باز» باشد');
+  ok(b.remaining === 135, 'باقی‌مانده از فرم ثبت شود');
+} catch (e) { failures++; console.log('FAIL backlog create: ' + e.message) }
+
+// ---- ب) مدت تخمینی خودکار از روی نوع‌ها ----
+try {
+  const st0 = preview.getState();
+  st0.backlogs = []; st0.activities = []; st0.events = [];
+  persistSilently(st0);
+  clickAction('add-backlog');
+  // مدت تخمینی خالی → باید از جمع نوع‌ها حساب شود (۴۰+۵۰+۴۵=۱۳۵)
+  global.__fd = new Map([
+    ['title','مطالعهٔ ناقص'], ['subject','شیمی'],
+    ['chapter',''], ['section',''], ['estimate',''], ['remaining',''],
+    ['volume',''], ['volumeDone',''], ['importance','3'], ['due',''], ['notes',''],
+  ]);
+  global.__fd.set('types', ['study','concept','testing']);
+  clickAction('save-backlog');
+  const st = preview.getState();
+  ok(st.backlogs.length === 1, 'عقب‌افتادگی ثبت شود');
+  ok(st.backlogs[0].estimate === 135, 'مدت تخمینی خودکار ۱۳۵ شود، یافت: ' + st.backlogs[0].estimate);
+} catch (e) { failures++; console.log('FAIL backlog estimate: ' + e.message) }
+
+// ---- ج) «مورد دیگر» بدون توضیح پذیرفته نمی‌شود ----
+try {
+  const st0 = preview.getState();
+  st0.backlogs = []; st0.activities = []; st0.events = [];
+  persistSilently(st0);
+  clickAction('add-backlog');
+  global.__fd = new Map([
+    ['title','مورد نامشخص'], ['subject','شیمی'], ['chapter',''], ['section',''],
+    ['estimate','30'], ['remaining','30'], ['volume',''], ['volumeDone',''],
+    ['importance','3'], ['due',''], ['notes',''],
+  ]);
+  global.__fd.set('types', ['other']);
+  clickAction('save-backlog');
+  const st = preview.getState();
+  ok(st.backlogs.length === 0, '«مورد دیگر» بدون توضیح ثبت نشود، یافت: ' + st.backlogs.length);
+} catch (e) { failures++; console.log('FAIL backlog other-note: ' + e.message) }
+
+// ---- د) «مورد دیگر» با توضیح پذیرفته می‌شود ----
+try {
+  const st0 = preview.getState();
+  st0.backlogs = []; st0.activities = []; st0.events = [];
+  persistSilently(st0);
+  clickAction('add-backlog');
+  global.__fd = new Map([
+    ['title','مورد نامشخص'], ['subject','شیمی'], ['chapter',''], ['section',''],
+    ['estimate','30'], ['remaining','30'], ['volume',''], ['volumeDone',''],
+    ['importance','3'], ['due',''], ['notes','جزوهٔ کسر شده از دوستان'],
+  ]);
+  global.__fd.set('types', ['other']);
+  clickAction('save-backlog');
+  const st = preview.getState();
+  ok(st.backlogs.length === 1, '«مورد دیگر» با توضیح ثبت شود');
+  ok(st.backlogs[0].types.includes('other'), 'نوع other ثبت شود');
+} catch (e) { failures++; console.log('FAIL backlog other-ok: ' + e.message) }
+
+// ---- ه) قرار دادن در برنامه: فعالیت مشتق می‌سازد، عقب‌افتادگی می‌ماند ----
+try {
+  const st0 = preview.getState();
+  st0.backlogs = [{ id:'bl1', title:'گفتار ۳ فصل ۲ زیست', types:['study','concept','testing'],
+    subject:'زیست‌شناسی', subjectName:'زیست‌شناسی', grade:10, chapter:2, section:3,
+    estimate:135, remaining:135, volume:null, volumeDone:null, importance:4, due:'',
+    notes:'', status:'open', history:[], createdAt:new Date().toISOString(),
+    updatedAt:new Date().toISOString() }];
+  st0.activities = []; st0.events = [];
+  persistSilently(st0);
+  clickAction('backlog-schedule:bl1');
+  const st = preview.getState();
+  ok(st.backlogs.length === 1, 'عقب‌افتادگی پس از زمان‌بندی حذف نشود');
+  ok(st.backlogs[0].status === 'scheduled', 'وضعیت به «در برنامهٔ امروز» تغییر کند');
+  const act = (st.activities || []).find(a => a.backlogId === 'bl1');
+  ok(!!act, 'فعالیت مشتق ساخته شود');
+  if (act) {
+    ok(act.state === 'open', 'فعالیت مشتق «برنامه‌ریزی‌شده» باشد نه انجام‌شده');
+    ok(num(act.remaining) === 135, 'باقی‌ماندهٔ فعالیت از عقب‌افتادگی بیاید');
+    ok(act.subjectName === 'زیست‌شناسی', 'درس منتقل شود');
+  }
+} catch (e) { failures++; console.log('FAIL backlog schedule: ' + e.message) }
+
+// ---- و) ثبت پیشرفت ناقص از رویداد واقعی change، باقی‌مانده را کم می‌کند ----
+try {
+  const st0 = preview.getState();
+  st0.backlogs = [{ id:'bl1', title:'گفتار ۳ فصل ۲ زیست', types:['study'],
+    subject:'زیست‌شناسی', subjectName:'زیست‌شناسی', grade:10, chapter:2, section:3,
+    estimate:135, remaining:135, volume:null, volumeDone:null, importance:4, due:'',
+    notes:'', status:'scheduled', history:[], createdAt:new Date().toISOString(),
+    updatedAt:new Date().toISOString() }];
+  st0.activities = [mkAct('ac1', 'مطالعهٔ ناقص · گفتار ۳ فصل ۲ زیست', 'زیست‌شناسی', 135, { backlogId:'bl1' })];
+  st0.events = [];
+  persistSilently(st0);
+  // کاربر ۶۰ دقیقه پیشرفت ثبت می‌کند (از دیالوگ واقعی)
+  global.__setPrompt('60');
+  const sel = makeEl('select');
+  sel.dataset.activityAction = 'ac1';
+  sel.value = 'partial';
+  const changeHandlers = (document._listeners && document._listeners.change) || [];
+  ok(changeHandlers.length > 0, 'شنوندهٔ change باید ثبت شده باشد');
+  for (const fn of changeHandlers) fn({ target: sel, preventDefault(){}, stopPropagation(){} });
+  const st = preview.getState();
+  ok(st.backlogs.length === 1, 'عقب‌افتادگی پس از پیشرفت حذف نشود');
+  ok(st.backlogs[0].remaining === 75, 'باقی‌مانده به ۷۵ کاهش یابد، یافت: ' + st.backlogs[0].remaining);
+  ok(st.backlogs[0].status === 'partial', 'وضعیت «ناقص انجام شده» شود، یافت: ' + st.backlogs[0].status);
+  ok(st.backlogs[0].history.length > 0, 'تاریخچهٔ پیشرفت ثبت شود');
+  const act = (st.activities || []).find(a => a.id === 'ac1');
+  ok(act && act.state === 'partial', 'فعالیت هم ناقص شود');
+} catch (e) { failures++; console.log('FAIL backlog partial: ' + e.message) }
+
+// ---- ز) انتقال به روز دیگر: عقب‌افتادگی می‌ماند، فعالیت بیرون می‌رود ----
+try {
+  const st0 = preview.getState();
+  st0.backlogs = [{ id:'bl2', title:'تست‌نزدن', types:['testing'],
+    subject:'شیمی', subjectName:'شیمی', grade:11, chapter:1, section:null,
+    estimate:45, remaining:45, volume:null, volumeDone:null, importance:3, due:'',
+    notes:'', status:'scheduled', history:[], createdAt:new Date().toISOString(),
+    updatedAt:new Date().toISOString() }];
+  st0.activities = [mkAct('ac2', 'تست‌نزدن', 'شیمی', 45, { backlogId:'bl2' })];
+  st0.events = [];
+  persistSilently(st0);
+  const before = (preview.getState().backlogs || []).length;
+  // کاربر دلیل انتقال را در دیالوگ وارد می‌کند
+  global.__setPrompt('امروز وقت نشد');
+  clickAction('backlog-defer:bl2');
+  const st = preview.getState();
+  ok(st.backlogs.length === before, 'عقب‌افتادگی پس از انتقال حذف نشود');
+  ok(st.backlogs[0].status === 'deferred', 'وضعیت «به روز دیگر منتقل شد» شود');
+  ok(st.backlogs[0].notes.indexOf('انتقال') !== -1, 'دلیل انتقال در یادداشت ثبت شود');
+  ok(!(st.activities || []).some(a => a.backlogId === 'bl2'), 'فعالیت مشتق از برنامه بیرون رود');
+} catch (e) { failures++; console.log('FAIL backlog defer: ' + e.message) }
+
+// ---- ح) هشدار وقتی حجم کار از ظرفیت بیشتر است ----
+try {
+  const st0 = preview.getState();
+  st0.backlogs = [
+    { id:'bl3', title:'بزرگ', types:['study'], subject:'زیست‌شناسی', subjectName:'زیست‌شناسی',
+      grade:10, chapter:1, section:1, estimate:1200, remaining:1200, volume:null, volumeDone:null,
+      importance:5, due:'', notes:'', status:'open', history:[], createdAt:new Date().toISOString(),
+      updatedAt:new Date().toISOString() }];
+  st0.activities = []; st0.events = [];
+  persistSilently(st0);
+  clickNav('backlogs');
+  const html = pageHtml();
+  ok(html.includes('ظرفیت امروز'), 'ظرفیت در صفحه دیده شود');
+  ok(html.includes('واقع‌بینانه') || html.includes('بیشتر است'),
+     'وقتی حجم از ظرفیت بیشتر است هشدار واقع‌بینانه بدهد');
+} catch (e) { failures++; console.log('FAIL backlog warning: ' + e.message) }
+
+console.log(JSON.stringify({failures}));
+process.exit(failures ? 1 : 0);
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node برای اجرای پیش‌نمایش لازم است")
+def test_backlog_management_is_durable_and_multi_type(preview_js, tmp_path):
+    """عقب‌فتادگی سند پایدار است، چند نوع هم‌زمان می‌گیرد و بی‌صدا حذف نمی‌شود."""
+    payload = tmp_path / "preview-bundle.js"
+    payload.write_text(preview_js, encoding="utf-8")
+    import json as _json
+
+    m = re.search(r'id="syllabusData"[^>]*>(.*?)</script>', PREVIEW.read_text(encoding="utf-8"), re.S)
+    syllabus_json = tmp_path / "syllabus.json"
+    syllabus_json.write_text(m.group(1).replace("\\u003c", "<"), encoding="utf-8")
+    seed = _seed_state()
+    seed["backlogs"] = []
+    harness = _harness(payload, seed, syllabus_json)
+    body = Path(harness).read_text(encoding="utf-8")
+    marker = "console.log(JSON.stringify({failures}));\nprocess.exit(failures ? 1 : 0);"
+    assert marker in body, "backlog harness marker"
+    body = body.replace(marker, _BACKLOG_SCRIPT.strip() + "\n", 1)
     Path(harness).write_text(body, encoding="utf-8")
     result = subprocess.run(
         [NODE, harness],
