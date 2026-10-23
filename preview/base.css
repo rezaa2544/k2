@@ -43,22 +43,6 @@ button,input,select{font:inherit}
 button{cursor:pointer}
 .preview-wrap{max-width:1390px;margin:0 auto}
 
-/* ---------- نوار اعلان بالای پیش‌نمایش ---------- */
-.preview-note{
-  display:flex;align-items:center;justify-content:space-between;gap:12px;
-  margin:0 0 13px;padding:11px 16px;border:2px solid var(--accent-line);
-  border-right:6px solid var(--accent);border-radius:13px;
-  background:var(--accent-soft);color:var(--text-soft);
-  font-size:12px;font-weight:600;
-}
-.preview-note strong{color:var(--accent);font-weight:800}
-.preview-note .note-mark{display:flex;align-items:center;gap:9px;min-width:0}
-.note-dot{
-  width:10px;height:10px;border-radius:50%;background:var(--accent);
-  box-shadow:0 0 0 4px #0a7a5724;flex:none;
-}
-.preview-note .note-rev{white-space:nowrap;color:var(--muted);font-size:11px;font-weight:500}
-
 /* ---------- پنجرهٔ برنامه ---------- */
 .app-window{
   overflow:hidden;border:2px solid var(--border);border-radius:18px;
@@ -83,10 +67,6 @@ button{cursor:pointer}
   outline:3px solid var(--accent-line);outline-offset:2px;
 }
 .menu-meta{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:11px;font-weight:500}
-.preview-chip{
-  padding:4px 10px;border:1px solid var(--accent-line);border-radius:99px;
-  background:var(--accent-soft);color:var(--accent);font-weight:800;
-}
 .menu-panel{
   position:absolute;top:calc(100% + 6px);right:0;display:none;width:290px;padding:8px;
   border:2px solid var(--border);border-radius:13px;background:var(--surface);
@@ -395,7 +375,7 @@ tbody tr:hover td{background:var(--surface-soft)}
   .menu-meta .note-hide{display:none}
 }
 @media(max-width:450px){
-  body{padding:7px}.preview-note{align-items:flex-start;flex-direction:column}
+  body{padding:7px}
   .app-window{border-radius:13px}.menu-bar{min-height:46px;padding:4px 8px}
   .menu-button{padding:5px 11px}.menu-meta{font-size:10px}
   .menu-panel{width:min(290px,calc(100vw - 24px))}

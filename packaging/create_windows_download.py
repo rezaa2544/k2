@@ -156,12 +156,6 @@ def update_release_metadata(
             f'data-source-revision="{source_revision}"',
             path=preview_path,
         )
-        preview = _replace_once(
-            preview,
-            r'(<b id="sourceRevision">)[^<]+(</b>)',
-            rf"\g<1>{source_revision[:8]}\g<2>",
-            path=preview_path,
-        )
         preview_path.write_text(preview, encoding="utf-8", newline="\n")
 
     return exe_hash, archive_hash
