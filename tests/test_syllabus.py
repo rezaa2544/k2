@@ -1365,3 +1365,96 @@ def test_storage_limits_and_no_sync_are_explained(preview_js, tmp_path):
     stderr = result.stderr or ""
     assert result.returncode == 0, stdout + stderr
     assert "FAIL" not in stdout, stdout
+
+_REVIEW_SCRIPT = r"""
+// ===== ردیابی مرور و فراموشی =====
+// قانون: فاصله با عملکرد تغییر کند، فراموشی شمرده شود، و مرور یک پیشنهاد
+// بماند نه قانون جعلی.
+
+const mkReview = (id, label, interval, due, lapses) => ({
+  id, label, subjectId: 's1', subjectName: 'زیست‌شناسی', type: 'مفهومی',
+  interval, lapses: lapses || 0, due, status: interval > 1 ? 'مرور' : 'یادگیری مجدد',
+  difficulty: 3, content: '', createdAt: new Date().toISOString()
+});
+
+// ۱) مرور درست: فاصله بلندتر، موعد دورتر، فراموشی زیاد نمی‌شود
+try {
+  const st0 = preview.getState();
+  const today = new Date().toISOString().slice(0, 10);
+  st0.reviews = [mkReview('r1', 'سلول و ساختارش', 2, today, 1)];
+  st0.reviewLogs = [];
+  persistSilently(st0);
+  clickNav('review');
+  let html = pageHtml();
+  ok(html.includes('سلول و ساختارش'), 'مورد سررسیدشده در صفحه دیده شود');
+  ok(html.includes('2.0 روز'), 'فاصلهٔ فعلی نمایش داده شود، یافت: ' + (html.match(/[\d.]+ روز/) || ['—'])[0]);
+  clickAction('grade-review:r1');
+  const st = preview.getState();
+  const r = st.reviews.find(x => x.id === 'r1');
+  ok(num(r.interval) > 2, 'فاصله پس از پاسخ درست بلندتر شود، یافت: ' + r.interval);
+  ok(r.lapses === 1, 'فراموشی با پاسخ درست زیاد نشود، یافت: ' + r.lapses);
+  ok(r.due > today, 'موعد بعدی جلو برود، یافت: ' + r.due);
+  ok((st.reviewLogs || []).length === 1, 'نتیجهٔ مرور ثبت شود');
+  ok(st.reviewLogs[0].grade === 4, 'نمرهٔ درست ثبت شود');
+  // پس از درست، دیگر در فهرست سررسیدشده نیست
+  clickNav('review');
+  html = pageHtml();
+  ok(!html.includes('سلول و ساختارش') || html.includes('موردی برای مرور سررسید نشده'),
+     'مورد مرور‌شده از فهرست سررسید خارج شود');
+} catch (e) { failures++; console.log('FAIL review grade ok: ' + e.message) }
+
+// ۲) مرور غلط: فاصله به کمینه برگردد، فراموشی شمرده شود، وضعیت عوض شود
+try {
+  const st0 = preview.getState();
+  const today = new Date().toISOString().slice(0, 10);
+  st0.reviews = [mkReview('r2', 'چرخهٔ خون', 7, today, 0)];
+  st0.reviewLogs = [];
+  persistSilently(st0);
+  clickAction('miss-review:r2');
+  const st = preview.getState();
+  const r = st.reviews.find(x => x.id === 'r2');
+  ok(num(r.interval) === 1, 'فاصله پس از فراموشی به کمینه برگردد، یافت: ' + r.interval);
+  ok(r.lapses === 1, 'فراموشی شمرده شود، یافت: ' + r.lapses);
+  ok(r.status === 'یادگیری مجدد', 'وضعیت به یادگیری مجدد تغییر کند، یافت: ' + r.status);
+  ok((st.reviewLogs || []).length === 1 && st.reviewLogs[0].grade === 1, 'نمرهٔ غلط ثبت شود');
+} catch (e) { failures++; console.log('FAIL review grade miss: ' + e.message) }
+
+// ۳) صفحه صداقت خود را حفظ کند: مرور پیشنهاد است نه قانون
+try {
+  clickNav('review');
+  const html = pageHtml();
+  ok(html.includes('یک پیشنهاد است، نه قانون علمی ثابت'),
+     'صفحه بگوید برنامهٔ مرور پیشنهاد است نه قانون');
+} catch (e) { failures++; console.log('FAIL review honesty: ' + e.message) }
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node برای اجرای پیش‌نمایش لازم است")
+def test_review_scheduling_tracks_forgetting(preview_js, tmp_path):
+    """مرور فاصله‌دار با عملکرد به‌روز می‌شود و فراموشی را می‌شمارد."""
+    payload = tmp_path / "preview-bundle.js"
+    payload.write_text(preview_js, encoding="utf-8")
+    syllabus_json = tmp_path / "syllabus.json"
+    import json as _json
+
+    m = re.search(r'id="syllabusData"[^>]*>(.*?)</script>', PREVIEW.read_text(encoding="utf-8"), re.S)
+    syllabus_json.write_text(m.group(1).replace("\\u003c", "<"), encoding="utf-8")
+    seed = _seed_state()
+    harness = _harness(payload, seed, syllabus_json)
+    body = Path(harness).read_text(encoding="utf-8")
+    marker = "console.log(JSON.stringify({failures}));\nprocess.exit(failures ? 1 : 0);"
+    assert marker in body, "review harness marker"
+    body = body.replace(marker, _REVIEW_SCRIPT.strip() + "\n", 1)
+    Path(harness).write_text(body, encoding="utf-8")
+    result = subprocess.run(
+        [NODE, harness],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=180,
+        cwd=str(ROOT),
+    )
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    assert result.returncode == 0, stdout + stderr
+    assert "FAIL" not in stdout, stdout
