@@ -447,7 +447,7 @@ table{width:100%;border-collapse:collapse;min-width:680px}th,td{padding:9px 11px
   const ERRORS={E1:'ضعف مفهومی',E2:'فراموشی',E3:'ضعف روش حل',E4:'خطای محاسباتی',E5:'بی‌دقتی',E6:'کمبود زمان',E7:'برداشت اشتباه از سؤال',E8:'حدس',E9:'ناتوانی در تشخیص تیپ'};
   const ROUTINE_KINDS={sleep:'خواب',meal:'غذا',rest:'استراحت',hygiene:'بهداشت/حمام',commute:'رفت‌وآمد',other:'سایر'};
   const EVENT_KINDS={live_class:'کلاس حضوری',online_class:'کلاس آنلاین',recorded_class:'کلاس ضبط‌شده',exam:'آزمون',commitment:'تعهد شخصی'};
-  const fresh=()=>({version:3,profile:null,subjects:[],books:[],events:[],routines:[],activities:[],attempts:[],reviews:[],reviewLogs:[],topics:[],learningEvidence:[],activeTopicId:null,sections:{},syllabusEdits:{},resources:[],backlogs:[],sessions:[],sessionRevisions:[],deadlines:[],problems:[],problemEvents:[],timer:{running:false,paused:false,startedAt:null,accumulated:0,pausedAt:null,kind:'independent',topicId:null},settings:{wake:'06:00',sleep:'23:00',studyStart:'09:00',breakMinutes:15,sleepTargetMinutes:480,mealBlocks:[{start:'13:00',end:'13:45',title:'ناهار'},{start:'20:00',end:'20:30',title:'شام'}],energy:2,peak:[],useExamCoefficients:true,coefficientFactor:1,safetyMargin:.2,negativeRatio:0,formula:'raw',masteryMinSpacedDays:2,masteryMinSpacingDays:3,masteryConfirmingScore:.8,priorityWeights:{importance:1,state:.8,weakness:1,prerequisite:.9,deadline:.7,forgetting:.6,finalShare:.5,progress:.6}},onboarding:{step:0,values:{},completed:false},updatedAt:null});
+  const fresh=()=>({version:3,profile:null,subjects:[],books:[],events:[],routines:[],activities:[],attempts:[],reviews:[],reviewLogs:[],topics:[],learningEvidence:[],activeTopicId:null,sections:{},syllabusEdits:{},resources:[],backlogs:[],examSeries:{enabled:true,startISO:'2026-11-05',intervalDays:14,durationMinutes:210,analysisMinutes:60,startNote:''},sessions:[],sessionRevisions:[],deadlines:[],problems:[],problemEvents:[],timer:{running:false,paused:false,startedAt:null,accumulated:0,pausedAt:null,kind:'independent',topicId:null},settings:{wake:'06:00',sleep:'23:00',studyStart:'09:00',breakMinutes:15,sleepTargetMinutes:480,mealBlocks:[{start:'13:00',end:'13:45',title:'ناهار'},{start:'20:00',end:'20:30',title:'شام'}],energy:2,peak:[],useExamCoefficients:true,coefficientFactor:1,safetyMargin:.2,negativeRatio:0,formula:'raw',masteryMinSpacedDays:2,masteryMinSpacingDays:3,masteryConfirmingScore:.8,priorityWeights:{importance:1,state:.8,weakness:1,prerequisite:.9,deadline:.7,forgetting:.6,finalShare:.5,progress:.6}},onboarding:{step:0,values:{},completed:false},updatedAt:null});
   function loadState(){let local=null;try{const x=localStorage.getItem(STORE_KEY);if(x)local=JSON.parse(x)}catch(e){console.warn(e)}const chosen=EMBEDDED&&(!local||String(EMBEDDED.updatedAt||'')>String(local.updatedAt||''))?EMBEDDED:local;if(chosen&&typeof chosen==='object')return {...fresh(),...chosen,settings:{...fresh().settings,...chosen.settings},onboarding:{...fresh().onboarding,...chosen.onboarding}};return fresh()}
   let state=loadState(),currentPage='dashboard',toastTimer=null,browserStorageAvailable=true,minimalMode=false;try{localStorage.setItem('__k2_preview_probe__','1');localStorage.removeItem('__k2_preview_probe__')}catch{browserStorageAvailable=false}
   const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
@@ -483,7 +483,7 @@ table{width:100%;border-collapse:collapse;min-width:680px}th,td{padding:9px 11px
   const studyStart=Math.max(wake,minOf(state.settings.studyStart||'09:00'));
   const brk=Math.max(0,num(state.settings.breakMinutes,15));
   const meals=(state.settings.mealBlocks||[]).map(m=>({start:minOf(m.start),end:minOf(m.end),title:m.title||'وعدهٔ غذا',kind:'غذا'}));
-  const allBusy=[...blocks,...meals];let placements=[],unplaced=[];const maxCoeff=Math.max(0,...selectedSubjects().map(s=>num(s.examCoefficient)));const items=state.activities.filter(a=>!['done','dropped','expired','blocked'].includes(a.state)).map(a=>{const subject=selectedSubjects().find(s=>s.id===a.subjectId);return{...a,score:num(a.personalWeight,1)*num(subject?.personalWeight,1)*(state.settings.useExamCoefficients&&maxCoeff>0&&a.examCoefficient?(.5+num(a.examCoefficient)/maxCoeff):1)*num(state.settings.coefficientFactor,1)+(a.deadline==='hard'?2:0)+(a.state==='partial'?1:0)}}).sort((a,b)=>b.score-a.score);if(minimalMode)items.splice(2);const occupied=allBusy.map(b=>({start:b.start,end:b.end}));
+  const allBusy=[...blocks,...meals];let placements=[],unplaced=[];const maxCoeff=Math.max(0,...selectedSubjects().map(s=>num(s.examCoefficient)));const items=state.activities.filter(a=>!['done','dropped','expired','blocked'].includes(a.state)).filter(a=>!a.date||a.date<=todayISO()).map(a=>{const subject=selectedSubjects().find(s=>s.id===a.subjectId);return{...a,score:num(a.personalWeight,1)*num(subject?.personalWeight,1)*(state.settings.useExamCoefficients&&maxCoeff>0&&a.examCoefficient?(.5+num(a.examCoefficient)/maxCoeff):1)*num(state.settings.coefficientFactor,1)+(a.deadline==='hard'?2:0)+(a.state==='partial'?1:0)}}).sort((a,b)=>b.score-a.score);if(minimalMode)items.splice(2);const occupied=allBusy.map(b=>({start:b.start,end:b.end}));
   const free=[];let p=studyStart;
   while(p<sleep){let end=Math.min(p+60,sleep),hit=occupied.find(b=>b.start<end&&b.end>p);
     if(hit){if(hit.start>p)free.push({start:p,end:hit.start});p=Math.max(p+1,hit.end)}
@@ -1473,6 +1473,233 @@ ${done.length ? `<article class="card tone-ok"><h3 class="card-title">انجام
 }
 
 
+  // ---- ماژول آزمون‌های جامع دوره‌ای ----
+  // چرا این ماژول جدا است: آزمون جامع و تحلیل آن دو کار مستقل‌اند. آزمون
+  // رویداد سنجش است، تحلیل کار شناخنی روی نتیجه. اگر یکی شوند، «آزمون دادم»
+  // به‌جای «دانستم چه کردی» ثبت می‌شود و برنامه عوض نمی‌شود.
+  //
+  // قاعدهٔ صداقت: بازهٔ ۱۴ روزه و تاریخ شروع ۱۴ آبان ۱۴۰۵ ورودی کاربر است،
+  // نه ادعای رسمی. تاریخ رسمی آزمون ابلاغ نشده و اینجا چیزی جعل نمی‌شود.
+
+  const EXAM_SERIES_DEFAULTS = {
+    enabled: true,
+    startISO: '2026-11-05',   // ۱۴ آبان ۱۴۰۵ (تقویم شمسی)
+    intervalDays: 14,
+    durationMinutes: 210,     // برآورد خود کاربر؛ قابل ویرایش
+    analysisMinutes: 60,      // تحلیل جدا و مستقل از خود آزمون
+    startNote: 'تاریخ شروع و بازهٔ تکرار را خودت تعیین می‌کنی؛ هیچ تاریخ رسمی ابلاغ نشده است.'
+  };
+
+  // تقسیم صحیح به سمت صفر، مثل div استاندارد جلالی. Math.floor اینجا غلط
+  // است: div(3-8, 6) باید 0 شود نه 1- و کل تاریخ یک ماه و دو سال جابه‌جا می‌شود.
+  function jDiv(a, b) { return Math.trunc(a / b) }
+  function jMod(a, b) { return a - jDiv(a, b) * b }
+
+  // تبدیل تقویم: الگوریتم استاندارد جلالی (بدون وابستگی بیرونی)
+  function jalBreaks() {
+    return [-61, 9, 38, 199, 426, 686, 756, 818, 1111, 1181, 1210, 1635, 2060, 2097, 2192, 2262, 2324, 2394, 2456, 3178];
+  }
+  function jG2D(gy, gm, gd) {
+    let d = jDiv((gy + jDiv(gm - 8, 6) + 100100) * 1461, 4) + jDiv(153 * jMod(gm + 9, 12) + 2, 5) + gd - 34840408;
+    d = d - jDiv(jDiv(gy + 100100 + jDiv(gm - 8, 6), 100) * 3, 4) + 752;
+    return d;
+  }
+  function jD2G(jdn) {
+    let j = 4 * jdn + 139361631;
+    j = j + jDiv(jDiv(4 * jdn + 183187720, 146097) * 3, 4) * 4 - 3908;
+    const i = jDiv(jMod(j, 1461), 4) * 5 + 308;
+    const gd = jDiv(jMod(i, 153), 5) + 1;
+    const gm = jDiv(i, 153) + 1;
+    const gy = jDiv(j, 1461) - 100100 + jDiv(8 - gm, 6);
+    return { gy, gm, gd };
+  }
+  function jalCal(jy) {
+    const breaks = jalBreaks(), bl = breaks.length;
+    const gy = jy + 621;
+    let leapJ = -14, jp = breaks[0], jm = 0, jump = 0, leap = 0, n = 0;
+    for (let i = 1; i < bl; i += 1) {
+      jm = breaks[i]; jump = jm - jp;
+      if (jy < jm) break;
+      leapJ = leapJ + jDiv(jump, 33) * 8 + jDiv(jMod(jump, 33), 4);
+      jp = jm;
+    }
+    n = jy - jp;
+    leapJ = leapJ + jDiv(n, 33) * 8 + jDiv(jMod(n, 33) + 3, 4);
+    if (jMod(jump, 33) === 4 && jump - n === 4) leapJ += 1;
+    const leapG = jDiv(gy, 4) - jDiv((jDiv(gy, 100) + 1) * 3, 4) - 150;
+    const march = 20 + leapJ - leapG;
+    if (jump - n < 6) n = n - jump + jDiv(jump + 4, 33) * 33;
+    leap = jMod(jMod(n + 1, 33) - 1, 4);
+    if (leap === -1) leap = 4;
+    return { gy, march, leap };
+  }
+  function jJ2D(jy, jm, jd) {
+    const r = jalCal(jy);
+    return jG2D(r.gy, 3, r.march) + (jm - 1) * 31 - jDiv(jm, 7) * (jm - 7) + jd - 1;
+  }
+  function jD2J(jdn) {
+    const gy = jD2G(jdn).gy;
+    let jy = gy - 621;
+    let r = jalCal(jy);
+    let k = jdn - jG2D(gy, 3, r.march);
+    if (k >= 0) {
+      if (k <= 185) return { jy, jm: 1 + jDiv(k, 31), jd: jMod(k, 31) + 1 };
+      k -= 186;
+    } else {
+      jy -= 1; k += 179; if (r.leap === 1) k += 1;
+      r = jalCal(jy);
+    }
+    return { jy, jm: 7 + jDiv(k, 30), jd: jMod(k, 30) + 1 };
+  }
+  const JALALI_MONTHS = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
+    'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
+
+  // 'YYYY-MM-DD' → {jy,jm,jd}
+  function isoToJalali(iso) {
+    const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return null;
+    return jD2J(jG2D(Number(m[1]), Number(m[2]), Number(m[3])));
+  }
+  // {jy,jm,jd} → 'YYYY-MM-DD'
+  function jalaliToIso(jy, jm, jd) {
+    const g = jD2G(jJ2D(jy, jm, jd));
+    return `${String(g.gy).padStart(4, '0')}-${String(g.gm).padStart(2, '0')}-${String(g.gd).padStart(2, '0')}`;
+  }
+  // برچسب خوانا: «۱۴ آبان ۱۴۰۵»
+  function jalaliLabel(iso) {
+    const j = isoToJalali(iso);
+    if (!j) return String(iso || '—');
+    return `${j.jd} ${JALALI_MONTHS[j.jm - 1]} ${j.jy}`;
+  }
+  function isoAddDays(iso, days) {
+    const d = new Date(`${iso}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  }
+  function isoBetween(iso, from, to) { return iso >= from && iso <= to }
+
+  function ensureExamSeries() {
+    // ادغام نرم پیش‌فرض‌ها: state ذخیره‌شدهٔ کاربر بازنویسی نمی‌شود.
+    const cur = state.examSeries || {};
+    state.examSeries = { ...EXAM_SERIES_DEFAULTS, ...cur };
+    if (state.examSeries.intervalDays < 1) state.examSeries.intervalDays = 1;
+    return state.examSeries;
+  }
+
+  // تاریخ‌های وقوع در بازهٔ [from, to] — مرزها هم شاملند.
+  function examSeriesOccurrences(series, from, to) {
+    if (!series || series.enabled === false) return [];
+    const start = String(series.startISO || '');
+    if (!start) return [];
+    const step = Math.max(1, Math.round(num(series.intervalDays, 14)));
+    const out = [];
+    // نخستین وقوع بزرگ‌تر یا مساوی از
+    let first = start;
+    if (from > start) {
+      const diff = Math.round((new Date(`${from}T00:00:00Z`) - new Date(`${start}T00:00:00Z`)) / 86400000);
+      const k = Math.floor(diff / step);
+      first = isoAddDays(start, k * step);
+      // اگر نزدیک‌ترین وقوع پیش از بازه افتاد، تا رسیدن به آن جلو می‌رویم.
+      while (first < from) first = isoAddDays(first, step);
+    }
+    for (let iso = first; iso <= to; iso = isoAddDays(iso, step)) {
+      if (iso >= start) out.push(iso);
+      if (out.length > 200) break; // محافظ: حلقهٔ بی‌پایان نشود
+    }
+    return out;
+  }
+
+  // وقوع‌ها را به دو فعالیت مستقل تبدیل می‌کند: خود آزمون و تحلیل آن.
+  function syncExamSeries(todayIso) {
+    ensureExamSeries();
+    const s = state.examSeries;
+    if (!s.enabled) return 0;
+    const today = todayIso || todayISO();
+    const horizon = isoAddDays(today, 60);
+    let created = 0;
+    for (const iso of examSeriesOccurrences(s, today, horizon)) {
+      const label = jalaliLabel(iso);
+      const has = role => (state.activities || []).some(a => a.examOccurrence === iso && a.examRole === role);
+      const base = {
+        date: iso, examOccurrence: iso, origin: 'examSeries',
+        deadline: 'hard', deadlineDate: iso, subjectId: '', subjectName: '',
+        topicId: null, topicName: '', state: 'planned', splittable: false,
+        minChunk: 15, maxChunk: Math.max(15, Math.min(90, num(s.durationMinutes, 210))),
+        personalWeight: 1, reason: ''
+      };
+      if (!has('exam')) {
+        const est = Math.max(1, Math.round(num(s.durationMinutes, 210)));
+        state.activities.unshift({
+          ...base, id: id(), title: `آزمون جامع دوره‌ای · ${label}`, type: 'exam', examRole: 'exam',
+          estimate: est, remaining: est,
+          reason: `چرخهٔ ${Math.round(num(s.intervalDays, 14))} روزه؛ این نوبت ${label}. آزمون رویداد سنجش است، نه خودِ یادگیری.`
+        });
+        created += 1;
+      }
+      if (!has('analysis')) {
+        const est = Math.max(1, Math.round(num(s.analysisMinutes, 60)));
+        state.activities.unshift({
+          ...base, id: id(), title: `تحلیل آزمون جامع · ${label}`, type: 'test_analysis', examRole: 'analysis',
+          estimate: est, remaining: est,
+          reason: `تحلیل مستقل از آزمون ${label}: گلوگاه درس، کد خطای غالب و اقدام اصلاحی. بدون تحلیل، نوبت بعدی همان اشتباه را تکرار می‌کند.`
+        });
+        created += 1;
+      }
+    }
+    return created;
+  }
+
+  function examSeriesForm() {
+    const s = ensureExamSeries();
+    dialog('تنظیم چرخهٔ آزمون جامع', `<form id="modalForm"><p class="card-body">آزمون و تحلیل آن دو فعالیت مستقل می‌شوند. بازهٔ تکرار و تاریخ شروع را خودت تعیین می‌کنی؛ تاریخ رسمی آزمون ابلاغ نشده و اینجا چیزی جعل نمی‌شود.</p><div class="form-grid"><label>تاریخ اولین نوبت (میلادی)<input type="date" name="startISO" value="${esc(s.startISO)}" required></label><label>بازهٔ تکرار (روز)<input type="number" name="intervalDays" min="1" max="90" value="${Math.round(num(s.intervalDays, 14))}" required></label><label>مدت خودِ آزمون (دقیقه)<input type="number" name="durationMinutes" min="15" max="600" value="${Math.round(num(s.durationMinutes, 210))}" required></label><label>مدت تحلیل (دقیقه)<input type="number" name="analysisMinutes" min="5" max="600" value="${Math.round(num(s.analysisMinutes, 60))}" required></label><label class="check-label"><input type="checkbox" name="enabled" ${s.enabled !== false ? 'checked' : ''}> چرخه فعال باشد</label></div><p class="card-body">تاریخ میلادی برای دقت ذخیره می‌شود؛ معادل شمسی همان روز: <strong>${esc(jalaliLabel(s.startISO))}</strong></p><div class="modal-actions"><button class="btn" type="button" data-action="close">انصراف</button><button class="btn primary" type="submit">ذخیرهٔ چرخه</button></div></form>`);
+    setModalType('examSeries');
+  }
+
+  function submitExamSeries(form) {
+    const d = new FormData(form), v = n => d.get(n);
+    const start = String(v('startISO') || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) { notify('تاریخ شروع معتبر نیست'); return; }
+    const intervalDays = Math.max(1, Math.min(90, Math.round(num(v('intervalDays'), 14))));
+    const durationMinutes = Math.max(15, Math.min(600, Math.round(num(v('durationMinutes'), 210))));
+    const analysisMinutes = Math.max(5, Math.min(600, Math.round(num(v('analysisMinutes'), 60))));
+    const enabled = d.has('enabled');
+    state.examSeries = { ...ensureExamSeries(), startISO: start, intervalDays, durationMinutes, analysisMinutes, enabled };
+    // نوبت‌های آینده با مدت تازه ساخته می‌شوند؛ نوبت‌های گذشته دست‌نخورده می‌مانند.
+    const created = syncExamSeries();
+    saveAndRender(created > 0
+      ? `چرخه ذخیره شد · ${created} فعالیت مستقل برای نوبت‌های پیش‌رو ساخته شد`
+      : 'چرخه ذخیره شد؛ نوبت پیش‌رو همین حالا در برنامه است');
+  }
+
+  // کارت نمایش چرخه در صفحهٔ آزمون‌های جامع
+  function examSeriesCard() {
+    const s = ensureExamSeries();
+    const today = todayISO();
+    const next = examSeriesOccurrences(s, today, isoAddDays(today, 60)).slice(0, 6);
+    const registered = (state.attempts || []).filter(a => a.kind === 'official' || a.kind === 'mock');
+    const occ = iso => {
+      const done = registered.some(a => String(a.date || '').slice(0, 10) === iso);
+      const acts = (state.activities || []).filter(a => a.examOccurrence === iso);
+      const examAct = acts.find(a => a.examRole === 'exam');
+      const anAct = acts.find(a => a.examRole === 'analysis');
+      return { iso, done, examAct, anAct };
+    };
+    const rows = next.map(o => {
+      const r = occ(o);
+      const status = r.done ? 'ثبت‌شده' : (r.examAct?.state === 'done' ? 'انجام‌شده' : 'در انتظار');
+      const analysis = r.anAct ? (r.anAct.state === 'done' ? 'تحلیل انجام شد' : 'تحلیل مستقل در برنامه') : '—';
+      return `<tr><td>${esc(jalaliLabel(o))}</td><td>${esc(o)}</td><td>${esc(DAYS[weekdayOfIso(o)])}</td><td>${esc(Math.round(num(s.durationMinutes, 210)))}</td><td>${esc(Math.round(num(s.analysisMinutes, 60)))}</td><td>${esc(status)}</td><td>${esc(analysis)}</td></tr>`;
+    }).join('');
+    return `<article class="card tone-exam"><div class="section-row"><h3 class="card-title">چرخهٔ آزمون جامع تکرارشونده</h3>${actionBtn('ویرایش چرخه', 'exam-series-edit')}</div><p class="card-body">هر نوبت دو فعالیت <strong>مستقل</strong> می‌سازد: خودِ آزمون و تحلیل آن. یکی می‌تواند انجام شود و دیگری نه؛ وضعیت یکی به دیگری سرریز نمی‌شود.${s.enabled === false ? '<br><strong>چرخه در حال حاضر غیرفعال است.</strong>' : ''}</p><div class="metrics"><article class="metric tone-exam"><p class="metric-label">نخستین نوبت</p><p class="metric-value">${esc(jalaliLabel(s.startISO))}</p><p class="metric-hint">${esc(s.startISO)}</p></article><article class="metric tone-exam"><p class="metric-label">بازهٔ تکرار</p><p class="metric-value">${esc(Math.round(num(s.intervalDays, 14)))} روز</p><p class="metric-hint">قابل ویرایش</p></article><article class="metric tone-exam"><p class="metric-label">مدت آزمون / تحلیل</p><p class="metric-value">${esc(Math.round(num(s.durationMinutes, 210)))} / ${esc(Math.round(num(s.analysisMinutes, 60)))}</p><p class="metric-hint">دقیقه</p></article></div>${next.length ? `<div class="table-wrap"><table><thead><tr><th>نوبت</th><th>تاریخ</th><th>روز</th><th>آزمون</th><th>تحلیل</th><th>وضعیت</th><th>تحلیل مستقل</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('نوبتی در بازهٔ ۶۰ روز آینده نیست', 'چرخه غیرفعال است یا تاریخ شروع گذشتهٔ دور است.')}<div class="advice"><span class="advice-mark">i</span><span>تاریخ رسمی آزمون کنکور ابلاغ نشده؛ بازهٔ ۱۴ روزه انتخاب خودِ شماست و هر وقت خواستید عوض می‌شود. تحلیل نوبت‌های گذشته را حتماً با کد خطا ثبت کنید تا چرخهٔ بعدی قابل مقایسه باشد.</span></div></article>`;
+  }
+
+  function weekdayOfIso(iso) {
+    // شمارهٔ روز هفتهٔ این پروژه: ۰ = شنبه
+    const d = new Date(`${iso}T00:00:00Z`);
+    return ((d.getUTCDay() + 1) % 7);
+  }
+
+
   function addActivityForm(a=null){dialog(a?'ویرایش فعالیت':'افزودن فعالیت',`<form id="modalForm"><label>عنوان فعالیت<input name="title" required value="${esc(a?.title||'')}"></label><div class="form-grid"><label>نوع<select name="type">${Object.entries(ACT_TYPES).map(([k,v])=>`<option value="${k}" ${a?.type===k?'selected':''}>${v}</option>`).join('')}</select></label><label>درس<select name="subject">${subjectOptions()}</select></label><label>برآورد (دقیقه)<input type="number" name="estimate" min="1" max="600" value="${num(a?.estimate,45)}" required></label><label>حداقل بخش<input type="number" name="minChunk" min="5" max="120" value="${num(a?.minChunk,20)}"></label><label>حداکثر بخش<input type="number" name="maxChunk" min="10" max="180" value="${num(a?.maxChunk,90)}"></label><label>مهلت<select name="deadline"><option value="none">بدون مهلت</option><option value="soft" ${a?.deadline==='soft'?'selected':''}>نرم</option><option value="hard" ${a?.deadline==='hard'?'selected':''}>سخت</option></select></label><label>تاریخ مهلت<input type="date" name="deadlineDate" value="${esc(a?.deadlineDate||'')}"></label><label>وزن شخصی (۰٫۵ تا ۲)<input type="number" name="weight" min="0.5" max="2" step="0.1" value="${num(a?.personalWeight,1)}"></label><label class="check-label"><input type="checkbox" name="splittable" ${a?.splittable!==false?'checked':''}> قابل تقسیم</label></div><div class="modal-actions"><button class="btn" type="button" data-action="close">انصراف</button><button class="btn primary" type="submit">ذخیره فعالیت</button></div></form>`);if(a){$('#modalForm').dataset.edit=a.id;$('#modalForm [name=subject]').value=a.subjectId||''}setModalType('activity')}
   function addExamForm(){dialog('ثبت نوبت آزمون',`<form id="modalForm"><label>نام آزمون<input name="name" required></label><div class="form-grid"><label>نوع<select name="kind">${Object.entries(EXAM_KINDS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></label><label>درس<select name="subject">${subjectOptions()}</select></label><label>تاریخ<input type="date" name="date" value="${todayISO()}" required></label><label>کل سؤال<input type="number" name="total" min="1" max="500" required></label><label>درست<input type="number" name="correct" min="0" value="0" required></label><label>غلط<input type="number" name="wrong" min="0" value="0" required></label><label>نزده<input type="number" name="blank" min="0" value="0" required></label><label>مدت (دقیقه)<input type="number" name="duration" min="0" value="0"></label><label>کد خطا<select name="error"><option value="">ثبت نشده</option>${Object.entries(ERRORS).map(([k,v])=>`<option value="${k}">${k} · ${v}</option>`).join('')}</select></label><label>یادداشت<textarea name="note"></textarea></label></div><label>پیوست نتیجهٔ آزمون (اختیاری)<input type="file" name="attachment" accept="image/*,.pdf,.txt,.csv"></label><p class="card-body">برنامه تصویر را <strong>نمی‌خوانَد</strong>؛ فقط نام و حجم فایل به‌عنوان منبع اعدادی که خودت وارد کرده‌ای ثبت می‌شود. در نسخهٔ دسکتاپ فایل در پوشهٔ محلی برنامه کپی می‌شود.</p><div class="modal-actions"><button class="btn" type="button" data-action="close">انصراف</button><button class="btn primary" type="submit">ثبت آزمون</button></div></form>`);setModalType('exam')}
   function addReviewForm(){dialog('افزودن مورد مرور',`<form id="modalForm"><label>عنوان مورد<input name="label" required></label><div class="form-grid"><label>درس<select name="subject">${subjectOptions()}</select></label><label>مبحث مرتبط (اختیاری)<select name="topicId"><option value="">بدون اتصال</option>${(state.topics||[]).map(t=>`<option value="${esc(t.id)}">${esc(t.subjectName)} · ${esc(t.name)}</option>`).join('')}</select></label><label>نوع<select name="type"><option>مفهومی</option><option>حفظی</option><option>محاسباتی</option><option>واژگانی</option><option>نموداری</option></select></label><label>موعد<input type="date" name="due" value="${todayISO()}"></label><label>دشواری ۱ تا ۵<input type="number" name="difficulty" min="1" max="5" value="3"></label><label>یادداشت<textarea name="content"></textarea></label></div><div class="modal-actions"><button class="btn" type="button" data-action="close">انصراف</button><button class="btn primary" type="submit">ذخیره</button></div></form>`);setModalType('review')}
@@ -1556,6 +1783,7 @@ ${done.length ? `<article class="card tone-ok"><h3 class="card-title">انجام
     if(form.dataset.modalType==='review'){const sid=v('subject'),s=state.subjects.find(x=>x.id===sid);state.reviews.unshift({id:id(),label:String(v('label')).trim(),subjectId:sid||'',subjectName:s?.name||'',topicId:String(v('topicId')||''),type:v('type'),due:v('due')||todayISO(),difficulty:num(v('difficulty'),3),interval:0,lapses:0,status:'جدید',content:v('content')||''});closeDialog();saveAndRender('مورد مرور ذخیره شد');return;}
     if(form.dataset.modalType==='event'){const sid=v('subject'),s=state.subjects.find(x=>x.id===sid);const obj={title:String(v('title')).trim(),kind:v('kind'),weekday:num(v('weekday')),subjectId:sid||'',subjectName:s?.name||'',start:v('start'),end:v('end'),recorded:d.has('recorded'),note:v('note')||''};if(minOf(obj.end)<=minOf(obj.start)){notify('بازهٔ رویداد معتبر نیست');return;}if(form.dataset.edit){const i=state.events.findIndex(e=>e.id===form.dataset.edit);state.events[i]={...state.events[i],...obj};}else state.events.push({id:id(),...obj});closeDialog();saveAndRender('رویداد ذخیره شد');return;}
     if(form.dataset.modalType==='deadline'){const date=String(v('date')||'');const topicId=String(v('topicId')||'');const kind=String(v('kind')||'final_consolidation');if(!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)||!topicId){notify('مبحث و تاریخ مهلت را درست وارد کنید');return;}state.deadlines=state.deadlines||[];const rawPercent=v('percent'),rawLevel=v('level');const obj={id:id(),topicId,kind,date,track:String(v('track')||'konkur'),targetPercent:rawPercent===''||rawPercent===null?null:num(rawPercent),targetLevel:rawLevel===''||rawLevel===null?null:num(rawLevel),isMaster:d.has('master'),note:String(v('note')||'')};const existing=state.deadlines.findIndex(d=>d.topicId===topicId&&d.kind===kind&&d.track===obj.track);if(existing>=0){obj.id=state.deadlines[existing].id;state.deadlines[existing]=obj;}else state.deadlines.unshift(obj);closeDialog();saveAndRender('مهلت ذخیره شد؛ بازمحاسبه به‌روز شد');currentPage='deadlines';render();return;}
+    if(form.dataset.modalType==='examSeries'){submitExamSeries(form);return;}
     if(form.dataset.modalType==='session'){const start=String(v('startedAt')||''),end=String(v('endedAt')||'');if(!start||!end||end<=start){notify('بازهٔ زمانی معتبر وارد کنید');return;}const gross=Math.round((new Date(end)-new Date(start))/60000);const brk=Math.max(0,num(v('breakMinutes')));const net=Math.max(0,gross-brk);state.sessions=state.sessions||[];state.sessions.unshift({id:id(),date:start.slice(0,10),startedAt:new Date(start).toISOString(),endedAt:new Date(end).toISOString(),kind:String(v('kind')||'independent'),topicId:String(v('topicId')||'')||null,minutes:net,breakMinutes:brk,mode:'manual',note:String(v('note')||'')});closeDialog();saveAndRender(`جلسه ثبت شد · ${fmtMin(net)} خالص`);currentPage='timer';render();return;}
     if(form.dataset.modalType==='problem'){const title=String(v('title')||'').trim();if(!title){notify('عنوان مشکل را وارد کنید');return;}state.problems=state.problems||[];state.problems.unshift({id:id(),title,kind:String(v('kind')||'conceptual_gap'),topicId:String(v('topicId')||'')||null,severity:Math.max(1,Math.min(5,num(v('severity'),3))),status:'open',firstSeen:String(v('firstSeen')||todayISO()),description:String(v('description')||''),resolutionNote:''});state.problemEvents=state.problemEvents||[];state.problemEvents.unshift({id:id(),problemId:state.problems[0].id,kind:'opened',at:new Date().toISOString(),note:'مشکل ثبت شد'});closeDialog();saveAndRender('مشکل ثبت شد');currentPage='problems';render();return;}
     if(form.dataset.modalType==='problemAction'){const pr=(state.problems||[]).find(x=>x.id===form.dataset.problemId);if(!pr)return;const note=String(v('note')||'').trim();if(!note){notify('یادداشت اقدام لازم است');return;}const before=pr.status;pr.status=String(v('status')||'in_progress');if(pr.status==='resolved')pr.resolutionNote=note;state.problemEvents=state.problemEvents||[];state.problemEvents.unshift({id:id(),problemId:pr.id,kind:before==='resolved'?'reopened':pr.status==='resolved'?'resolved':'progressed',at:new Date().toISOString(),note});closeDialog();saveAndRender('اقدام روی مشکل ثبت شد');render();return;}
@@ -1563,7 +1791,7 @@ ${done.length ? `<article class="card tone-ok"><h3 class="card-title">انجام
     if(form.dataset.modalType==='routine'){const days=d.getAll('days').map(Number);if(!days.length||v('start')===v('end')){notify('روز و بازهٔ معتبر انتخاب کنید');return;}const obj={title:String(v('title')).trim(),kind:v('kind'),start:v('start'),end:v('end'),days,repeat:v('repeat')};if(form.dataset.edit){const i=state.routines.findIndex(r=>r.id===form.dataset.edit);state.routines[i]={...state.routines[i],...obj};}else state.routines.push({id:id(),...obj});closeDialog();saveAndRender('روال ذخیره شد');return;}
   }
   function setModalType(type){const f=$('#modalForm');if(f)f.dataset.modalType=type;}
-  function runAction(action){$$('.menu-panel').forEach(p=>p.classList.remove('open'));if(action==='setup'){if(!state.onboarding.values)state.onboarding.values={};currentPage='onboarding';render();return;}if(action==='go-dashboard'){currentPage='dashboard';render();return;}if(action==='minimal-day'){minimalMode=true;currentPage='today';render();return;}if(action==='full-day'){minimalMode=false;currentPage='today';render();return;}if(action==='about'){dialog('دربارهٔ K2','<p>پیش‌نمایش HTML آفلاین K2 است. این نسخه دادهٔ نمونه ندارد و ذخیرهٔ محلی/پشتیبان دارد.</p>');return;}if(action==='privacy'){dialog('ذخیره و حریم خصوصی','<p>ذخیرهٔ خودکار در storage مرورگر انجام می‌شود. برای انتقال دستگاه، فایل JSON یا HTML داده‌دار را دانلود کنید. فایل اصلی بدون تأیید شما بازنویسی نمی‌شود.</p>');return;}if(action==='quit'){notify('برای بستن پیش‌نمایش، زبانه را ببندید.');return;}if(action==='go-today'){minimalMode=false;currentPage='today';render();return;}if(action==='add-topic'){addTopicForm();return;}if(action==='add-topic-evidence'){addTopicEvidenceForm();return;}if(action==='generate-topic-pathway'){generateTopicPathway();return;}if(action.startsWith('select-topic:')){state.activeTopicId=action.split(':')[1];currentPage='topics';render();return;}if(action==='add-activity'){addActivityForm();setModalType('activity');return;}if(action==='add-exam'){addExamForm();setModalType('exam');return;}if(action==='add-review'){addReviewForm();setModalType('review');return;}if(action==='add-event'){eventForm();setModalType('event');return;}
+  function runAction(action){$$('.menu-panel').forEach(p=>p.classList.remove('open'));if(action==='setup'){if(!state.onboarding.values)state.onboarding.values={};currentPage='onboarding';render();return;}if(action==='go-dashboard'){currentPage='dashboard';render();return;}if(action==='minimal-day'){minimalMode=true;currentPage='today';render();return;}if(action==='full-day'){minimalMode=false;currentPage='today';render();return;}if(action==='about'){dialog('دربارهٔ K2','<p>پیش‌نمایش HTML آفلاین K2 است. این نسخه دادهٔ نمونه ندارد و ذخیرهٔ محلی/پشتیبان دارد.</p>');return;}if(action==='privacy'){dialog('ذخیره و حریم خصوصی','<p>ذخیرهٔ خودکار در storage مرورگر انجام می‌شود. برای انتقال دستگاه، فایل JSON یا HTML داده‌دار را دانلود کنید. فایل اصلی بدون تأیید شما بازنویسی نمی‌شود.</p>');return;}if(action==='quit'){notify('برای بستن پیش‌نمایش، زبانه را ببندید.');return;}if(action==='go-today'){minimalMode=false;currentPage='today';render();return;}if(action==='add-topic'){addTopicForm();return;}if(action==='add-topic-evidence'){addTopicEvidenceForm();return;}if(action==='generate-topic-pathway'){generateTopicPathway();return;}if(action.startsWith('select-topic:')){state.activeTopicId=action.split(':')[1];currentPage='topics';render();return;}if(action==='add-activity'){addActivityForm();setModalType('activity');return;}if(action==='add-exam'){addExamForm();setModalType('exam');return;}if(action==='exam-series-edit'){examSeriesForm();return;}if(action==='add-review'){addReviewForm();setModalType('review');return;}if(action==='add-event'){eventForm();setModalType('event');return;}
   if(action==='seed-classes'){if(confirm('کلاس‌های ثابت اولیه با علامت «نیازمند تأیید» اضافه شوند؟ ساعت‌های نامشخص را خودت باید وارد کنی.'))seedFixedClasses();return;}if(action==='add-routine'){routineForm();setModalType('routine');return;}
 if(action==='add-deadline'){addDeadlineForm();return;}
 if(action==='add-session'){addSessionForm();return;}
@@ -1620,7 +1848,14 @@ if(action.startsWith('problem-act:')){const pr=(state.problems||[]).find(x=>x.id
   $('#refreshButton').addEventListener('click',()=>{render();notify('همهٔ نماها تازه شدند');});
   $('#restoreInput').addEventListener('change',e=>{const f=e.target.files?.[0];if(f)restoreFile(f);e.target.value='';});
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDialog();if(e.key==='F5'){e.preventDefault();render();notify('نماها تازه شدند');}if(e.ctrlKey&&e.key.toLowerCase()==='s'){e.preventDefault();saveHTML();}if(e.ctrlKey&&e.key.toLowerCase()==='q'){e.preventDefault();notify('برای بستن پیش‌نمایش، زبانه را ببندید.')}});
-  window.K2Preview={getState:()=>structuredClone(state),getPlan:()=>structuredClone(makePlan()),setState:(s)=>{state=s&&typeof s==='object'?{...fresh(),...s,settings:{...fresh().settings,...s.settings},onboarding:{...fresh().onboarding,...s.onboarding}}:fresh()},render,saveHTML,backupJSON,restoreFile};
+  window.K2Preview={getState:()=>structuredClone(state),getPlan:()=>structuredClone(makePlan()),setState:(s)=>{state=s&&typeof s==='object'?{...fresh(),...s,settings:{...fresh().settings,...s.settings},onboarding:{...fresh().onboarding,...s.onboarding},examSeries:{...fresh().examSeries,...(s.examSeries||{})}}:fresh()},render,saveHTML,backupJSON,restoreFile,
+  // رابط کوچک برنامه‌نویسی برای راستی‌آزمایی و یکپارچه‌سازی: تبدیل تاریخ شمسی و
+  // چرخهٔ آزمون جامع. این‌ها همان توابعی‌اند که رابط کاربری صدا می‌زند، نه نسخهٔ موازی.
+  jalaliToIso:(y,m,d)=>jalaliToIso(y,m,d),isoToJalali:(iso)=>isoToJalali(iso),jalaliLabel:(iso)=>jalaliLabel(iso),
+  examSeriesOccurrences:(series,from,to)=>examSeriesOccurrences(series,from,to),
+  syncExamSeries:(today)=>syncExamSeries(today)};
+  ensureExamSeries();
+  syncExamSeries();
   render();
   if(!state.profile&&!state.onboarding.completed){setTimeout(()=>{currentPage='onboarding';render();},200);}
 
@@ -1677,7 +1912,7 @@ if(action.startsWith('problem-act:')){const pr=(state.problems||[]).find(x=>x.id
   function testsPage(){const tests=(state.attempts||[]).filter(a=>a.kind!=='official'&&a.kind!=='mock');const rows=[...tests].sort((a,b)=>b.date.localeCompare(a.date)).map(a=>`<tr><td>${esc(a.name)}</td><td>${EXAM_KINDS[a.kind]||a.kind}</td><td>${esc(a.date)}</td><td>${a.percentage.toFixed(1)}٪</td><td>${fmtMin(num(a.duration))}</td><td>${a.error?`${a.error} · ${ERRORS[a.error]}`:'—'}</td></tr>`).join('');const last=tests.at(-1);return `<div class="page-scroll">${pageHeader('تست و تحلیل','تست ابزار یادگیری است؛ خروجی‌اش اقدام اصلاحی است، نه فقط نمره',actionBtn('＋ ثبت تست','add-exam','primary'))}${tests.length?`<div class="table-wrap"><table><thead><tr><th>نام</th><th>نوع</th><th>تاریخ</th><th>درصد</th><th>مدت</th><th>کد خطا</th></tr></thead><tbody>${rows}</tbody></table></div>${last?`<article class="card tone-exam"><h3 class="card-title">تحلیل آخرین تست</h3><p class="card-body">${esc(last.name)} · ${last.percentage.toFixed(1)}٪ · ${last.error?`علت غالب: ${ERRORS[last.error]}`:'کد خطا ثبت نشده'}. تکرار یک علت یعنی روش قبلی کار نکرده است.</p>${actionBtn('ساخت اقدام اصلاحی','remediate','primary')}</article>`:''}`:emptyState('تستی ثبت نشده','تست تدریس، تست زمان‌دار یا آزمون مؤسسه را ثبت کن.',actionBtn('ثبت تست','add-exam','primary'))}<div class="advice"><span class="advice-mark">i</span><span>تست و آزمون جامع جدا هستند: تست برای یادگیری است، آزمون جامع برای سنجش سراسری.</span></div></div>`}
 
   // ---- صفحهٔ آزمون‌های جامع ----
-  function comprehensivePage(){const exams=(state.attempts||[]).filter(a=>a.kind==='official'||a.kind==='mock').sort((a,b)=>a.date.localeCompare(b.date));let prev=null;const rows=exams.map(a=>{const delta=prev===null?'—':`${a.percentage-prev>0?'+':''}${(a.percentage-prev).toFixed(1)}٪`;prev=a.percentage;return `<tr><td>${esc(a.name)}</td><td>${EXAM_KINDS[a.kind]||a.kind}</td><td>${esc(a.date)}</td><td>${a.percentage.toFixed(1)}٪</td><td>${a.correct} از ${a.total}</td><td>${esc(a.attachmentName||'—')}</td><td>${delta}</td></tr>`}).join('');const last=exams.at(-1),before=exams.at(-2);const drop=last&&before?last.percentage-before.percentage:null;return `<div class="page-scroll">${pageHeader('آزمون‌های جامع','سنجش سراسری نزدیک به شرایط واقعی',actionBtn('＋ ثبت آزمون جامع','add-exam','primary'))}${exams.length?`<div class="table-wrap"><table><thead><tr><th>نام</th><th>نوع</th><th>تاریخ</th><th>درصد</th><th>درست/کل</th><th>پیوست</th><th>تغییر</th></tr></thead><tbody>${rows}</tbody></table></div>${drop!==null&&drop<-5?`<div class="advice warning"><span class="advice-mark">!</span><span>درصد آخرین آزمون جامع افت کرده است. علت را ثبت کن: حجم بیشتر بود؟ روش عوض نشده؟ خستگی؟ بدون علت، برنامهٔ بعدی همان اشتباه را تکرار می‌کند.</span></div>`:'<div class="advice"><span class="advice-mark">✓</span><span>روند درصد پایدار یا صعودی است.</span></div>'}`:emptyState('آزمون جامعی ثبت نشده','آزمون رسمی یا شبیه‌سازی چند درسی را ثبت کن.',actionBtn('ثبت آزمون جامع','add-exam','primary'))}<div class="advice"><span class="advice-mark">i</span><span>آزمون جامع فقط وقتی معنا دارد که بعد از آن برنامه عوض شود: گلوگاه پیدا شود، اولویت‌ها بازبینی شوند و مهلت‌ها بازمحاسبه شوند.</span></div></div>`}
+  function comprehensivePage(){const exams=(state.attempts||[]).filter(a=>a.kind==='official'||a.kind==='mock').sort((a,b)=>a.date.localeCompare(b.date));let prev=null;const rows=exams.map(a=>{const delta=prev===null?'—':`${a.percentage-prev>0?'+':''}${(a.percentage-prev).toFixed(1)}٪`;prev=a.percentage;return `<tr><td>${esc(a.name)}</td><td>${EXAM_KINDS[a.kind]||a.kind}</td><td>${esc(a.date)}</td><td>${a.percentage.toFixed(1)}٪</td><td>${a.correct} از ${a.total}</td><td>${esc(a.attachmentName||'—')}</td><td>${delta}</td></tr>`}).join('');const last=exams.at(-1),before=exams.at(-2);const drop=last&&before?last.percentage-before.percentage:null;return `<div class="page-scroll">${pageHeader('آزمون‌های جامع','سنجش سراسری نزدیک به شرایط واقعی',actionBtn('＋ ثبت آزمون جامع','add-exam','primary'))}${examSeriesCard()}${exams.length?`<div class="table-wrap"><table><thead><tr><th>نام</th><th>نوع</th><th>تاریخ</th><th>درصد</th><th>درست/کل</th><th>پیوست</th><th>تغییر</th></tr></thead><tbody>${rows}</tbody></table></div>${drop!==null&&drop<-5?`<div class="advice warning"><span class="advice-mark">!</span><span>درصد آخرین آزمون جامع افت کرده است. علت را ثبت کن: حجم بیشتر بود؟ روش عوض نشده؟ خستگی؟ بدون علت، برنامهٔ بعدی همان اشتباه را تکرار می‌کند.</span></div>`:'<div class="advice"><span class="advice-mark">✓</span><span>روند درصد پایدار یا صعودی است.</span></div>'}`:emptyState('آزمون جامعی ثبت نشده','آزمون رسمی یا شبیه‌سازی چند درسی را ثبت کن.',actionBtn('ثبت آزمون جامع','add-exam','primary'))}<div class="advice"><span class="advice-mark">i</span><span>آزمون جامع فقط وقتی معنا دارد که بعد از آن برنامه عوض شود: گلوگاه پیدا شود، اولویت‌ها بازبینی شوند و مهلت‌ها بازمحاسبه شوند.</span></div></div>`}
 
   // ---- صفحهٔ بانک دروس ----
   function coursesPage(){const rows=(state.topics||[]).map(t=>{const st=stageOf(t);return `<tr><td>${esc(t.name)}</td><td>${esc(t.subjectName||'—')}</td><td>${esc(stageLabel('konkur',st.konkur))}</td><td>${stageProgress('konkur',st.konkur)}٪</td><td>${esc(stageLabel('final',st.final))}</td><td>${stageProgress('final',st.final)}٪</td><td>${fmtMin(num(t.estimatedMinutes))}</td><td>${esc(num(t.prerequisiteShare).toFixed(1))}</td><td>${esc(num(t.finalExamShare).toFixed(1))}</td></tr>`}).join('');return `<div class="page-scroll">${pageHeader('بانک دروس','هر مبحث دو مسیر مستقل دارد؛ پیشرفت هر مسیر نیازمند شاهد است',`${actionBtn('＋ افزودن مبحث','add-topic','primary')}${actionBtn('فاکتورهای اولویت','topic-fields')}`)}${(state.topics||[]).length?`<div class="table-wrap"><table><thead><tr><th>مبحث</th><th>درس</th><th>مسیر کنکور</th><th>پیشرفت</th><th>مسیر نهایی</th><th>پیشرفت</th><th>برآورد زمان</th><th>پیش‌نیاز</th><th>سهم نهایی</th></tr></thead><tbody>${rows}</tbody></table></div><div class="advice"><span class="advice-mark">i</span><span>مسیر کنکور: ${KONKUR_STAGES.join(' ← ')}. مسیر نهایی: ${FINAL_STAGES.join(' ← ')}. هیچ‌کدام جای دیگری را نمی‌گیرد و مطالعهٔ تشریحی، تمرین تستی را جانشین نمی‌کند.</span></div>`:emptyState('موردی ثبت نشده','مبحث یا خروجی قابل سنجش اضافه کن.',actionBtn('افزودن مبحث','add-topic','primary'))}<article class="card tone-study"><h3 class="card-title">مباحث و تسلط</h3><p class="card-body">سنجش عملکردی، روش پیشنهادی و ثبت شاهد هر مبحث در نسخهٔ کامل این صفحه است. این پیش‌نمایش پله‌ها را از شواهد ثبت‌شده تخمین می‌زند.</p>${actionBtn('رفتن به مباحث و تسلط','go-topics')}</article>${resourceBankPage(resourceSubject)}</div>`}

@@ -21,7 +21,7 @@ PREVIEW = PREVIEW_DIR / "K2-preview.html"
 
 NODE = shutil.which("node") or shutil.which("nodejs")
 
-JS_FILES = ("core.js", "syllabus.js", "backlog.js", "forms.js", "app.js")
+JS_FILES = ("core.js", "syllabus.js", "backlog.js", "examseries.js", "forms.js", "app.js")
 
 
 @pytest.fixture(scope="module")
@@ -743,6 +743,163 @@ def test_backlog_management_is_durable_and_multi_type(preview_js, tmp_path):
     marker = "console.log(JSON.stringify({failures}));\nprocess.exit(failures ? 1 : 0);"
     assert marker in body, "backlog harness marker"
     body = body.replace(marker, _BACKLOG_SCRIPT.strip() + "\n", 1)
+    Path(harness).write_text(body, encoding="utf-8")
+    result = subprocess.run(
+        [NODE, harness],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=180,
+        cwd=str(ROOT),
+    )
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    assert result.returncode == 0, stdout + stderr
+    assert "FAIL" not in stdout, stdout
+
+_EXAMSERIES_SCRIPT = r"""
+// ===== آزمون جامع دوره‌ای: تکرار ۱۴ روزه، آزمون و تحلیل مستقل =====
+// تاریخ مرجع کاربر: ۱۴ آبان ۱۴۰۵. عددها در JS ساخته می‌شوند تا تست به ساعت
+// واقعی sandbox وابسته نباشد.
+const _TODAY = new Date().toISOString().slice(0, 10);
+
+// ۱) تبدیل تقویم شمسی: ۱۴ آبان ۱۴۰۵ باید ۲۰۲۶-۱۱-۰۵ باشد
+try {
+  ok(preview.jalaliToIso(1405, 8, 14) === '2026-11-05',
+     '۱۴ آبان ۱۴۰۵ به ۲۰۲۶-۱۱-۰۵ تبدیل شود، یافت: ' + preview.jalaliToIso(1405, 8, 14));
+  ok(preview.jalaliLabel('2026-11-05') === '14 آبان 1405',
+     'برچسب شمسی درست باشد، یافت: ' + preview.jalaliLabel('2026-11-05'));
+  ok(preview.isoToJalali('2026-11-05').jm === 8, 'ماه آبان (۸) تشخیص داده شود');
+  ok(preview.isoToJalali('2026-03-21').jm === 1, '۲۱ مارس اول فروردین باشد');
+} catch (e) { failures++; console.log('FAIL jalali convert: ' + e.message) }
+
+// ۲) وقوع‌ها با بازهٔ ۱۴ روزه از تاریخ شروع
+try {
+  const s = { enabled: true, startISO: '2026-11-05', intervalDays: 14,
+              durationMinutes: 210, analysisMinutes: 60 };
+  const occ = preview.examSeriesOccurrences(s, '2026-11-01', '2026-12-31');
+  ok(occ[0] === '2026-11-05', 'نخستین نوبت ۱۴ آبان باشد، یافت: ' + occ[0]);
+  ok(occ[1] === '2026-11-19', 'نوبت دوم ۱۴ روز بعد باشد، یافت: ' + occ[1]);
+  ok(occ[2] === '2026-12-03', 'نوبت سوم ۲۸ روز بعد باشد، یافت: ' + occ[2]);
+  ok(occ.every((v, i) => i === 0 || v > occ[i - 1]), 'وقوع‌ها صعودی و بی‌تکرار باشند');
+  // بازهٔ مرزی: از نوبتی در میان چرخه شروع می‌شود، نه از تاریخ شروع
+  const mid = preview.examSeriesOccurrences(s, '2026-11-20', '2026-12-31');
+  ok(mid[0] === '2026-12-03', 'جست‌وجو از ۲۰ نوامبر به نوبت بعدی برسد، یافت: ' + mid[0]);
+  ok(preview.examSeriesOccurrences({ ...s, enabled: false }, '2026-11-01', '2026-12-31').length === 0,
+     'چرخهٔ غیرفعال نوبتی نسازد');
+} catch (e) { failures++; console.log('FAIL occurrences: ' + e.message) }
+
+// ۳) هر نوبت دو فعالیت مستقل می‌سازد: خود آزمون و تحلیل آن
+try {
+  const st0 = preview.getState();
+  st0.examSeries = { enabled: true, startISO: _TODAY, intervalDays: 14,
+                     durationMinutes: 210, analysisMinutes: 60, startNote: '' };
+  st0.activities = [];
+  persistSilently(st0);
+  // بازهٔ افق همان چیزی است که ماژول استفاده می‌کند: امروز تا ۶۰ روز بعد
+  const horizon = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10);
+  const expectedOcc = preview.examSeriesOccurrences(st0.examSeries, _TODAY, horizon).length;
+  ok(expectedOcc >= 2, 'در بازهٔ ۶۰ روز چند نوبت باشد، یافت: ' + expectedOcc);
+  const created = preview.syncExamSeries(_TODAY);
+  const st = preview.getState();
+  const acts = (st.activities || []).filter(a => a.origin === 'examSeries');
+  ok(acts.length === 2 * expectedOcc,
+     'هر نوبت دو فعالیت مستقل بسازد: ' + expectedOcc + ' نوبت، یافت: ' + acts.length);
+  ok(created === 2 * expectedOcc, 'تعداد ساخته‌شده گزارش شود، یافت: ' + created);
+  ok(new Set(acts.map(a => a.examRole)).size === 2, 'دوطرفهٔ نقش‌ها باشد');
+  // نوبت امروز: هر دو فعالیت باید به همین تاریخ وصل باشند
+  const examAct = acts.find(a => a.examRole === 'exam' && a.date === _TODAY);
+  const anAct = acts.find(a => a.examRole === 'analysis' && a.date === _TODAY);
+  ok(!!examAct && !!anAct, 'هر دو نقش آزمون و تحلیل ساخته شوند');
+  // هر نوبت دقیقاً دو فعالیت دارد و نقش‌ها تکراری نیستند
+  const perDate = {};
+  for (const a of acts) perDate[a.date] = perDate[a.date] || new Set();
+  for (const a of acts) perDate[a.date].add(a.examRole);
+  ok(Object.keys(perDate).length === expectedOcc, 'هر تاریخ یک نوبت باشد');
+  ok(Object.values(perDate).every(r => r.size === 2),
+     'هر نوبت دقیقاً دو نقش مستقل داشته باشد');
+  ok(examAct.type === 'exam', 'فعالیت آزمون نوع exam باشد، یافت: ' + examAct.type);
+  ok(anAct.type === 'test_analysis', 'فعالیت تحلیل نوع test_analysis باشد، یافت: ' + anAct.type);
+  ok(examAct.date === _TODAY && anAct.date === _TODAY, 'هر دو به تاریخ نوبت وصل باشند');
+  ok(examAct.id !== anAct.id, 'شناسهٔ دو فعالیت متفاوت باشد');
+  ok(num(examAct.remaining) === 210 && num(anAct.remaining) === 60,
+     'مدت هر کدام جدا باشد: آزمون ۲۱۰، تحلیل ۶۰');
+  // همگام‌سازی دوم نباید تکراری بسازد
+  ok(preview.syncExamSeries(_TODAY) === 0, 'همگام‌سازی دوم فعالیت تکراری نسازد');
+  ok(preview.getState().activities.filter(a => a.origin === 'examSeries').length === 2 * expectedOcc,
+     'تعداد فعالیت‌ها پس از همگام‌سازی دوم ثابت بماند');
+} catch (e) { failures++; console.log('FAIL sync pair: ' + e.message) }
+
+// ۴) استقلال واقعی: پایان یکی، دیگری را تمام نمی‌کند
+try {
+  const st0 = preview.getState();
+  const acts = (st0.activities || []).filter(a => a.origin === 'examSeries');
+  const examAct = acts.find(a => a.examRole === 'exam');
+  const anAct = acts.find(a => a.examRole === 'analysis');
+  st0.activities = st0.activities.map(a => a.id === examAct.id
+    ? { ...a, state: 'done', remaining: 0 } : a);
+  persistSilently(st0);
+  const st = preview.getState();
+  const after = (st.activities || []).filter(a => a.origin === 'examSeries');
+  ok(after.find(a => a.id === examAct.id).state === 'done', 'آزمون تمام‌شده ثبت بماند');
+  ok(after.find(a => a.id === anAct.id).state !== 'done',
+     'تحلیل با پایان آزمون تمام نشود؛ یافت: ' + after.find(a => a.id === anAct.id).state);
+  ok(num(after.find(a => a.id === anAct.id).remaining) === 60, 'باقی‌ماندهٔ تحلیل دست‌نخورده بماند');
+} catch (e) { failures++; console.log('FAIL independence: ' + e.message) }
+
+// ۵) فعالیت آینده در برنامهٔ امروز نیاید؛ فعالیت امروز بیاید
+try {
+  const st0 = preview.getState();
+  st0.examSeries = { enabled: true, startISO: _TODAY, intervalDays: 14,
+                     durationMinutes: 210, analysisMinutes: 60, startNote: '' };
+  st0.activities = [];
+  persistSilently(st0);
+  preview.syncExamSeries(_TODAY);
+  const st = preview.getState();
+  const future = (st.activities || []).filter(a => a.origin === 'examSeries' && a.date > _TODAY);
+  ok(future.length >= 2, 'نوبت‌های آینده هم ساخته شوند، یافت: ' + future.length);
+  const plan = preview.getPlan();
+  const planTitles = (plan.placements || []).map(p => p.title);
+  const todayTitles = (st.activities || [])
+    .filter(a => a.origin === 'examSeries' && a.date <= _TODAY)
+    .map(a => a.title);
+  ok(planTitles.includes('آزمون جامع دوره‌ای · ' + preview.jalaliLabel(_TODAY)),
+     'آزمون امروز در برنامه باشد؛ تیترها: ' + planTitles.join(' | '));
+  ok(!planTitles.includes('آزمون جامع دوره‌ای · ' + preview.jalaliLabel(future[0].date)),
+     'آزمون نوبت آینده در برنامهٔ امروز نیاید');
+  const futurePlanned = future.filter(a => a.date > _TODAY && a.state === 'planned');
+  ok(futurePlanned.length === future.length, 'نوبت‌های آینده در وضعیت برنامه‌ریزی‌شده بمانند');
+} catch (e) { failures++; console.log('FAIL plan horizon: ' + e.message) }
+
+// ۶) صفحهٔ آزمون‌های جامع چرخه را نشان می‌دهد و هشدار تاریخ رسمی را دارد
+try {
+  clickNav('comprehensive');
+  const html = pageHtml();
+  ok(html.includes('چرخهٔ آزمون جامع تکرارشونده'), 'کارت چرخه در صفحه دیده شود');
+  ok(html.includes('مستقل'), 'استقلال آزمون و تحلیل در صفحه گفته شود');
+  ok(html.includes('ابلاغ نشده'), 'هشدار «تاریخ رسمی ابلاغ نشده» بیاید');
+  ok(html.includes(preview.jalaliLabel(_TODAY)) || html.includes('14'),
+     'تاریخ نوبت با برچسب شمسی نمایش داده شود');
+} catch (e) { failures++; console.log('FAIL series page: ' + e.message) }
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node برای اجرای پیش‌نمایش لازم است")
+def test_comprehensive_exam_series_recurs_and_splits_analysis(preview_js, tmp_path):
+    """آزمون جامع هر ۱۴ روز از ۱۴ آبان ۱۴۰۵ تکرار شود و تحلیل مستقل باشد."""
+    payload = tmp_path / "preview-bundle.js"
+    payload.write_text(preview_js, encoding="utf-8")
+    syllabus_json = tmp_path / "syllabus.json"
+    import json as _json
+
+    m = re.search(r'id="syllabusData"[^>]*>(.*?)</script>', PREVIEW.read_text(encoding="utf-8"), re.S)
+    syllabus_json.write_text(m.group(1).replace("\\u003c", "<"), encoding="utf-8")
+    seed = _seed_state()
+    harness = _harness(payload, seed, syllabus_json)
+    body = Path(harness).read_text(encoding="utf-8")
+    marker = "console.log(JSON.stringify({failures}));\nprocess.exit(failures ? 1 : 0);"
+    assert marker in body, "examseries harness marker"
+    body = body.replace(marker, _EXAMSERIES_SCRIPT.strip() + "\n", 1)
     Path(harness).write_text(body, encoding="utf-8")
     result = subprocess.run(
         [NODE, harness],
