@@ -1195,3 +1195,97 @@ def test_unknown_section_counts_are_entered_not_invented(preview_js, tmp_path):
     stderr = result.stderr or ""
     assert result.returncode == 0, stdout + stderr
     assert "FAIL" not in stdout, stdout
+
+_REPORTS_SCRIPT = r"""
+// ===== گزارش روزانه و هفتگی با دلیل تغییرها =====
+// چیزی که باید تضمین شود: گزارش از دادهٔ واقعی ساخته شود، تفاوت برآورد و
+// واقعی دیده شود، و دلیل هر تغییر وضعیت از دست نرود.
+const _TODAY2 = new Date().toISOString().slice(0, 10);
+const _DAYS_AGO = (n) => { const d = new Date(); d.setUTCDate(d.getUTCDate() - n); return d.toISOString().slice(0, 10) };
+
+try {
+  const st0 = preview.getState();
+  const mkAct = (title, stateName, actual, estimate, updatedAt, reason) => ({
+    id: 'a_' + title, title, type: 'independent_practice', subjectId: 's1', subjectName: 'زیست‌شناسی',
+    estimate, remaining: 0, actual, state: stateName, minChunk: 20, maxChunk: 90, splittable: true,
+    deadline: 'none', personalWeight: 1, updatedAt: updatedAt + 'T10:00:00.000Z', reason: reason || ''
+  });
+  st0.activities = [
+    // امروز: دو تا تمام‌شده (یکی با دلیل)، یکی ناقص، یکی تعویق‌شده با دلیل
+    mkAct('تمرین امروز الف', 'done', 70, 45, _TODAY2, 'سؤال سخت‌تر بود'),
+    mkAct('تمرین امروز ب', 'done', 40, 40, _TODAY2, ''),
+    mkAct('تمرین امروز ج', 'partial', 25, 60, _TODAY2, 'وقت نشد'),
+    mkAct('تمرین امروز د', 'deferred', 0, 30, _TODAY2, 'کلاس اضافه شد'),
+    // سه روز پیش
+    mkAct('تمرین سه روز پیش', 'done', 90, 60, _DAYS_AGO(3), ''),
+    // هفت روز پیش (بیرون از بازه)
+    mkAct('تمرین هفت روز پیش', 'done', 30, 30, _DAYS_AGO(9), ''),
+    // باز
+    mkAct('تمرین باز', 'planned', 0, 50, _TODAY2, ''),
+    // گذشته و هنوز باز
+    { ...mkAct('تمرین گذشتهٔ باز', 'planned', 0, 40, _TODAY2, ''), date: _DAYS_AGO(2) }
+  ];
+  persistSilently(st0);
+  clickNav('reports');
+  const html = pageHtml();
+  ok(html.includes('گزارش امروز'), 'بخش گزارش امروز باشد');
+  ok(html.includes('گزارش هفت روز گذشته'), 'بخش گزارش هفتگی باشد');
+  ok(html.includes('دلیل تغییرهای امروز'), 'جدول دلیل تغییرهای امروز باشد');
+  ok(html.includes('دلیل تغییرهای هفته'), 'جدول دلیل تغییرهای هفته باشد');
+  ok(html.includes('سؤال سخت‌تر بود'), 'دلیل ثبت‌شدهٔ امروز دیده شود');
+  ok(html.includes('کلاس اضافه شد'), 'دلیل تعویق دیده شود');
+  // هفت ردیف روزانه
+  const dayRowCount = (html.match(/<tr><td>(امروز|[^<]*)<\/td><td>\d{4}-\d{2}-\d{2}<\/td>/g) || []).length;
+  ok(dayRowCount === 7, 'هفت ردیف روزانه در گزارش هفتگی باشد، یافت: ' + dayRowCount);
+  // برآورد و واقعی هفته: (45+40+60+90) برآورد، (70+40+90) واقعی
+  ok(html.includes('اختلاف برآورد و واقعی'), 'شاخص اختلاف برآورد و واقعی باشد');
+  ok(html.includes('فعالیت‌های باز'), 'فعالیت‌های باز گزارش شوند');
+  ok(html.includes('هنوز باز است'), 'فعالیت گذشتهٔ باز هشدار بگیرد');
+} catch (e) { failures++; console.log('FAIL reports: ' + e.message) }
+
+// فعالیت بدون دلیل، برنامه را به ثبت دلیل reminder می‌کند
+try {
+  const st0 = preview.getState();
+  st0.activities = [{
+    id: 'a_noreason', title: 'تمرین بدون دلیل', type: 'independent_practice', subjectId: 's1',
+    subjectName: 'زیست‌شناسی', estimate: 45, remaining: 0, actual: 45, state: 'done',
+    minChunk: 20, maxChunk: 90, splittable: true, deadline: 'none', personalWeight: 1,
+    updatedAt: _TODAY2 + 'T10:00:00.000Z', reason: ''
+  }];
+  persistSilently(st0);
+  clickNav('reports');
+  const html = pageHtml();
+  ok(html.includes('دلیل خالی است'), 'وقتی دلیل ثبت نشده یادآوری شود');
+} catch (e) { failures++; console.log('FAIL reports nudge: ' + e.message) }
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node برای اجرای پیش‌نمایش لازم است")
+def test_reports_show_daily_weekly_and_change_reasons(preview_js, tmp_path):
+    """گزارش روزانه و هفتگی ساخته می‌شود و دلیل تغییرها را از دست نمی‌دهد."""
+    payload = tmp_path / "preview-bundle.js"
+    payload.write_text(preview_js, encoding="utf-8")
+    syllabus_json = tmp_path / "syllabus.json"
+    import json as _json
+
+    m = re.search(r'id="syllabusData"[^>]*>(.*?)</script>', PREVIEW.read_text(encoding="utf-8"), re.S)
+    syllabus_json.write_text(m.group(1).replace("\\u003c", "<"), encoding="utf-8")
+    seed = _seed_state()
+    harness = _harness(payload, seed, syllabus_json)
+    body = Path(harness).read_text(encoding="utf-8")
+    marker = "console.log(JSON.stringify({failures}));\nprocess.exit(failures ? 1 : 0);"
+    assert marker in body, "reports harness marker"
+    body = body.replace(marker, _REPORTS_SCRIPT.strip() + "\n", 1)
+    Path(harness).write_text(body, encoding="utf-8")
+    result = subprocess.run(
+        [NODE, harness],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=180,
+        cwd=str(ROOT),
+    )
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    assert result.returncode == 0, stdout + stderr
+    assert "FAIL" not in stdout, stdout
