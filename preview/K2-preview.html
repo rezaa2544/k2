@@ -787,15 +787,10 @@ function assessStart(subject, grade, chapter, section) {
   const existing = sectionRecord(subject, grade, chapter, section) || {};
   assessDraft = {
     subject, grade, chapter, section, step: 0,
-    answers: {
-      teaching: existing.teaching ?? null,
-      study: existing.study ?? null,
-      comprehension: existing.comprehension ?? null,
-      consolidation: existing.consolidation ?? null,
-      testing: existing.testing ?? null,
-      analysis: existing.analysis ?? null,
-      essay: existing.essay ?? null,
-    },
+    // پاسخ‌های قبلی از خودِ فهرست سؤال‌ها خوانده می‌شوند تا «ویرایش پاسخ»
+    // برای هر سؤالی کار کند — با فهرست دستی، سؤال تازه بی‌جواب باز می‌شد.
+    answers: Object.fromEntries(
+      ASSESS_QUESTIONS.map(q => [q.key, existing[q.key] ?? null])),
     mastery: existing.mastery ?? null,
     masteryUnknown: existing.mastery === null || existing.mastery === undefined || existing.mastery === '',
     pagesTotal: existing.pagesTotal ?? null,

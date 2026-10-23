@@ -231,6 +231,22 @@ try {
       ['essay',['not_done','flawed']],['speed',['slow','partial_time','panic']]];
     return map.filter(([k,v]) => v.includes(r[k])).map(x => x[0]); })();
   ok(needs.length === 0, 'پاسخ‌های مثبت نیاز جبرانی نسازند، یافت: ' + JSON.stringify(needs));
+  // پاسخ‌ها قابل ویرایش‌اند: باز کردن دوباره، پاسخ قبلی را پیش‌پر می‌کند
+  clickAction('assess:زیست‌شناسی:10:1:3');
+  const reopened = byId['#modalBody'].innerHTML || '';
+  ok(reopened.includes('سؤال ۱ از ۸'), 'باز کردن دوباره از سؤال ۱ شروع شود');
+  ok(reopened.includes('primary'), 'گزینهٔ انتخاب‌شدهٔ قبلی علامت بخورد');
+  // رفتن به سؤال ۸ باید پاسخ قبلی را نشان دهد
+  for (let i = 0; i < 7; i++) clickAction('assess-next');
+  const atEight = byId['#modalBody'].innerHTML || '';
+  ok(atEight.includes('سؤال ۸ از ۸'), 'سؤال ۸ در ویرایش دیده شود');
+  ok(atEight.includes('در زمان لازم پاسخ می‌دهم'),
+     'پاسخ قبلی سؤال ۸ پیش‌پر شود (پاسخ قابل ویرایش است)');
+  clickAction('assess-pick:speed:slow');
+  clickAction('assess-save');
+  const st2 = preview.getState();
+  ok(st2.sections['زیست‌شناسی|10|1|3'].speed === 'slow',
+     'تغییر پاسخ سؤال ۸ ذخیره شود، یافت: ' + st2.sections['زیست‌شناسی|10|1|3'].speed);
 } catch (e) { failures++; console.log('FAIL step-by-step: ' + e.message) }
 
 // ---- د) وضعیت گفتار به فصل دیگر تعمیم داده نمی‌شود ----
