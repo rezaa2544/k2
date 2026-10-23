@@ -56,6 +56,12 @@ function makeEl(tag) {
     closest(sel){ let cur=this; while(cur){ if(cur.matches && cur.matches(sel)) return cur; cur=cur.parentNode } return null },
     querySelector(){return null}, querySelectorAll(){return []},
     getBoundingClientRect(){return {top:0,left:0,width:0,height:0}},
+    // سریال‌سازی ساده تا خروجی HTML داده‌دار قابل آزمایش باشد
+    get outerHTML(){
+      const attrs = Object.entries(this.attrs||{}).map(([k,v])=>` ${k}="${String(v).replace(/"/g,'&quot;')}"`).join('');
+      const inner = (this.children||[]).map(c=>c.outerHTML).join('') + (this.textContent||'');
+      return `<${this.tagName}${attrs}>${inner}</${this.tagName}>`;
+    },
   };
   return el;
 }
@@ -73,6 +79,13 @@ const document = Object.assign(makeEl('#document'), {
   querySelectorAll(sel){ return sel==='.nav-item' ? navItems : [] },
   getElementById(id){ return byId['#'+id] || null },
 });
+// تگ وضعیت جاسازی‌شده باید داخل documentElement باشد تا خروجی HTML داده‌دار
+// همان الگوی مرورگر واقعی را داشته باشد.
+const _embedded = byId['#embeddedState'];
+_embedded.tagName = 'script';
+_embedded.attrs.id = 'embeddedState';
+_embedded.attrs.type = 'application/json';
+document.documentElement.children.push(_embedded);
 const store = {};
 const localStorage = { getItem:k=>k in store?store[k]:null, setItem:(k,v)=>{store[k]=String(v)},
   removeItem:k=>{delete store[k]}, clear:()=>{for(const k in store) delete store[k]} };
@@ -94,20 +107,28 @@ const window = { K2_CATALOG: {}, K2_GROUP_WEIGHTS: {}, K2_SYLLABUS: SYL.courses,
   K2_SYLLABUS_META: SYL.meta, showSaveFilePicker: null };
 const promptReply = { value: null };
 global.__setPrompt = (v) => { promptReply.value = v };
+// DOMParser کوچک: فقط تگ وضعیت جاسازی‌شده را برمی‌گرداند تا مسیر
+// «بازیابی از HTML داده‌دار» قابل آزمایش باشد.
+const DOMParser = class {
+  parseFromString(text){
+    const m = String(text).match(/<script id="embeddedState" type="application\/json">([\s\S]*?)<\/script>/);
+    return { querySelector:(sel)=> (sel === '#embeddedState' && m) ? { textContent: m[1] } : null };
+  }
+};
 const preview = new Function('document','localStorage','window','Intl','structuredClone','navigator',
-  'confirm','prompt','setTimeout','clearTimeout','URL','Blob','console','FormData',
+  'confirm','prompt','setTimeout','clearTimeout','URL','Blob','console','FormData','DOMParser',
   factory_src + '\nreturn window.K2Preview;')(document, localStorage, window, Intl,
   o=>JSON.parse(JSON.stringify(o)), {userAgent:'node'}, ()=>true,
   (msg, def) => promptReply.value === null ? def : promptReply.value, ()=>0, ()=>{},
   {createObjectURL:()=>'', revokeObjectURL:()=>{}},
-  class Blob { constructor(p){this.parts=p} }, console,
+  class Blob { constructor(p){this.parts=p;(global.__blobs=global.__blobs||[]).push(this)} }, console,
   class FormData { constructor(){ this._m = global.__fd || new Map() }
     get(k){ const v = this._m.has(k) ? this._m.get(k) : null;
       return Array.isArray(v) ? (v[0] === undefined ? null : v[0]) : v }
     has(k){ const v=this.get(k); return v!==null && v!=='' && v!==undefined }
     getAll(k){ const v=this._m.has(k) ? this._m.get(k) : null;
       if (v===null || v===undefined) return [];
-      return Array.isArray(v) ? v.slice() : [v] } });
+      return Array.isArray(v) ? v.slice() : [v] } }, DOMParser);
 if (!preview) { console.log('FAIL: K2Preview missing'); process.exit(1) }
 const clicks = (document._listeners && document._listeners.click) || [];
 function clickNav(page){ const b = navItems.find(x=>x.dataset.page===page);
@@ -1606,6 +1627,134 @@ def test_exams_have_time_draft_state_and_conflict_detection(preview_js, tmp_path
     marker = "console.log(JSON.stringify({failures}));\nprocess.exit(failures ? 1 : 0);"
     assert marker in body, "examdraft harness marker"
     body = body.replace(marker, _EXAMDRAFT_SCRIPT.strip() + "\n", 1)
+    Path(harness).write_text(body, encoding="utf-8")
+    result = subprocess.run(
+        [NODE, harness],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=180,
+        cwd=str(ROOT),
+    )
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    assert result.returncode == 0, stdout + stderr
+    assert "FAIL" not in stdout, stdout
+
+_BACKUP_SCRIPT = r"""
+// ===== پشتیبان JSON، بازگردانی و خروجی HTML داده‌دار =====
+// چیزی که باید ثابت شود: داده واقعاً از دستگاه بیرون می‌آید و واقعاً
+// برمی‌گردد — نه اینکه فقط دکمه‌ها وجود داشته باشند.
+
+const _mkBackupState = () => {
+  const st0 = preview.getState();
+  st0.activities = [{
+    id: 'bk1', title: 'تمرین پشتیبان', type: 'independent_practice', subjectId: 's1',
+    subjectName: 'زیست‌شناسی', estimate: 45, remaining: 45, actual: 0, state: 'planned',
+    minChunk: 20, maxChunk: 90, splittable: true, deadline: 'none', personalWeight: 1
+  }];
+  st0.events = [{ id: 'bk2', title: 'کلاس پشتیبان', kind: 'class', weekday: 2,
+    start: '15:00', end: '17:00', recorded: false, needsConfirmation: false }];
+  st0.attempts = [{ id: 'bk3', name: 'آزمون پشتیبان', kind: 'teaching', date: '2026-11-05',
+    time: '09:00', total: 40, correct: 30, wrong: 6, blank: 4, duration: 90,
+    percentage: 75, draft: false, subjectId: '', subjectName: '' }];
+  persistSilently(st0);
+  return st0;
+};
+const _lastBlobText = () => {
+  const all = global.__blobs || [];
+  if (!all.length) return null;
+  const b = all[all.length - 1];
+  const parts = b.parts || [];
+  return parts.map(x => (typeof x === 'string' ? x : String(x))).join('');
+};
+
+// ۱) پشتیبان JSON: داده واقعاً در فایل می‌رود
+(async () => {
+  try {
+    _mkBackupState();
+    global.__blobs = [];
+    preview.backupJSON();
+    const text = _lastBlobText();
+    ok(!!text, 'پشتیبان JSON something بسازد');
+    const raw = JSON.parse(text);
+    ok(raw.app === 'K2-preview', 'سرآیند پشتیبان درست باشد');
+    ok(!!raw.exportedAt, 'زمان خروجی ثبت شود');
+    ok(Array.isArray(raw.state.activities) && raw.state.activities.length === 1,
+       'فعالیت‌ها در پشتیبان باشند');
+    ok(raw.state.activities[0].title === 'تمرین پشتیبان', 'محتوای فعالیت درست باشد');
+    ok(raw.state.events[0].title === 'کلاس پشتیبان', 'رویدادها در پشتیبان باشند');
+    ok(raw.state.attempts[0].percentage === 75, 'نتیجهٔ آزمون در پشتیبان باشد');
+
+    // ۲) بازگردانی از JSON: داده جایگزین می‌شود
+    const wiped = preview.getState();
+    wiped.activities = []; wiped.events = []; wiped.attempts = [];
+    persistSilently(wiped);
+    ok(preview.getState().activities.length === 0, 'داده پاک شود');
+    await preview.restoreFile({ name: 'K2-backup.json', text: async () => text });
+    const back = preview.getState();
+    ok(back.activities.length === 1 && back.activities[0].title === 'تمرین پشتیبان',
+       'بازگردانی JSON فعالیت‌ها را برگرداند');
+    ok(back.events.length === 1 && back.events[0].title === 'کلاس پشتیبان',
+       'بازگردانی JSON رویدادها را برگرداند');
+    ok(back.attempts.length === 1 && back.attempts[0].percentage === 75,
+       'بازگردانی JSON آزمون‌ها را برگرداند');
+
+    // ۳) خروجی HTML داده‌دار: خودبسنده و شامل داده
+    global.__blobs = [];
+    await preview.saveHTML();
+    const html = _lastBlobText();
+    ok(!!html && html.startsWith('<!doctype html>'), 'خروجی HTML بسازد');
+    ok(html.includes('id="embeddedState"'), 'تگ وضعیت جاسازی‌شده در خروجی باشد');
+    const m = html.match(/<script id="embeddedState" type="application\/json">([\s\S]*?)<\/script>/);
+    ok(!!m, 'الگوی تگ وضعیت پیدا شود');
+    const embedded = JSON.parse(m[1]);
+    ok(embedded.activities[0].title === 'تمرین پشتیبان',
+       'داده در HTML جاسازی شود (خروجی خودبسنده)');
+    ok(embedded.attempts[0].percentage === 75, 'دادهٔ آزمون هم جاسازی شود');
+
+    // ۴) بازگردانی از همان HTML داده‌دار
+    const wiped2 = preview.getState();
+    wiped2.activities = []; wiped2.events = []; wiped2.attempts = [];
+    persistSilently(wiped2);
+    await preview.restoreFile({ name: 'K2-preview-with-data.html', text: async () => html });
+    const back2 = preview.getState();
+    ok(back2.activities.length === 1 && back2.activities[0].title === 'تمرین پشتیبان',
+       'بازگردانی از HTML داده‌دار کار کند');
+    ok(back2.events.length === 1 && back2.events[0].title === 'کلاس پشتیبان',
+       'بازگردانی از HTML رویدادها را هم برگرداند');
+
+    // ۵) فایل نامرتبط باید خطای روشن بدهد، نه خرابی خاموش
+    let rejected = false;
+    try { await preview.restoreFile({ name: 'junk.json', text: async () => '{"hello":1}' }); }
+    catch (e) { rejected = true; }
+    ok(rejected, 'فایل ناسازگار رد شود');
+
+    console.log(JSON.stringify({failures}));
+    process.exit(failures ? 1 : 0);
+  } catch (e) { failures++; console.log('FAIL backup: ' + e.message);
+    console.log(JSON.stringify({failures})); process.exit(1); }
+})();
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node برای اجرای پیش‌نمایش لازم است")
+def test_backup_restore_and_html_export_round_trip(preview_js, tmp_path):
+    """پشتیبان JSON، بازگردانی و خروجی HTML داده‌دار واقعاً داده را جابه‌جا می‌کنند."""
+    payload = tmp_path / "preview-bundle.js"
+    payload.write_text(preview_js, encoding="utf-8")
+    syllabus_json = tmp_path / "syllabus.json"
+    import json as _json
+
+    m = re.search(r'id="syllabusData"[^>]*>(.*?)</script>', PREVIEW.read_text(encoding="utf-8"), re.S)
+    syllabus_json.write_text(m.group(1).replace("\\u003c", "<"), encoding="utf-8")
+    seed = _seed_state()
+    harness = _harness(payload, seed, syllabus_json)
+    body = Path(harness).read_text(encoding="utf-8")
+    marker = "console.log(JSON.stringify({failures}));\nprocess.exit(failures ? 1 : 0);"
+    assert marker in body, "backup harness marker"
+    # این اسکریپت خودش پایان را چاپ می‌کند (async است) پس نشانگر پایانی حذف می‌شود
+    body = body.replace(marker, _BACKUP_SCRIPT.strip() + "\n", 1)
     Path(harness).write_text(body, encoding="utf-8")
     result = subprocess.run(
         [NODE, harness],
