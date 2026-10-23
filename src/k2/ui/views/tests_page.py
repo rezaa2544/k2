@@ -149,7 +149,7 @@ class TestsPage(QWidget):
         root.addWidget(self.analysis)
 
         splitter = QHBoxLayout()
-        tests_card = Card("تست‌های ثبت‌شده")
+        tests_card = Card("تست‌های ثبت‌شده", tone="exam")
         self.test_table = QTableWidget(0, 6)
         self.test_table.setHorizontalHeaderLabels(
             ["نام", "نوع", "تاریخ", "درصد", "مدت", "یادداشت"]
@@ -161,7 +161,7 @@ class TestsPage(QWidget):
         tests_card.add(self.test_table)
         splitter.addWidget(tests_card, 3)
 
-        errors_card = Card("خطاهای تست انتخاب‌شده")
+        errors_card = Card("خطاهای تست انتخاب‌شده", tone="problem")
         self.error_table = QTableWidget(0, 4)
         self.error_table.setHorizontalHeaderLabels(
             ["مبحث", "علت خطا", "وضعیت رفع", "اقدام"]

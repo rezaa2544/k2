@@ -189,7 +189,7 @@ class ExamsPage(QWidget):
         header.addWidget(btn_remedy)
         root.addLayout(header)
 
-        card = Card("نوبت‌های آزمون")
+        card = Card("نوبت‌های آزمون", tone="exam")
         self.table = QTableWidget(0, 8)
         self.table.setHorizontalHeaderLabels(
             ["نام", "نوع", "تاریخ", "کل", "درست", "غلط", "نزده", "درصد"]
@@ -201,7 +201,7 @@ class ExamsPage(QWidget):
         card.add(self.table)
         root.addWidget(card, 1)
 
-        self.analysis = Card("تحلیل آخرین آزمون")
+        self.analysis = Card("تحلیل آخرین آزمون", tone="exam")
         self.analysis_text = QLabel("—")
         self.analysis_text.setWordWrap(True)
         self.analysis.add(self.analysis_text)

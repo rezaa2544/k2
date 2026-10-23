@@ -312,7 +312,7 @@ class ClassesPage(QWidget):
         root.addWidget(self.conflicts)
 
         splitter = QHBoxLayout()
-        events_card = Card("رویدادهای ثابت هفتگی")
+        events_card = Card("رویدادهای ثابت هفتگی", tone="class")
         self.event_table = QTableWidget(0, 6)
         self.event_table.setHorizontalHeaderLabels(
             ["عنوان", "نوع", "روز", "ساعت", "ضبط‌شده", "درس"]
@@ -324,7 +324,7 @@ class ClassesPage(QWidget):
         events_card.add(self.event_table)
         splitter.addWidget(events_card, 3)
 
-        routines_card = Card("روال‌های ضروری روزانه")
+        routines_card = Card("روال‌های ضروری روزانه", tone="class")
         self.routine_table = QTableWidget(0, 4)
         self.routine_table.setHorizontalHeaderLabels(
             ["عنوان", "نوع", "ساعت", "تناوب"]

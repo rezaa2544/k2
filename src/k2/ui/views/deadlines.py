@@ -194,7 +194,7 @@ class DeadlinesPage(QWidget):
         self.alert.setVisible(False)
         root.addWidget(self.alert)
 
-        card = Card("مهلت‌های ثبت‌شده")
+        card = Card("مهلت‌های ثبت‌شده", tone="deadline")
         self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels(
             ["مبحث", "نوع مهلت", "تاریخ", "هدف", "مسیر", "مادر", "وضعیت"]
@@ -206,7 +206,7 @@ class DeadlinesPage(QWidget):
         card.add(self.table)
         root.addWidget(card, 1)
 
-        self.detail = Card("بازمحاسبه و امکان‌سنجی")
+        self.detail = Card("بازمحاسبه و امکان‌سنجی", tone="deadline")
         self.detail_text = QLabel("یک مبحث را انتخاب کن.")
         self.detail_text.setWordWrap(True)
         self.detail_text.setTextInteractionFlags(Qt.TextSelectableByMouse)

@@ -203,7 +203,7 @@ class TopicsPage(QWidget):
         )
         root.addWidget(self.info)
 
-        card = Card("نقشهٔ یادگیری شخصی")
+        card = Card("نقشهٔ یادگیری شخصی", tone="study")
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(
             ["مبحث/مهارت", "درس", "نوع محتوا", "وضعیت عملکردی", "جلسه‌های جدا", "آخرین شاهد"]
@@ -229,7 +229,7 @@ class TopicsPage(QWidget):
             actions.addWidget(button)
         actions.addStretch(1)
         root.addLayout(actions)
-        self.method_card = Card("روش‌های پیشنهادی برای مبحث انتخاب‌شده")
+        self.method_card = Card("روش‌های پیشنهادی برای مبحث انتخاب‌شده", tone="study")
         self.method_label = QLabel("یک مبحث را انتخاب کنید تا شواهد و روش‌ها دیده شود.")
         self.method_label.setWordWrap(True)
         self.method_card.add(self.method_label)

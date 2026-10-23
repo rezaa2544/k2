@@ -66,7 +66,7 @@ class BacklogsPage(QWidget):
 
         splitter = QHBoxLayout()
 
-        triage_card = Card("تریاژ امروز")
+        triage_card = Card("تریاژ امروز", tone="backlog")
         self.triage_table = QTableWidget(0, 4)
         self.triage_table.setHorizontalHeaderLabels(
             ["کار", "مدت", "اولویت", "دلیل"]
@@ -78,7 +78,7 @@ class BacklogsPage(QWidget):
         triage_card.add(self.triage_table)
         splitter.addWidget(triage_card, 2)
 
-        backlog_card = Card("بدهی ثبت‌شده")
+        backlog_card = Card("بدهی ثبت‌شده", tone="backlog")
         self.backlog_table = QTableWidget(0, 3)
         self.backlog_table.setHorizontalHeaderLabels(["کار", "مهلت", "وضعیت"])
         self.backlog_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)

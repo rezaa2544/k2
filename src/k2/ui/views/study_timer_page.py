@@ -241,7 +241,7 @@ class StudyTimerPage(QWidget):
         header.addWidget(btn_correct)
         root.addLayout(header)
 
-        timer_card = Card("تایمر")
+        timer_card = Card("تایمر", tone="timer")
         clock_row = QHBoxLayout()
         self.clock = QLabel("۰۰:۰۰:۰۰")
         self.clock.setObjectName("bigNumber")
@@ -290,7 +290,7 @@ class StudyTimerPage(QWidget):
         root.addWidget(self.tip)
 
         stats_row = QHBoxLayout()
-        self.tile_day = Card("امروز")
+        self.tile_day = Card("امروز", tone="timer")
         self.day_value = QLabel("—")
         self.day_value.setObjectName("bigNumber")
         self.tile_day.add(self.day_value)
@@ -300,7 +300,7 @@ class StudyTimerPage(QWidget):
         self.tile_day.add(self.day_detail)
         stats_row.addWidget(self.tile_day)
 
-        self.tile_week = Card("این هفته")
+        self.tile_week = Card("این هفته", tone="timer")
         self.week_value = QLabel("—")
         self.week_value.setObjectName("bigNumber")
         self.tile_week.add(self.week_value)
@@ -310,7 +310,7 @@ class StudyTimerPage(QWidget):
         self.tile_week.add(self.week_detail)
         stats_row.addWidget(self.tile_week)
 
-        self.tile_compare = Card("برنامه در مقابل اجرا")
+        self.tile_compare = Card("برنامه در مقابل اجرا", tone="study")
         self.compare_value = QLabel("—")
         self.compare_value.setObjectName("bigNumber")
         self.tile_compare.add(self.compare_value)
@@ -321,7 +321,7 @@ class StudyTimerPage(QWidget):
         stats_row.addWidget(self.tile_compare)
         root.addLayout(stats_row)
 
-        card = Card("جلسه‌های ثبت‌شده")
+        card = Card("جلسه‌های ثبت‌شده", tone="timer")
         self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels(
             ["شروع", "نوع", "درس/مبحث", "خالص", "استراحت", "نوع ثبت", "یادداشت"]
