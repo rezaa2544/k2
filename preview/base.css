@@ -385,3 +385,15 @@ tbody tr:hover td{background:var(--surface-soft)}
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}
 }
+
+/* ---------- سرفصل، ارزیابی گفتار و بانک منابع ---------- */
+.syllabus-chapter{margin:12px 0}
+.syllabus-sec-row td{vertical-align:middle}
+.assess-steps{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.assess-step{width:26px;height:26px;border-radius:50%;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:var(--muted);background:#fff}
+.assess-step.done{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
+.assess-step.current{background:var(--accent);border-color:var(--accent);color:#fff}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.danger{background:var(--danger-soft);color:var(--danger)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.resource-meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:var(--muted);font-size:11px}
