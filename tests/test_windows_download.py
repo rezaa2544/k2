@@ -73,7 +73,6 @@ def test_release_metadata_tracks_exe_and_zip_hashes_and_sizes(tmp_path: Path):
     assert f"{_packager.persian_grouped_number(archive.stat().st_size)} بایت" in release_doc
     preview = (metadata_root / "preview" / "K2-preview.html").read_text(encoding="utf-8")
     assert f'data-source-revision="{source_revision}"' in preview
-    assert f'<b id="sourceRevision">{source_revision[:8]}</b>' in preview
 
 
 def test_refresh_preview_download_bundle_keeps_zip_and_readme_in_sync(tmp_path: Path):

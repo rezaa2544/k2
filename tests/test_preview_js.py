@@ -61,7 +61,7 @@ function makeEl(tag) {
 }
 const byId = {};
 for (const id of ['pageTitle','pageHint','pageContent','navList','toast','statusMessage','storageState',
-  'dateLabel','sourceRevision','refreshButton','modalBackdrop','modalTitle','modalBody','modalActions',
+  'dateLabel','refreshButton','modalBackdrop','modalTitle','modalBody','modalActions',
   'modalClose','modalForm','restoreInput','programMenuButton','programMenu','helpMenuButton','helpMenu',
   'embeddedState','catalogData','groupWeightsData','csvData','timerClock']) byId['#'+id] = makeEl();
 const navItems = ['dashboard','weekly','courses','backlogs','classes','problems','tests','review',

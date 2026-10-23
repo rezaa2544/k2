@@ -16,16 +16,13 @@ def _comparable(html: bytes) -> bytes:
     """HTML را برای مقایسه آماده می‌کند: مهر نسخه و پایان‌خط نادیده می‌رود.
 
     چرا لازم است: مرحلهٔ «refresh bundle» در CI هش واقعی مبدأ را داخل
-    ``data-source-revision`` و ``#sourceRevision`` مهر می‌کند، ولی سازندهٔ
-    پیش‌نمایش همیشه ``pending`` می‌گذارد. پس مقایسهٔ بازتولیدپذیری باید
-    همین دو فیلد و تفاوت CRLF ویندوز را نادیده بگیرد.
+    ``data-source-revision`` مهر می‌کند، ولی سازندهٔ پیش‌نمایش همیشه
+    ``pending`` می‌گذارد. پس مقایسهٔ بازتولیدپذیری باید همین فیلد و تفاوت
+    CRLF ویندوز را نادیده بگیرد.
     """
     html = html.replace(b"\r\n", b"\n")
-    html = re.sub(rb'data-source-revision="[^"]*"', b'data-source-revision="pending"', html)
     return re.sub(
-        rb'(<b id="sourceRevision">)[^<]*(</b>)',
-        rb"\g<1>working tree\g<2>",
-        html,
+        rb'data-source-revision="[^"]*"', b'data-source-revision="pending"', html
     )
 
 
@@ -42,17 +39,9 @@ def test_source_revision_stamp_does_not_break_reproducibility():
     canonical = re.sub(
         r'data-source-revision="[^"]*"', 'data-source-revision="pending"', html
     )
-    canonical = re.sub(
-        r'(<b id="sourceRevision">)[^<]*(</b>)',
-        r"\g<1>working tree\g<2>",
-        canonical,
-    )
     stamped = canonical.replace(
         'data-source-revision="pending"',
         'data-source-revision="3058074aa4bc5dbb767927763990037c355eb8c9"',
-    ).replace(
-        '<b id="sourceRevision">working tree</b>',
-        '<b id="sourceRevision">3058074a</b>',
     )
     assert stamped != canonical, "دادهٔ مهر‌شده ساخته نشد"
     assert _comparable(stamped.encode("utf-8")) == _comparable(canonical.encode("utf-8"))
