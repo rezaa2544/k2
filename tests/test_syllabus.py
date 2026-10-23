@@ -193,6 +193,46 @@ try {
   }
 } catch (e) { failures++; console.log('FAIL assessment: ' + e.message) }
 
+// ---- ج۲) پیمایش گام‌به‌گام واقعی کاربر با «بعدی» تا سؤال ۸ ----
+try {
+  clickAction('assess:زیست‌شناسی:10:1:3');
+  const order = ['teaching','study','comprehension','consolidation','testing','analysis','essay','speed'];
+  const vals = { teaching:'taught', study:'complete', comprehension:'well',
+    consolidation:'consolidated', testing:'satisfactory', analysis:'full',
+    essay:'ready', speed:'timed_ok' };
+  for (let i = 0; i < order.length; i++) {
+    const htmlBefore = byId['#modalBody'].innerHTML || '';
+    const fa = '۰۱۲۳۴۵۶۷۸۹';
+    const expect = 'سؤال ' + fa[i + 1] + ' از ۸';
+    ok(htmlBefore.includes(expect), 'گام ' + (i + 1) + ' باید عنوان درست را نشان دهد: ' + expect);
+    clickAction('assess-pick:' + order[i] + ':' + vals[order[i]]);
+    clickAction('assess-next');
+  }
+  // پس از هشت گام، گام تسلط باز می‌شود
+  const htmlAfter = byId['#modalBody'].innerHTML || '';
+  ok(htmlAfter.includes('از ۸') || htmlAfter.includes('تسلط'),
+     'پس از هشت سؤال، گام پایانی باز شود');
+  global.__fd = new Map([['mastery',''],['masteryUnknown','on'],['notes','']]);
+  clickAction('assess-save');
+  const st = preview.getState();
+  const rec = st.sections['زیست‌شناسی|10|1|3'];
+  ok(!!rec, 'رکورد گفتار ۲ فصل ۱ ذخیره شود');
+  if (rec) {
+    const saved = order.filter(k => rec[k] !== null && rec[k] !== undefined);
+    ok(saved.length === 8, 'هر هشت پاسخ گام‌به‌گام ذخیره شوند، یافت: ' + saved.length);
+    ok(rec.speed === 'timed_ok', 'پاسخ سؤال ۸ درست ذخیره شود، یافت: ' + rec.speed);
+    ok(rec.mastery === null, 'تسلط نامشخص null بماند');
+  }
+  // همهٔ پاسخ‌ها مثبت ⇒ نیاز جبرانی نباید ساخته شود
+  const needs = (function(){ const r = st.sections['زیست‌شناسی|10|1|3'];
+    const map = [['teaching',['missed','repair']],['study',['not_started','started','need_reread']],
+      ['comprehension',['not_understood','partial','repair']],['consolidation',['not_reviewed','initial','risk','unknown']],
+      ['testing',['not_tested','few','enough_errors','retake']],['analysis',['not_analyzed','partial','known_not_fixed']],
+      ['essay',['not_done','flawed']],['speed',['slow','partial_time','panic']]];
+    return map.filter(([k,v]) => v.includes(r[k])).map(x => x[0]); })();
+  ok(needs.length === 0, 'پاسخ‌های مثبت نیاز جبرانی نسازند، یافت: ' + JSON.stringify(needs));
+} catch (e) { failures++; console.log('FAIL step-by-step: ' + e.message) }
+
 // ---- د) وضعیت گفتار به فصل دیگر تعمیم داده نمی‌شود ----
 try {
   const st = preview.getState();

@@ -226,7 +226,9 @@ function assessRender() {
   if (d.step < ASSESS_QUESTIONS.length) {
     const q = ASSESS_QUESTIONS[d.step];
     const picked = d.answers[q.key];
-    let body = `<p class="card-body">${esc(q.hint)}</p><div class="button-row" style="flex-direction:column;align-items:stretch">`;
+    // عنوان خود سؤال («سؤال ۳ از ۸ · فهم مطلب») هم نمایش داده می‌شود؛
+    // پیش‌تر فقط راهنما دیده می‌شد و کاربر نمی‌دانست کدام سؤال چندم است.
+    let body = `<h3 class="card-title">${esc(q.title)}</h3><p class="card-body">${esc(q.hint)}</p><div class="button-row" style="flex-direction:column;align-items:stretch">`;
     for (const [val, label] of q.options) {
       body += `<button type="button" class="btn ${picked === val ? 'primary' : ''}" data-action="assess-pick:${q.key}:${val}">${esc(label)}</button>`;
     }
@@ -243,7 +245,7 @@ function assessRender() {
     return;
   }
   // گام آخر: میزان تسلط
-  let body = `<p class="card-body">میزان تسلط خودت را از ۰ تا ۱۰۰ مشخص کن. اگر مطمئن نیستی، گزینهٔ «مطمئن نیستم» را انتخاب کن؛ عدد ساختگی ثبت نمی‌شود.</p>`;
+  let body = `<h3 class="card-title">گام پایانی · میزان تسلط</h3><p class="card-body">میزان تسلط خودت را از ۰ تا ۱۰۰ مشخص کن. اگر مطمئن نیستی، گزینهٔ «مطمئن نیستم» را انتخاب کن؛ عدد ساختگی ثبت نمی‌شود.</p>`;
   body += `<div class="form-grid"><label>میزان تسلط (۰ تا ۱۰۰)<input name="mastery" type="number" min="0" max="100" inputmode="numeric" value="${d.masteryUnknown ? '' : (d.mastery ?? '')}" ${d.masteryUnknown ? 'disabled' : ''}></label></div>`;
   body += `<label class="check-label"><input type="checkbox" name="masteryUnknown" ${d.masteryUnknown ? 'checked' : ''} data-action="assess-mastery-unknown"> مطمئن نیستم / نیاز به ارزیابی</label>`;
   body += `<label>یادداشت (اختیاری)<textarea name="notes">${esc(d.notes || '')}</textarea></label>`;
