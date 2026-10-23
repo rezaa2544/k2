@@ -1311,6 +1311,62 @@ try {
      'کار ناقص (+۱) هم بر پاداش ترجیح پیشی بگیرد، یافت: ' + plan2.placements[0].subject);
 } catch (e) { failures++; console.log('FAIL preference is not law: ' + e.message) }
 
+// ---- ط) سناریوی واقعی کاربر: چهار درس زیست←شیمی←ریاضی←فیزیک ----
+// کاربر ترجیح خودش را با چهار درس می‌گوید؛ پاداش باید روی چهار رتبه به‌درستی
+// کم شود و ذخیره‌سازی و برنامه‌ریزی هر چهار را بپوشاند.
+try {
+  const st0 = preview.getState();
+  st0.subjects = [
+    { id: 's1', name: 'زیست‌شناسی', examCoefficient: 12, selected: true },
+    { id: 's2', name: 'شیمی', examCoefficient: 9, selected: true },
+    { id: 's3', name: 'ریاضی', examCoefficient: 7, selected: true },
+    { id: 's4', name: 'فیزیک', examCoefficient: 7, selected: true }
+  ];
+  st0.settings.subjectOrder = [];
+  persistSilently(st0);
+  ok(preview.preferenceBonus('s1') === 0 && preview.preferenceBonus('s4') === 0,
+     'بدون ترتیب حتی با چهار درس هیچ پاداشی نباشد');
+  preview.priorityOrderForm();
+  const html = byId['#modalBody'].innerHTML || '';
+  for (const nm of ['زیست‌شناسی', 'شیمی', 'ریاضی', 'فیزیک']) {
+    ok(html.includes(nm), 'فرم ترتیب درس ' + nm + ' را بپوشاند');
+  }
+  ok(html.includes('name="rank_s1"') && html.includes('name="rank_s4"'),
+     'برای هر چهار درس ورودی رتبه ساخته شود');
+
+  const form = makeEl('form');
+  form.id = 'modalForm';
+  form.dataset.modalType = 'priorityOrder';
+  global.__fd = new Map([['rank_s1', '1'], ['rank_s2', '2'],
+                         ['rank_s3', '3'], ['rank_s4', '4']]);
+  preview.submitPriorityOrder(form);
+  const st = preview.getState();
+  ok(JSON.stringify(st.settings.subjectOrder) === JSON.stringify(['s1', 's2', 's3', 's4']),
+     'ترتیب چهار درس ذخیره شود، یافت: ' + JSON.stringify(st.settings.subjectOrder));
+  const want = [0.6, 0.4, 0.2, 0];
+  const ids = ['s1', 's2', 's3', 's4'];
+  for (let i = 0; i < ids.length; i++) {
+    const got = preview.preferenceBonus(ids[i]);
+    ok(Math.abs(got - want[i]) < 1e-9,
+       'پاداش رتبهٔ ' + (i + 1) + ' برابر ' + want[i] + ' باشد، یافت: ' + got);
+  }
+  ok(preview.subjectPreferenceRank('s4') === 3, 'رتبهٔ آخرین درس درست باشد');
+
+  st0.events = [];
+  st0.activities = [
+    ACT('q1', 'کار زیست', 's1', 'زیست‌شناسی', 60),
+    ACT('q2', 'کار شیمی', 's2', 'شیمی', 60),
+    ACT('q3', 'کار ریاضی', 's3', 'ریاضی', 60),
+    ACT('q4', 'کار فیزیک', 's4', 'فیزیک', 60)
+  ];
+  persistSilently(st0);
+  const plan = preview.getPlan();
+  const order = plan.placements.map(p => p.subject);
+  ok(order.length === 4, 'هر چهار کار برنامه‌ریزی شوند، یافت: ' + order.length);
+  ok(order[0] === 'زیست‌شناسی' && order[3] === 'فیزیک',
+     'ترتیب بلوک‌ها ترجیح را منع کند، یافت: ' + JSON.stringify(order));
+} catch (e) { failures++; console.log('FAIL four subjects: ' + e.message) }
+
 // ---- ح) فرم ترتیب با کمتر از دو درس باز نمی‌شود ----
 try {
   const st0 = preview.getState();
