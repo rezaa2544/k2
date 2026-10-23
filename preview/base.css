@@ -397,3 +397,4 @@ tbody tr:hover td{background:var(--surface-soft)}
 .pill.danger{background:var(--danger-soft);color:var(--danger)}
 .pill.warn{background:var(--warn-soft);color:var(--warn)}
 .resource-meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:var(--muted);font-size:11px}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
