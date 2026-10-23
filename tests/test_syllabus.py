@@ -1768,3 +1768,65 @@ def test_backup_restore_and_html_export_round_trip(preview_js, tmp_path):
     stderr = result.stderr or ""
     assert result.returncode == 0, stdout + stderr
     assert "FAIL" not in stdout, stdout
+
+_SUGGESTION_SCRIPT = r"""
+// ===== تعداد تست روزانه پیشنهاد است، نه سهمیه =====
+const _mkTest = (title, type, stateName) => ({
+  id: 'sg_' + title, title, type: type || 'timed_test', subjectId: 's1',
+  subjectName: 'زیست‌شناسی', estimate: 45, remaining: 45, actual: 0,
+  state: stateName || 'planned', minChunk: 20, maxChunk: 90, splittable: true,
+  deadline: 'none', personalWeight: 1
+});
+
+try {
+  const st0 = preview.getState();
+  // دو تست زمان‌دار باز + یک مطالعه
+  st0.activities = [_mkTest('تست زمان‌دار الف'), _mkTest('تست زمان‌دار ب'), _mkTest('مطالعه', 'processing')];
+  st0.events = [];
+  persistSilently(st0);
+  const plan = preview.getPlan();
+  const inPlan = (plan.placements || []).filter(x => x.type === 'timed_test').length;
+  ok(inPlan === 2, 'دو تست در برنامهٔ امروز باشند، یافت: ' + inPlan);
+  clickNav('today');
+  let html = pageHtml();
+  ok(html.includes('تست‌های پیشنهادی امروز'), 'کارت تست‌های پیشنهادی امروز باشد');
+  ok(html.includes('پیشنهاد'), 'واژهٔ پیشنهاد بیاید');
+  ok(html.includes('نه سهمیه'), 'صریحاً گفته شود سهمیه نیست');
+  ok(html.includes('تست ابزار یادگیری است، نه هدف'), 'هدف تست روشن باشد');
+  clickNav('tests');
+  html = pageHtml();
+  ok(html.includes('پیشنهاد'), 'صفحهٔ تست هم پیشنهاد را بگوید');
+  ok(html.includes('نه سهمیه'), 'صفحهٔ تست هم سهمیه‌نبودن را بگوید');
+} catch (e) { failures++; console.log('FAIL suggestion: ' + e.message) }
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node برای اجرای پیش‌نمایش لازم است")
+def test_daily_test_counts_are_suggestions_not_quotas(preview_js, tmp_path):
+    """تعداد تست روزانه به‌عنوان پیشنهاد ارائه می‌شود، نه سهمیهٔ الزامی."""
+    payload = tmp_path / "preview-bundle.js"
+    payload.write_text(preview_js, encoding="utf-8")
+    syllabus_json = tmp_path / "syllabus.json"
+    import json as _json
+
+    m = re.search(r'id="syllabusData"[^>]*>(.*?)</script>', PREVIEW.read_text(encoding="utf-8"), re.S)
+    syllabus_json.write_text(m.group(1).replace("\\u003c", "<"), encoding="utf-8")
+    seed = _seed_state()
+    harness = _harness(payload, seed, syllabus_json)
+    body = Path(harness).read_text(encoding="utf-8")
+    marker = "console.log(JSON.stringify({failures}));\nprocess.exit(failures ? 1 : 0);"
+    assert marker in body, "suggestion harness marker"
+    body = body.replace(marker, _SUGGESTION_SCRIPT.strip() + "\n", 1)
+    Path(harness).write_text(body, encoding="utf-8")
+    result = subprocess.run(
+        [NODE, harness],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=180,
+        cwd=str(ROOT),
+    )
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    assert result.returncode == 0, stdout + stderr
+    assert "FAIL" not in stdout, stdout
