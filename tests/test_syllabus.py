@@ -1458,3 +1458,164 @@ def test_review_scheduling_tracks_forgetting(preview_js, tmp_path):
     stderr = result.stderr or ""
     assert result.returncode == 0, stdout + stderr
     assert "FAIL" not in stdout, stdout
+
+_EXAMDRAFT_SCRIPT = r"""
+// ===== آزمون با ساعت، پیش‌نویس دادهٔ ناقص، و تشخیص تعارض =====
+const wdOf = (iso) => ((new Date(iso + 'T00:00:00Z').getUTCDay() + 1) % 7);  // ۰ = شنبه
+// نزدیک‌ترین تاریخ با روز هفتهٔ مورد نظر
+const nextWithWeekday = (wd) => {
+  for (let i = 0; i < 14; i += 1) {
+    const d = new Date(); d.setUTCDate(d.getUTCDate() + i);
+    const iso = d.toISOString().slice(0, 10);
+    if (wdOf(iso) === wd) return iso;
+  }
+  return new Date().toISOString().slice(0, 10);
+};
+const submitExam = (fd) => {
+  const form = makeEl('form');
+  form.id = 'modalForm';
+  form.dataset.modalType = 'exam';
+  global.__fd = new Map(Object.entries(fd));
+  preview.submitModal(form);
+};
+
+// ۱) آزمون با ساعت هم‌پوشان با کلاس ثابت → تعارض
+try {
+  const wd = 0;  // شنبه
+  const date = nextWithWeekday(wd);
+  const st0 = preview.getState();
+  st0.events = [{ id: 'e1', title: 'کلاس زیست‌شناسی', kind: 'class', weekday: wd,
+    start: '15:00', end: '19:00', recorded: false, needsConfirmation: false }];
+  st0.attempts = [];
+  st0.activities = [];
+  persistSilently(st0);
+  submitExam({ name: 'تست مبحثی', kind: 'teaching', date: date, time: '16:30',
+    total: '40', correct: '20', wrong: '10', blank: '10', duration: '60',
+    error: '', note: '', subject: '' });
+  const c = preview.examConflicts();
+  ok(c.length === 1, 'تعارض آزمون با کلاس شناسایی شود، یافت: ' + c.length);
+  ok(c[0].exam === 'تست مبحثی' && c[0].other === 'کلاس زیست‌شناسی',
+     'طرفین تعارض درست نام‌برده شوند، یافت: ' + JSON.stringify(c[0] || {}));
+  // صفحهٔ تست هشدار تعارض را نشان می‌دهد
+  clickNav('tests');
+  ok(pageHtml().includes('تعارض زمان‌بندی'), 'هشدار تعارض در صفحه دیده شود');
+} catch (e) { failures++; console.log('FAIL exam conflict: ' + e.message) }
+
+// ۲) آزمون بیرون از ساعت کلاس → تعارض نیست
+try {
+  const wd = 0;
+  const date = nextWithWeekday(wd);
+  const st0 = preview.getState();
+  st0.events = [{ id: 'e1', title: 'کلاس زیست‌شناسی', kind: 'class', weekday: wd,
+    start: '15:00', end: '19:00', recorded: false, needsConfirmation: false }];
+  st0.attempts = [];
+  persistSilently(st0);
+  submitExam({ name: 'تست بدون تعارض', kind: 'teaching', date: date, time: '09:00',
+    total: '40', correct: '20', wrong: '10', blank: '10', duration: '60',
+    error: '', note: '', subject: '' });
+  ok(preview.examConflicts().length === 0, 'آزمون بیرون از کلاس تعارض نسازد');
+} catch (e) { failures++; console.log('FAIL exam no conflict: ' + e.message) }
+
+// ۳) آزمون بی‌ساعت بررسی نمی‌شود (ادعای تعارض روی دادهٔ ناقص درست نیست)
+try {
+  const wd = 0;
+  const date = nextWithWeekday(wd);
+  const st0 = preview.getState();
+  st0.events = [{ id: 'e1', title: 'کلاس زیست‌شناسی', kind: 'class', weekday: wd,
+    start: '00:00', end: '23:59', recorded: false, needsConfirmation: false }];
+  st0.attempts = [];
+  persistSilently(st0);
+  submitExam({ name: 'آزمون بی‌ساعت', kind: 'teaching', date: date, time: '',
+    total: '40', correct: '20', wrong: '10', blank: '10', duration: '60',
+    error: '', note: '', subject: '' });
+  ok(preview.examConflicts().length === 0, 'آزمون بی‌ساعت تعارض نسازد');
+} catch (e) { failures++; console.log('FAIL exam no time: ' + e.message) }
+
+// ۴) دادهٔ ناقص → پیش‌نویس، نه رد شدن و نه درصد جعلی
+try {
+  const date = new Date().toISOString().slice(0, 10);
+  const st0 = preview.getState();
+  st0.attempts = [];
+  persistSilently(st0);
+  // «کل» خالی: کاربر هنوز نمی‌داند چند سؤال بوده
+  submitExam({ name: 'تست نیمه‌کاره', kind: 'teaching', date: date, time: '10:00',
+    total: '', correct: '', wrong: '', blank: '', duration: '90',
+    error: '', note: '', subject: '' });
+  let st = preview.getState();
+  let a = (st.attempts || [])[0];
+  ok(!!a, 'آزمون با دادهٔ ناقص ذخیره شود');
+  ok(a.draft === true, 'وضعیت پیش‌نویس بگیرد، یافت: ' + a.draft);
+  ok(a.total === null, '«کل» نامشخص null بماند، یافت: ' + a.total);
+  ok(a.percentage === null, 'درصد محاسبه نشود (عدد جعلی ساخته نشود)، یافت: ' + a.percentage);
+  // صفحه‌ها با درصد null نمی‌شکنند
+  clickNav('tests');
+  let html = pageHtml();
+  ok(html.includes('پیش‌نویس'), 'برچسب پیش‌نویس در صفحه تست دیده شود');
+  ok(html.includes('کامل کردن'), 'راه کامل کردن پیش‌نویس داده شود');
+  ok(html.includes('نامشخص'), 'تعداد کل نامشخص باشد');
+  clickNav('comprehensive');
+  html = pageHtml();
+  ok(html.includes('چرخهٔ آزمون جامع تکرارشونده'),
+     'صفحهٔ جامع با وجود پیش‌نویس در داده بدون خطا رندر شود');
+  // یک پیش‌نویس جامع هم در صفحهٔ جامع دیده می‌شود
+  submitExam({ name: 'آزمون جامع ناقص', kind: 'mock', date: date, time: '',
+    total: '', correct: '', wrong: '', blank: '', duration: '180',
+    error: '', note: '', subject: '' });
+  st = preview.getState();
+  ok((st.attempts || []).some(x => x.name === 'آزمون جامع ناقص' && x.draft === true),
+     'پیش‌نویس جامع ذخیره شود');
+  clickNav('comprehensive');
+  html = pageHtml();
+  ok(html.includes('آزمون جامع ناقص') && html.includes('پیش‌نویس'),
+     'پیش‌نویس جامع در صفحه دیده شود');
+
+  // ۵) پاسخ‌های متناقض با «کل» رد می‌شود (ناقص ≠ متناقض)
+  submitExam({ name: 'تست متناقض', kind: 'teaching', date: date, time: '10:00',
+    total: '40', correct: '30', wrong: '20', blank: '5', duration: '60',
+    error: '', note: '', subject: '' });
+  st = preview.getState();
+  ok((st.attempts || []).every(x => x.name !== 'تست متناقض'),
+     'دادهٔ متناقض ذخیره نشود، یافت: ' + (st.attempts || []).map(x => x.name).join('|'));
+
+  // ۶) کامل کردن پیش‌نویس: درصد محاسبه و پیش‌نویس برداشته می‌شود
+  submitExam({ name: 'تست نیمه‌کاره', kind: 'teaching', date: date, time: '10:00',
+    total: '40', correct: '30', wrong: '6', blank: '4', duration: '90',
+    error: '', note: '', subject: '' });
+  st = preview.getState();
+  a = (st.attempts || []).find(x => x.name === 'تست نیمه‌کاره');
+  ok(a.draft === false, 'پس از کامل شدن، پیش‌نویس برداشته شود، یافت: ' + a.draft);
+  ok(a.percentage === 75, 'درصد درست محاسبه شود، یافت: ' + a.percentage);
+  ok(preview.examConflicts().length === 0, 'آزمون بی‌کلاس تعارض نسازد');
+} catch (e) { failures++; console.log('FAIL exam draft: ' + e.message) }
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node برای اجرای پیش‌نمایش لازم است")
+def test_exams_have_time_draft_state_and_conflict_detection(preview_js, tmp_path):
+    """آزمون‌ها ساعت دارند، دادهٔ ناقص پیش‌نویس می‌شود و تعارض تشخیص داده می‌شود."""
+    payload = tmp_path / "preview-bundle.js"
+    payload.write_text(preview_js, encoding="utf-8")
+    syllabus_json = tmp_path / "syllabus.json"
+    import json as _json
+
+    m = re.search(r'id="syllabusData"[^>]*>(.*?)</script>', PREVIEW.read_text(encoding="utf-8"), re.S)
+    syllabus_json.write_text(m.group(1).replace("\\u003c", "<"), encoding="utf-8")
+    seed = _seed_state()
+    harness = _harness(payload, seed, syllabus_json)
+    body = Path(harness).read_text(encoding="utf-8")
+    marker = "console.log(JSON.stringify({failures}));\nprocess.exit(failures ? 1 : 0);"
+    assert marker in body, "examdraft harness marker"
+    body = body.replace(marker, _EXAMDRAFT_SCRIPT.strip() + "\n", 1)
+    Path(harness).write_text(body, encoding="utf-8")
+    result = subprocess.run(
+        [NODE, harness],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=180,
+        cwd=str(ROOT),
+    )
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    assert result.returncode == 0, stdout + stderr
+    assert "FAIL" not in stdout, stdout

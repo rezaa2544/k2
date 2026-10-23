@@ -219,6 +219,49 @@
     return `<article class="card tone-exam"><div class="section-row"><h3 class="card-title">چرخهٔ آزمون جامع تکرارشونده</h3>${actionBtn('ویرایش چرخه', 'exam-series-edit')}</div><p class="card-body">هر نوبت دو فعالیت <strong>مستقل</strong> می‌سازد: خودِ آزمون و تحلیل آن. یکی می‌تواند انجام شود و دیگری نه؛ وضعیت یکی به دیگری سرریز نمی‌شود.${s.enabled === false ? '<br><strong>چرخه در حال حاضر غیرفعال است.</strong>' : ''}</p><div class="metrics"><article class="metric tone-exam"><p class="metric-label">نخستین نوبت</p><p class="metric-value">${esc(jalaliLabel(s.startISO))}</p><p class="metric-hint">${esc(s.startISO)}</p></article><article class="metric tone-exam"><p class="metric-label">بازهٔ تکرار</p><p class="metric-value">${esc(Math.round(num(s.intervalDays, 14)))} روز</p><p class="metric-hint">قابل ویرایش</p></article><article class="metric tone-exam"><p class="metric-label">مدت آزمون / تحلیل</p><p class="metric-value">${esc(Math.round(num(s.durationMinutes, 210)))} / ${esc(Math.round(num(s.analysisMinutes, 60)))}</p><p class="metric-hint">دقیقه</p></article></div>${next.length ? `<div class="table-wrap"><table><thead><tr><th>نوبت</th><th>تاریخ</th><th>روز</th><th>آزمون</th><th>تحلیل</th><th>وضعیت</th><th>تحلیل مستقل</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('نوبتی در بازهٔ ۶۰ روز آینده نیست', 'چرخه غیرفعال است یا تاریخ شروع گذشتهٔ دور است.')}<div class="advice"><span class="advice-mark">i</span><span>تاریخ رسمی آزمون کنکور ابلاغ نشده؛ بازهٔ ۱۴ روزه انتخاب خودِ شماست و هر وقت خواستید عوض می‌شود. تحلیل نوبت‌های گذشته را حتماً با کد خطا ثبت کنید تا چرخهٔ بعدی قابل مقایسه باشد.</span></div></article>`;
   }
 
+  /**
+   * تعارض آزمون/تست با کلاس‌های ثابت و نوبت‌های چرخه.
+   *
+   * چرا لازم است: آزمون با ساعت مشخص روی تقویم کاربر می‌نشیند. اگر روی
+   * کلاس ثابت بیفتد، یکی از دو باید جابه‌جا شود — ولی کلاس ثابت جابه‌جا
+   * نمی‌شود، پس هشدار باید پیش از آن لحظه بیاید. آزمون بدون ساعت یا
+   * پیش‌نویس بررسی نمی‌شود؛ ادعای تعارض روی دادهٔ ناقص درست نیست.
+   */
+  function examConflicts() {
+    const out = [];
+    const exams = (state.attempts || []).filter(a => a.date && a.time && !a.draft);
+    for (const a of exams) {
+      const wd = weekdayOfIso(a.date);
+      const dur = num(a.duration, 0) > 0 ? num(a.duration, 0) : 120;
+      const st = minOf(a.time), en = st + dur;
+      for (const ev of (state.events || [])) {
+        if (Number(ev.weekday) !== wd || ev.recorded || !ev.start || !ev.end) continue;
+        if (minOf(ev.start) < en && st < minOf(ev.end)) {
+          out.push({ exam: a.name, other: ev.title, date: a.date, day: wd,
+            examStart: st, examEnd: en, kind: 'class' });
+        }
+      }
+      // نوبت‌های چرخهٔ آزمون جامع همان روز
+      for (const iso of examSeriesOccurrences(state.examSeries, a.date, a.date)) {
+        if (iso !== a.date) continue;
+        for (const act of (state.activities || []).filter(x => x.examOccurrence === iso)) {
+          out.push({ exam: a.name, other: act.title, date: iso, day: wd,
+            examStart: st, examEnd: en, kind: 'series' });
+        }
+      }
+    }
+    return out;
+  }
+
+  // متن هشدار تعارض برای صفحه‌های آزمون
+  function examConflictNote() {
+    const c = examConflicts();
+    if (!c.length) return '';
+    const items = c.slice(0, 5).map(x =>
+      `${DAYS[x.day]} · ${esc(x.exam)} با ${esc(x.other)}`).join('؛ ');
+    return `<div class="advice warning"><span class="advice-mark">!</span><span>${c.length} تعارض زمان‌بندی: ${items}. کلاس ثابت جابه‌جا نمی‌شود؛ یا ساعت آزمون را عوض کن یا آن را به روز دیگری ببر. آزمون‌های بی‌ساعت یا پیش‌نویس بررسی نمی‌شوند.</span></div>`;
+  }
+
   function weekdayOfIso(iso) {
     // شمارهٔ روز هفتهٔ این پروژه: ۰ = شنبه
     const d = new Date(`${iso}T00:00:00Z`);
