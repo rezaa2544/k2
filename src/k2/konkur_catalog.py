@@ -448,3 +448,169 @@ def source_status_for_year(year: int | None) -> str:
     if year == 1405:
         return SOURCE_SANJESH_1405.verification
     return "year_not_set"
+
+
+# ---------------------------------------------------------------------------
+# سرفصل درس‌ها: پایه ← کتاب ← فصل ← گفتار
+# ---------------------------------------------------------------------------
+#
+# ⚠ این ساختار **اطلاعات اولیه و تأییدنشده** است (``preliminary_unverified``).
+# از فهرست فصل‌های کتاب‌های درسی استخراج شده، اما با نسخهٔ معتبر و سالِ
+# ۱۴۰۶ تطبیق نشده است. کاربر باید آن را در «وضعیت فصل‌ها و گفتارها» تأیید،
+# اصلاح یا حذف کند؛ عنوان یا بخش جدیدی بی‌اطلاع او جایگزین نمی‌شود.
+#
+# قاعدهٔ صداقت: هرجا کاربر تعداد گفتارها را نداده یا آن را «نامشخص» اعلام
+# کرده، عدد ساخته نمی‌شود؛ ``sections`` تهی می‌ماند تا خودش مقدار واقعی را
+# وارد کند.
+
+
+#: وضعیت پیش‌فرض اعتبار داده‌های سرفصل.
+SYLLABUS_STATUS = "preliminary_unverified"
+
+#: برچسب فارسی برای نمایش در رابط کاربری.
+SYLLABUS_STATUS_LABEL = "اطلاعات اولیه · تأییدنشده · قابل ویرایش"
+
+#: سرفصل درس‌های تخصصی تجربی بر پایهٔ پایهٔ تحصیلی.
+#: مقدار ``sections`` تعداد گفتارهای هر فصل است؛ ``None`` یعنی نامشخص.
+SYLLABUS_BY_COURSE: dict[str, dict[int, tuple[dict, ...]]] = {
+    "زیست‌شناسی": {
+        10: (
+            {"no": 1, "title": "دنیای زنده", "sections": 3},
+            {"no": 2, "title": "گوارش و جذب مواد", "sections": 3},
+            {"no": 3, "title": "تبدلات گازی", "sections": 3},
+            {"no": 4, "title": "گردش مواد در بدن", "sections": 4},
+            {"no": 5, "title": "تنظیم اسمزی و دفع مواد زائد", "sections": 3},
+            {"no": 6, "title": "از یاخته تا گیاه", "sections": 3},
+            {"no": 7, "title": "جذب و انتقال مواد در گیاهان", "sections": 3},
+        ),
+        11: (
+            {"no": 1, "title": "تنظیم عصبی", "sections": 2},
+            {"no": 2, "title": "حواس", "sections": 3},
+            {"no": 3, "title": "دستگاه حرکتی", "sections": 2},
+            {"no": 4, "title": "تنظیم شیمیایی", "sections": 2},
+            {"no": 5, "title": "ایمنی", "sections": 3},
+            {"no": 6, "title": "تقسیم یاخته", "sections": 3},
+            {"no": 7, "title": "تولیدمثل", "sections": 4},
+            {"no": 8, "title": "تولیدمثل نهاندانگان", "sections": 3},
+            {"no": 9, "title": "پاسخ گیاهان به محرک‌ها", "sections": 2},
+        ),
+        12: (
+            {"no": 1, "title": "مولکول‌های اطلاعاتی", "sections": 3},
+            {"no": 2, "title": "جریان اطلاعات در یاخته", "sections": 3},
+            {"no": 3, "title": "انتقال اطلاعات در نسل‌ها", "sections": 2},
+            {"no": 4, "title": "تغییر در اطلاعات وراثتی", "sections": 3},
+            {"no": 5, "title": "از ماده به انرژی", "sections": 3},
+            {"no": 6, "title": "از انرژی به ماده", "sections": 3},
+            {"no": 7, "title": "فناوری‌های نوین زیستی", "sections": 3},
+            {"no": 8, "title": "رفتارهای جانوران", "sections": 3},
+        ),
+    },
+    "شیمی": {
+        10: (
+            {"no": 1, "title": "کیهان، زادگاه الفبای هستی", "sections": None},
+            {"no": 2, "title": "رد پای گازها در زندگی", "sections": None},
+            {"no": 3, "title": "آب، آهنگ زندگی", "sections": None},
+        ),
+        11: (
+            {"no": 1, "title": "قدر هدایای زمینی را بدانیم", "sections": None},
+            {"no": 2, "title": "در پی غذای سالم", "sections": None},
+            {"no": 3, "title": "پوشاک، نیازی پایان‌ناپذیر", "sections": None},
+        ),
+        12: (
+            {"no": 1, "title": "مولکول‌ها در خدمت تندرستی", "sections": None},
+            {"no": 2, "title": "آسایش و رفاه در سایهٔ شیمی", "sections": None},
+            {"no": 3, "title": "شیمی، جلوه‌ای از هنر، زیبایی و ماندگاری", "sections": None},
+            {"no": 4, "title": "شیمی، راهی به سوی آیندهٔ روشن‌تر", "sections": None},
+        ),
+    },
+    "ریاضی": {
+        10: (
+            {"no": 1, "title": "مجموعه، الگو و دنباله", "sections": 4},
+            {"no": 2, "title": "مثلث‌ها", "sections": 3},
+            {"no": 3, "title": "توان‌های گویا و عبارت‌های جبری", "sections": 4},
+            {"no": 4, "title": "معادله و نامعادله", "sections": 3},
+            {"no": 5, "title": "تابع", "sections": 3},
+            {"no": 6, "title": "شمارش بدون شمردن", "sections": 3},
+            {"no": 7, "title": "آمار و احتمال", "sections": 3},
+        ),
+        11: (
+            {"no": 1, "title": "هندسهٔ تحلیلی و جبر", "sections": 3},
+            {"no": 2, "title": "هندسه", "sections": 3},
+            {"no": 3, "title": "تابع", "sections": 3},
+            {"no": 4, "title": "مثلثات", "sections": 3},
+            {"no": 5, "title": "توابع نمایی و لگاریتم", "sections": 3},
+            {"no": 6, "title": "حد و پیوستگی", "sections": 3},
+            {"no": 7, "title": "آمار و احتمال", "sections": 2},
+        ),
+        12: (
+            {"no": 1, "title": "تابع", "sections": 3},
+            {"no": 2, "title": "مثلثات", "sections": 2},
+            {"no": 3, "title": "حد بی‌نهایت و حد در بی‌نهایت", "sections": 2},
+            {"no": 4, "title": "مشتق", "sections": 3},
+            {"no": 5, "title": "کاربرد مشتق", "sections": 2},
+            {"no": 6, "title": "هندسه", "sections": 2},
+            {"no": 7, "title": "احتمال", "sections": 1},
+        ),
+    },
+    "فیزیک": {
+        10: (
+            {"no": 1, "title": "فیزیک و اندازه‌گیری", "sections": 6},
+            {"no": 2, "title": "ویژگی‌های فیزیکی مواد", "sections": 5},
+            {"no": 3, "title": "کار، انرژی و توان", "sections": 7},
+            {"no": 4, "title": "دما و گرما", "sections": 5},
+        ),
+        11: (
+            {"no": 1, "title": "الکتریسیتهٔ ساکن", "sections": 11},
+            {"no": 2, "title": "جریان الکتریکی و مدارهای جریان مستقیم", "sections": 6},
+            {"no": 3, "title": "مغناطیس و القای الکترومغناطیسی", "sections": 11},
+        ),
+        12: (
+            {"no": 1, "title": "حرکت بر خط راست", "sections": 3},
+            {"no": 2, "title": "دینامیک", "sections": 4},
+            {"no": 3, "title": "نوسان و امواج", "sections": 8},
+            {"no": 4, "title": "آشنایی با فیزیک اتمی و هسته‌ای", "sections": 6},
+        ),
+    },
+    "زمین‌شناسی": {
+        12: (
+            {"no": 1, "title": "آفرینش کیهان و تکوین زمین", "sections": 8},
+            {"no": 2, "title": "منابع معدنی و ذخایر انرژی، زیرساخت تمدن و توسعه", "sections": 7},
+            {"no": 3, "title": "منابع آب و خاک", "sections": 4},
+            {"no": 4, "title": "زمین‌شناسی و سازه‌های مهندسی", "sections": 11},
+            {"no": 5, "title": "زمین‌شناسی و سلامت", "sections": 4},
+            {"no": 6, "title": "پویایی زمین", "sections": 9},
+            {"no": 7, "title": "زمین‌شناسی ایران", "sections": 9},
+        ),
+    },
+}
+
+
+#: درس‌های عمومی و مدرسه — تعداد درس/گفتار در «اطلاعات اولیه».
+#: این‌ها در اطلاعیهٔ کنکور سهم مستقیم ندارند و فقط برای برنامهٔ مدرسه‌اند.
+GENERAL_SUBJECT_SYLLABUS: dict[str, dict] = {
+    "فارسی": {"lessons": 17, "note": "۱۷ درس در اطلاعات اولیه؛ تأییدنشده"},
+    "عربی": {"lessons": 12, "note": "۱۲ درس در اطلاعات اولیه؛ تأییدنشده"},
+    "دینی": {"lessons": None, "note": "تعداد درس نامشخص است؛ کاربر وارد کند"},
+    "زبان انگلیسی": {"lessons": None, "note": "تعداد درس نامشخص است؛ کاربر وارد کند"},
+    "سلامت و بهداشت": {"lessons": None, "note": "تعداد درس نامشخص است؛ کاربر وارد کند"},
+    "هویت اجتماعی": {"lessons": None, "note": "تعداد درس نامشخص است؛ کاربر وارد کند"},
+}
+
+
+def syllabus_for(course_name: str, grade: int | None = None) -> tuple[dict, ...]:
+    """فصل‌های یک درس؛ اگر ``grade`` داده شود فقط همان پایه."""
+    by_grade = SYLLABUS_BY_COURSE.get(course_name, {})
+    if grade is not None:
+        return by_grade.get(int(grade), ())
+    return tuple(ch for chapters in by_grade.values() for ch in chapters)
+
+
+def section_count(course_name: str, grade: int | None = None) -> int | None:
+    """جمع گفتارهای شناخته‌شده؛ اگر هیچ‌کدام نامشخص باشد ``None``."""
+    total = 0
+    known = False
+    for ch in syllabus_for(course_name, grade):
+        if ch["sections"] is not None:
+            total += ch["sections"]
+            known = True
+    return total if known else None

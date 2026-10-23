@@ -7,7 +7,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT.parent / "src"))
-from k2.konkur_catalog import EXAM_WEIGHT_BY_GROUP, GROUPS, courses_for_group  # noqa: E402
+from k2.konkur_catalog import (  # noqa: E402
+    EXAM_WEIGHT_BY_GROUP,
+    GENERAL_SUBJECT_SYLLABUS,
+    GROUPS,
+    SYLLABUS_BY_COURSE,
+    SYLLABUS_STATUS,
+    SYLLABUS_STATUS_LABEL,
+    courses_for_group,
+)
 
 
 def _catalog_from_domain() -> dict:
@@ -51,6 +59,29 @@ weights = {
     encoding="utf-8",
     newline="\n",
 )
+
+# ---------------------------------------------------------------------------
+# سرفصل درس‌ها (پایه ← فصل ← گفتار) — دادهٔ اولیه تأییدنشده
+# ---------------------------------------------------------------------------
+#: ساختار سرفصل برای پیش‌نمایش: درس ← پایه ← فهرست فصل‌ها.
+syllabus: dict[str, dict[str, list[dict]]] = {}
+for _course, _by_grade in SYLLABUS_BY_COURSE.items():
+    syllabus[_course] = {
+        str(_grade): [
+            {"no": _ch["no"], "title": _ch["title"], "sections": _ch["sections"]}
+            for _ch in _chapters
+        ]
+        for _grade, _chapters in sorted(_by_grade.items())
+    }
+_syllabus_meta = {
+    "status": SYLLABUS_STATUS,
+    "statusLabel": SYLLABUS_STATUS_LABEL,
+    "generalSubjects": GENERAL_SUBJECT_SYLLABUS,
+}
+_syllabus_json = json.dumps(
+    {"meta": _syllabus_meta, "courses": syllabus}, ensure_ascii=False, separators=(",", ":")
+).replace("<", "\\u003c")
+
 _weights_json = json.dumps(weights, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
 
 # ---------------------------------------------------------------------------
@@ -80,7 +111,10 @@ def _font_face() -> str:
 
 _font_css = _font_face()
 css = (ROOT / "base.css").read_text(encoding="utf-8")
-app_js = "\n".join((ROOT / name).read_text(encoding="utf-8") for name in ("core.js", "forms.js", "app.js"))
+app_js = "\n".join(
+    (ROOT / name).read_text(encoding="utf-8")
+    for name in ("core.js", "syllabus.js", "forms.js", "app.js")
+)
 extra_css = r'''
 /* Functional browser-preview controls */
 input,select,textarea{width:100%;min-height:38px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text)}
@@ -111,9 +145,10 @@ html = f'''<!doctype html>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div><div class="modal-backdrop" id="modalBackdrop" role="presentation"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-head"><h2 id="modalTitle"></h2><button class="modal-close" id="modalClose" aria-label="بستن">×</button></div><div id="modalBody"></div><div class="modal-actions" id="modalActions"></div></section></div><input id="restoreInput" type="file" accept=".json,.html,application/json,text/html" hidden>
 <script id="catalogData" type="application/json">{_catalog_json}</script>
+<script id="syllabusData" type="application/json">{_syllabus_json}</script>
 <script id="groupWeightsData" type="application/json">{_weights_json}</script>
 <script id="embeddedState" type="application/json">{{}}</script>
-<script>window.K2_CATALOG=JSON.parse(document.getElementById('catalogData').textContent);window.K2_GROUP_WEIGHTS=JSON.parse(document.getElementById('groupWeightsData').textContent);</script>
+<script>window.K2_CATALOG=JSON.parse(document.getElementById('catalogData').textContent);window.K2_GROUP_WEIGHTS=JSON.parse(document.getElementById('groupWeightsData').textContent);window.K2_SYLLABUS=JSON.parse(document.getElementById('syllabusData').textContent).courses;window.K2_SYLLABUS_META=JSON.parse(document.getElementById('syllabusData').textContent).meta;</script>
 <script>{app_js}</script>
 </body></html>
 '''
