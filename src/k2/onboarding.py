@@ -168,9 +168,34 @@ ONBOARDING_STEPS: tuple[OnboardingStep, ...] = (
         kind="text", required=True,
     ),
     OnboardingStep(
+        key="min_sleep", title="حداقل خواب مورد نظر",
+        description="چند دقیقه خواب کمینه می‌خواهی؟ خواب هرگز قربانی جبران عقب‌افتادگی نمی‌شود؛ اگر ظرفیت کم بیاید، برنامه کوتاه می‌شود نه خواب.",
+        kind="choice",
+        options=("۳۰۰ (۵ ساعت)", "۳۶۰ (۶ ساعت)", "۴۲۰ (۷ ساعت)",
+                 "۴۸۰ (۸ ساعت)", "۵۴۰ (۹ ساعت)"),
+    ),
+    OnboardingStep(
         key="routines", title="خواب، غذا، استراحت و کارهای ثابت",
         description="وعده‌ها، استراحت، بهداشت و هر کار دلخواه را با بازه و روزهای تکرار اضافه کنید. خواب شب را در مرحلهٔ قبل وارد کنید.",
         kind="routines",
+    ),
+    OnboardingStep(
+        key="comprehensive_exam_cycle", title="چرخهٔ آزمون جامع",
+        description="آزمون جامع و تحلیل آن دو کار مستقل‌اند. تاریخ رسمی ابلاغ نشده؛ بازهٔ تکرار را خودت تأیید کن. اگر حالا نمی‌خواهی ثبت کنی، این گام را رد کن.",
+        kind="choice",
+        options=("بله، هر دو هفته پنجشنبه ۰۸:۰۰ تا ۱۲:۰۰",
+                 "خیر، بازهٔ دیگری دارد",
+                 "هنوز مشخص نیست"),
+    ),
+    OnboardingStep(
+        key="comprehensive_exam_date", title="تاریخ ۳۰ مهر به کدام سال است؟",
+        description="اگر تاریخ «۳۰ مهر» را داری، سال آن را از تقویم خودت تأیید کن. خالی بگذاشتن یعنی «نامشخص»؛ سال حدس زده نمی‌شود.",
+        kind="text",
+    ),
+    OnboardingStep(
+        key="typical_durations", title="طول معمول هر نوع کار",
+        description="به‌ترتیب تست زمان‌دار، تحلیل تست، تثبیت و تکلیف را با دقیقه وارد کن؛ مثلاً ۵۰، ۳۵، ۲۵، ۴۰. این اعداد فرضیهٔ محافظه‌کارانه‌اند و بعد از نمونه‌های واقعی‌ات کالیبره می‌شوند.",
+        kind="text",
     ),
     OnboardingStep(
         key="priority_mode", title="روش اولویت‌بندی خودکار",
@@ -184,6 +209,11 @@ ONBOARDING_STEPS: tuple[OnboardingStep, ...] = (
     OnboardingStep(
         key="peak_hours", title="ساعت‌های پربازده",
         description="مثل «۱۶:۰۰–۱۸:۰۰, ۲۰:۰۰–۲۲:۰۰» (اختیاری).", kind="text",
+    ),
+    OnboardingStep(
+        key="topic_levels", title="سطح اولیهٔ هر مبحث",
+        description="سطح در سطح مبحث سنجیده می‌شود، نه یک برچسب کلی برای کل درس. این گام اختیاری است؛ بعداً در صفحهٔ «مباحث و تسلط» برای هر مبحث جدا تکمیل می‌شود.",
+        kind="text",
     ),
     OnboardingStep(
         key="previous_results", title="نتایج آزمون قبلی",

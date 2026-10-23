@@ -154,6 +154,22 @@ button{cursor:pointer}
 .page-scroll{display:flex;flex-direction:column;gap:14px;padding:1px 2px 7px}
 .page-heading{margin:0;color:var(--text);font-size:17px;font-weight:900}
 .page-intro{margin:-9px 0 0;color:var(--muted);font-size:12px;font-weight:500}
+/* ---------- راه‌اندازی: ستون جمع‌وجود، حدود نیمی از عرض محتوا ---------- */
+.setup-shell{width:100%;max-width:min(560px,100%);margin-inline:auto;display:flex;flex-direction:column;gap:9px}
+.setup-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.setup-card{padding:11px 12px;border-radius:13px}
+.setup-card .card-title{margin-bottom:8px}
+.setup-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;padding-top:9px;border-top:1px solid var(--border)}
+.setup-course-list{display:grid;gap:7px;margin:8px 0}
+.setup-course-list .card{padding:9px 10px;border-radius:11px}
+.setup-course-list .catalog-course{margin:0}
+.setup-course-list .book-list{margin-top:6px;gap:4px}
+.setup-course-list .book-row{padding:5px 7px}
+.setup-inline{flex-direction:row;align-items:center;gap:6px;font-size:12px;font-weight:700}
+.setup-card .list-row{padding:5px 0;font-size:12px}
+.setup-card .advice{margin-top:8px;font-size:11px;line-height:1.9}
+.setup-card .card-body{line-height:1.9}
+.setup-card .form-grid{margin:8px 0;gap:9px}
 
 /* ---------- کارت قهرمان ---------- */
 .hero{

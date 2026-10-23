@@ -101,6 +101,30 @@ def test_preview_exposes_core_pages_and_persistent_data_controls():
     assert "checked>" not in html
 
 
+def test_setup_page_is_compact_and_half_width():
+    """صفحهٔ راه‌اندازی باید جمع‌وجور و حدود نیمی از عرض محتوا باشد.
+
+    چرا لازم است: کاربر صریحاً خواست صفحهٔ ورود اطلاعات اولیه کوچک‌تر و با
+    فضای خالی کمتر باشد؛ بدون این قید در CSS، فرم در تمام عرض باز می‌شود.
+    """
+    html = PREVIEW.read_text(encoding="utf-8")
+    assert ".setup-shell{" in html, "ستون جمع‌وجود راه‌اندازی در CSS نیست"
+    shell = re.search(r"\.setup-shell\{([^}]*)\}", html)
+    assert shell, "قاعدهٔ .setup-shell پیدا نشد"
+    body = shell.group(1)
+    assert "max-width" in body, ".setup-shell باید عرض محدود داشته باشد"
+    assert "margin-inline:auto" in body, ".setup-shell باید وسط‌چین باشد"
+    # عرض محدودشده باید کوچک‌تر از عرض محتوا باشد، نه کل صفحه
+    width = re.search(r"max-width:min\((\d+)px", body)
+    assert width, "max-width باید با min(...px,...) بیان شود"
+    assert int(width.group(1)) <= 620, "عرض راه‌اندازی باید حدود نیم صفحه باشد"
+    assert ".setup-card{" in html, "کارت راه‌اندازی باید فشرده‌تر از کارت عادی باشد"
+    card = re.search(r"\.setup-card\{([^}]*)\}", html)
+    assert card, "قاعدهٔ .setup-card پیدا نشد"
+    assert "padding" in card.group(1), "فشردگی کارت راه‌اندازی"
+    assert ".setup-actions{" in html, "دکمه‌های راه‌اندازی باید در یک ردیف جمع باشند"
+
+
 def test_preview_zip_bundle_is_current_and_reproducible():
     """ZIP دانلود پیش‌نمایش باید تازه و قطعی باشد تا لینک README کهنه نشود."""
     sys.path.insert(0, str(ROOT / "preview"))

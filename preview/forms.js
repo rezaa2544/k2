@@ -4,19 +4,315 @@
   function addReviewForm(){dialog('افزودن مورد مرور',`<form id="modalForm"><label>عنوان مورد<input name="label" required></label><div class="form-grid"><label>درس<select name="subject">${subjectOptions()}</select></label><label>مبحث مرتبط (اختیاری)<select name="topicId"><option value="">بدون اتصال</option>${(state.topics||[]).map(t=>`<option value="${esc(t.id)}">${esc(t.subjectName)} · ${esc(t.name)}</option>`).join('')}</select></label><label>نوع<select name="type"><option>مفهومی</option><option>حفظی</option><option>محاسباتی</option><option>واژگانی</option><option>نموداری</option></select></label><label>موعد<input type="date" name="due" value="${todayISO()}"></label><label>دشواری ۱ تا ۵<input type="number" name="difficulty" min="1" max="5" value="3"></label><label>یادداشت<textarea name="content"></textarea></label></div><div class="modal-actions"><button class="btn" type="button" data-action="close">انصراف</button><button class="btn primary" type="submit">ذخیره</button></div></form>`);setModalType('review')}
   function eventForm(e=null){dialog(e?'ویرایش رویداد':'افزودن کلاس یا تعهد',`<form id="modalForm"><label>عنوان<input name="title" required value="${esc(e?.title||'')}"></label><div class="form-grid"><label>نوع<select name="kind">${Object.entries(EVENT_KINDS).map(([k,v])=>`<option value="${k}" ${e?.kind===k?'selected':''}>${v}</option>`).join('')}</select></label>${weekdaySelect('weekday',e?.weekday??weekday())}<label>درس<select name="subject">${subjectOptions()}</select></label>${timeInputs(e?.start||'09:00',e?.end||'10:00')}<label class="check-label"><input name="recorded" type="checkbox" ${e?.recorded?'checked':''}> ضبط‌شده/غیرهم‌زمان</label><label>یادداشت<input name="note" value="${esc(e?.note||'')}"></label></div><div class="modal-actions"><button class="btn" type="button" data-action="close">انصراف</button><button class="btn primary" type="submit">ذخیره</button></div></form>`);if(e){$('#modalForm').dataset.edit=e.id;$('#modalForm [name=subject]').value=e.subjectId||''}setModalType('event')}
   function routineForm(r=null){dialog(r?'ویرایش روال':'افزودن روال ثابت',`<form id="modalForm"><label>عنوان روال<input name="title" required value="${esc(r?.title||'')}"></label><div class="form-grid"><label>نوع<select name="kind">${Object.entries(ROUTINE_KINDS).map(([k,v])=>`<option value="${k}" ${r?.kind===k?'selected':''}>${v}</option>`).join('')}</select></label>${timeInputs(r?.start||'12:00',r?.end||'12:30')}<label>تکرار<select name="repeat"><option value="daily">روزانه</option><option value="alternate" ${r?.repeat==='alternate'?'selected':''}>یک‌روزدرمیان</option></select></label><fieldset class="day-picker"><legend>روزهای تکرار</legend>${DAYS.map((d,i)=>`<label><input type="checkbox" name="days" value="${i}" ${(r?.days||[0,1,2,3,4,5,6]).includes(i)?'checked':''}>${d}</label>`).join('')}</fieldset></div><div class="modal-actions"><button class="btn" type="button" data-action="close">انصراف</button><button class="btn primary" type="submit">ذخیره روال</button></div></form>`);if(r)$('#modalForm').dataset.edit=r.id;setModalType('routine')}
-  function setupPage(){const o=state.onboarding.values||{},step=num(state.onboarding.step),group=o.group||profileGroup(),catalog=window.K2_CATALOG||{},courses=catalog[group]||[];let body='';
-    if(step===0)body=`<div class="form-grid"><label>نام/عنوان پروفایل<input data-flow="name" value="${esc(o.name||state.profile?.name||'')}" placeholder="اختیاری"></label><label>رشته<select data-flow="group"><option value="">انتخاب رشته</option>${Object.keys(catalog).map(g=>`<option value="${esc(g)}" ${g===group?'selected':''}>${esc(g)}</option>`).join('')}</select></label><label>سال آزمون<input data-flow="year" value="${esc(o.year||state.profile?.year||'۱۴۰۶')}"></label><label>نام آزمون<input data-flow="examName" value="${esc(o.examName||state.profile?.examName||'کنکور سراسری')}"></label><label>تاریخ (اختیاری)<input type="date" data-flow="date" value="${esc(o.date||state.profile?.date||'')}"></label><label>وضعیت تاریخ<select data-flow="dateStatus"><option value="unknown">نامشخص</option><option value="official" ${o.dateStatus==='official'?'selected':''}>رسمی با منبع</option><option value="estimated" ${o.dateStatus==='estimated'?'selected':''}>تخمینی</option></select></label><label>منبع/یادداشت تاریخ<input data-flow="source" value="${esc(o.source||'')}"></label></div><p class="card-body">تاریخ آزمون حدس زده نمی‌شود؛ خالی‌گذاشتن مجاز است.</p>`;
-    else if(step===1){if(!group)body='<p>ابتدا رشته را در گام قبل انتخاب کنید.</p>';else {const year=String(o.year||state.profile?.year||'').replace(/[۰-۹]/g,d=>'۰۱۲۳۴۵۶۷۸۹'.indexOf(d));const share=year==='1406'?window.K2_GROUP_WEIGHTS?.[group]:null;const shareNote=share?`سهم کلیِ بازنشرشده برای ۱۴۰۶: آزمون اختصاصی ${share.exam}٪ و سوابق تحصیلی ${share.transcript}٪؛ ضرایب تک‌درس سابقه جدا و هنوز در این catalog بارگذاری نشده‌اند.`:'سهم کلی برای این سال/گروه در این پیش‌نمایش تأیید نشده است.';body=`<p class="card-body">مواد آزمون اختصاصی از سوابق تحصیلی جداست. انتخاب‌ها از ابتدا خالی هستند. ${esc(shareNote)}</p><div class="button-row">${actionBtn('انتخاب همهٔ درس‌ها','select-all-courses')}${actionBtn('پاک‌کردن درس‌ها','clear-courses')}${actionBtn('انتخاب همهٔ کتاب‌ها','select-all-books')}${actionBtn('پاک‌کردن کتاب‌ها','clear-books')}</div>${courses.map(c=>{const key=group+'|'+c.name,sel=(o.subjects||[]).includes(key);return `<article class="card catalog-course"><label class="course-select"><input type="checkbox" data-course="${esc(key)}" ${sel?'checked':''}><strong>${esc(c.name)}</strong><span class="pill ${c.examCoefficient!==null?'info':'gray'}">${esc(c.type)}${c.examCoefficient!==null?' · ضریب آزمون '+c.examCoefficient:' · ضریب تک‌درس نامشخص'}</span></label><p class="card-body">${esc(c.note||'')}</p><div class="book-list">${c.books.map(b=>{const bk=key+'|'+b.code,checked=(o.books||[]).includes(bk);return `<label class="book-row"><input type="checkbox" data-book="${esc(bk)}" ${checked?'checked':''}><span>${esc(b.title)} · پایهٔ ${b.grade} · کد ${esc(b.code)}</span><small>${b.editionYear?'فرادادهٔ چاپ ۱۴۰۴–۱۴۰۵':'فراداده نیازمند بازبینی مستقیم'}${b.transcriptNote?' · هم‌پوشانی با سابقه':''}</small></label>`}).join('')}</div></article>`}).join('')}<div class="advice warning">دروس عمومی دفترچهٔ آزمون اختصاصی نیستند؛ اثر آن‌ها از مسیر سوابق تحصیلی است. منبع اعداد آزمون، بازنشر متن اطلاعیه است؛ پیوست ضرایب تک‌درس سوابق در دسترس نبود.</div>`}}
-    else if(step===2)body=`<p>آیا در کلاس کنکوری مؤسسه شرکت می‌کنید؟</p><label><input type="radio" name="attend" data-flow="attend" value="yes" ${o.attend==='yes'?'checked':''}> بله</label><label><input type="radio" name="attend" data-flow="attend" value="no" ${o.attend==='no'?'checked':''}> خیر</label>${o.attend==='yes'?`<div class="button-row">${actionBtn('＋ افزودن جلسه','wizard-add-class')}</div>${(o.classes||[]).map((e,i)=>`<div class="list-row"><span>${DAYS[e.weekday]} ${esc(e.start)}–${esc(e.end)} · ${esc(e.title)} · ${esc(e.subjectName||'')}</span>${actionBtn('حذف','wizard-delete-class:'+i,'danger')}</div>`).join('')||'<p>جلسه‌ای ثبت نشده است.</p>'}`:''}`;
-    else if(step===3)body=`<p>آزمون‌های هفتگی و دیگر تعهدهای ثابت را وارد کنید؛ این مرحله می‌تواند خالی بماند.</p><div class="button-row">${actionBtn('＋ افزودن آزمون/تعهد','wizard-add-event')}</div>${(o.commitments||[]).map((e,i)=>`<div class="list-row"><span>${DAYS[e.weekday]} ${esc(e.start)}–${esc(e.end)} · ${esc(e.title)}</span>${actionBtn('حذف','wizard-delete-event:'+i,'danger')}</div>`).join('')||'<p>تعهدی ثبت نشده است.</p>'}`;
-    else if(step===4)body=`<div class="form-grid"><label>بیداری<input type="time" data-flow="wake" value="${esc(o.wake||state.settings.wake)}"></label><label>خواب<input type="time" data-flow="sleep" value="${esc(o.sleep||state.settings.sleep)}"></label><label>انرژی<select data-flow="energy"><option value="1" ${num(o.energy,2)===1?'selected':''}>کم</option><option value="2" ${num(o.energy,2)===2?'selected':''}>متوسط</option><option value="3" ${num(o.energy,2)===3?'selected':''}>خوب</option></select></label><label>ساعت‌های پربازده (اختیاری)<input data-flow="peak" value="${esc(o.peak||'')}" placeholder="۱۶:۰۰–۱۸:۰۰"></label></div><p>وعدهٔ غذا، استراحت و کارهای ثابت دلخواه را اضافه کنید.</p><div class="button-row">${actionBtn('＋ افزودن روال','wizard-add-routine')}</div>${(o.routines||[]).map((r,i)=>`<div class="list-row"><span>${esc(r.title)} · ${esc(r.start)}–${esc(r.end)} · ${(r.days||[]).map(d=>DAYS[d]).join('، ')}</span>${actionBtn('حذف','wizard-delete-routine:'+i,'danger')}</div>`).join('')||'<p>روال اضافی ثبت نشده است.</p>'}`;
-    else body=`<div class="form-grid"><label>اولویت‌بندی<select data-flow="priority"><option value="auto" ${o.priority!=='personal'?'selected':''}>خودکار؛ ضریب آزمون تعدیل‌گر</option><option value="personal" ${o.priority==='personal'?'selected':''}>فقط وزن شخصی</option></select></label><label>شدت تعدیل‌گر (۰٫۵ تا ۱٫۵)<input type="number" min="0.5" max="1.5" step="0.1" data-flow="coefficientFactor" value="${esc(o.coefficientFactor||1)}"></label></div><article class="card"><h3 class="card-title">بازبینی پیش از ذخیره</h3><p class="card-body">رشته: ${esc(group||'—')} · درس: ${(o.subjects||[]).length} · کتاب: ${(o.books||[]).length}<br>کلاس: ${(o.classes||[]).length} · تعهد: ${(o.commitments||[]).length} · روال: ${(o.routines||[]).length}<br>ضرایب سوابق تحصیلی حدس زده نمی‌شوند.</p></article><label class="check-label"><input type="checkbox" data-flow="confirm" ${o.confirm?'checked':''}> اطلاعات را بررسی کرده و ذخیره می‌کنم.</label>`;
-    if(step===2||step===3){const entries=[...(o.attend==='yes'?(o.classes||[]):[]),...(o.commitments||[])].filter(e=>!e.recorded),hits=[];for(let i=0;i<entries.length;i++)for(let j=i+1;j<entries.length;j++){const a=entries[i],b=entries[j];if(a.weekday===b.weekday&&minOf(a.start)<minOf(b.end)&&minOf(b.start)<minOf(a.end))hits.push(`${DAYS[a.weekday]}: ${a.title} با ${b.title}`)}if(hits.length)body+=`<div class="advice warning">تعارض زمانی؛ یکی از بازه‌ها را اصلاح کنید یا رویداد ضبط‌شده را مشخص کنید: ${hits.map(esc).join('؛ ')}</div>`;}
-    return `<div class="page-scroll"><div class="section-row"><div><h2 class="page-heading">راه‌اندازی · گام ${step+1} از 6</h2><p class="page-intro">پیشرفت راه‌اندازی ذخیره می‌شود.</p></div>${actionBtn('بازگشت به داشبورد','go-dashboard')}</div><div class="modal-progress"><i style="width:${(step+1)/6*100}%"></i></div><article class="card"><h3 class="card-title">${['پروفایل آزمون','انتخاب رشته، درس و کتاب','کلاس مؤسسه','آزمون‌ها و تعهدها','خواب و روال‌ها','اولویت و تأیید نهایی'][step]}</h3>${body}<div class="button-row">${step>0?actionBtn('مرحلهٔ قبل','wizard-back'):''}${step<5?actionBtn('ذخیره و ادامه','wizard-next','primary'):actionBtn('ذخیره و ورود','wizard-finish','primary')}</div></article></div>`;
+  // ---- راه‌اندازی: گام‌های جمع‌وجور ----
+  // مرجع نیازمندی‌ها: docs/USER_SCHEDULE_AND_ONBOARDING.md §3،
+  // docs/MASTER_PRODUCT_BLUEPRINT.md بخش A و UNIFIED_REQUIREMENTS_CATALOG.md
+  // (ONB-01..05، EST-02). هیچ گامی دادهٔ نمونه نیست؛ عدد پیش‌فرض فرضیهٔ قابل
+  // تنظیم است و تعارض فقط از رویداد واقعی کاربر ساخته می‌شود (D-023).
+  const SETUP_TITLES = ['پروفایل آزمون', 'درس و کتاب', 'کلاس‌ها و تعهدات',
+    'خواب، غذا و روال‌ها', 'آزمون جامع', 'سطح مبحثی و برآورد زمان',
+    'اولویت و تأیید نهایی'];
+  const SETUP_TOTAL = SETUP_TITLES.length;
+  // گام‌های اختیاری قابل رد کردن‌اند؛ بقیه بدون پاسخ جلو نمی‌روند.
+  const SETUP_OPTIONAL = [false, false, false, false, true, true, false];
+  const ESTIMATE_DEFAULT_KEYS = [
+    ['testing', 'تست زمان‌دار'], ['analysis', 'تحلیل تست'],
+    ['consolidation', 'تثبیت'], ['homework', 'تکلیف'], ['review', 'مرور فعال']];
+
+  /** تعارض واقعی بین رویدادهایی که خود کاربر در همین راه‌اندازی وارد کرده. */
+  function setupConflicts() {
+    const o = state.onboarding.values || {};
+    const items = [];
+    (o.attend === 'yes' ? (o.classes || []) : []).forEach((e, i) => items.push({ e, i, key: 'class' }));
+    (o.commitments || []).forEach((e, i) => items.push({ e, i, key: 'commitment' }));
+    const live = items.filter(x => !x.e.recorded);
+    const hits = [];
+    for (let i = 0; i < live.length; i++) {
+      for (let j = i + 1; j < live.length; j++) {
+        const x = live[i], y = live[j];
+        if (x.e.weekday === y.e.weekday && minOf(x.e.start) < minOf(y.e.end)
+          && minOf(y.e.start) < minOf(x.e.end)) hits.push({ x, y });
+      }
+    }
+    return hits;
   }
-  function updateFlow(key,value){state.onboarding.values[key]=value;persist('')}
+
+  /** بلوک پرسش تعارض: کدام‌یک ضبط‌شده/غیرهم‌زمان است؟ */
+  function setupConflictBlock() {
+    const hits = setupConflicts();
+    if (!hits.length) return '';
+    const rows = hits.map(({ x, y }) => {
+      const day = DAYS[x.e.weekday];
+      const label = (it) => esc(it.e.title) + ' ' + esc(it.e.start) + '–' + esc(it.e.end);
+      return `<li>${day}: ${label(x)} با ${label(y)} هم‌پوشانی دارد.</li>`;
+    }).join('');
+    const marks = hits.map(({ x, y }) =>
+      `${actionBtn('«' + esc(x.e.title) + '» ضبط‌شده است', 'wizard-recorded:' + x.key + ':' + x.i)}
+       ${actionBtn('«' + esc(y.e.title) + '» ضبط‌شده است', 'wizard-recorded:' + y.key + ':' + y.i)}`
+    ).join('');
+    return `<div class="advice warning"><span class="advice-mark">!</span><span>
+      <strong>تعارض حل‌نشده.</strong> ${rows}<br>
+      کدام‌یک ضبط‌شده/غیرهم‌زمان است؟ با علامت‌زدن آن، بازه آزاد می‌شود و برنامه
+      قطعی ساخته می‌شود. تا حل این تعارض، پایان راه‌اندازی باز است.<br>${marks}</span></div>`;
+  }
+
+  function setupPage() {
+    const o = state.onboarding.values || {}, step = num(state.onboarding.step),
+      group = o.group || profileGroup(), catalog = window.K2_CATALOG || {},
+      courses = catalog[group] || [];
+    let body = '';
+    if (step === 0) body = `<div class="form-grid">`
+      + `<label>نام پروفایل<input data-flow="name" value="${esc(o.name || state.profile?.name || '')}" placeholder="اختیاری"></label>`
+      + `<label>رشته<select data-flow="group"><option value="">انتخاب رشته</option>${Object.keys(catalog).map(g => `<option value="${esc(g)}" ${g === group ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select></label>`
+      + `<label>سال آزمون<input data-flow="year" value="${esc(o.year || state.profile?.year || '۱۴۰۶')}"></label>`
+      + `<label>نام آزمون<input data-flow="examName" value="${esc(o.examName || state.profile?.examName || 'کنکور سراسری')}"></label>`
+      + `<label>تاریخ آزمون<input type="date" data-flow="date" value="${esc(o.date || state.profile?.date || '')}"></label>`
+      + `<label>وضعیت تاریخ<select data-flow="dateStatus"><option value="unknown">نامشخص</option><option value="official" ${o.dateStatus === 'official' ? 'selected' : ''}>رسمی با منبع</option><option value="estimated" ${o.dateStatus === 'estimated' ? 'selected' : ''}>تخمینی</option></select></label>`
+      + `<label>منبع تاریخ<input data-flow="source" value="${esc(o.source || '')}" placeholder="در حالت «رسمی» لازم است"></label>`
+      + `</div><p class="card-body">تاریخ رسمی ابلاغ نشده؛ خالی گذاشتن مجاز است و حدس زده نمی‌شود.</p>`;
+    else if (step === 1) {
+      if (!group) body = '<p class="card-body">ابتدا رشته را در گام قبل انتخاب کنید.</p>';
+      else {
+        const year = String(o.year || state.profile?.year || '').replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+        const share = year === '1406' ? window.K2_GROUP_WEIGHTS?.[group] : null;
+        const shareNote = share
+          ? `سهم بازنشرشدهٔ ۱۴۰۶: آزمون اختصاصی ${share.exam}٪ و سوابق ${share.transcript}٪. ضرایب تک‌درس سوابقه جدا و هنوز بارگذاری نشده‌اند.`
+          : 'سهم کلی برای این سال/گروه در این پیش‌نمایش تأیید نشده است.';
+        body = `<p class="card-body">${esc(shareNote)}</p>`
+          + `<div class="button-row">${actionBtn('انتخاب همهٔ درس‌ها', 'select-all-courses')}${actionBtn('پاک‌کردن درس‌ها', 'clear-courses')}${actionBtn('انتخاب همهٔ کتاب‌ها', 'select-all-books')}${actionBtn('پاک‌کردن کتاب‌ها', 'clear-books')}</div>`
+          + `<div class="setup-course-list">` + courses.map(c => {
+            const key = group + '|' + c.name, sel = (o.subjects || []).includes(key);
+            return `<article class="card catalog-course"><label class="course-select">`
+              + `<input type="checkbox" data-course="${esc(key)}" ${sel ? 'checked' : ''}>`
+              + `<strong>${esc(c.name)}</strong>`
+              + `<span class="pill ${c.examCoefficient !== null ? 'info' : 'gray'}">${esc(c.type)}${c.examCoefficient !== null ? ' · ضریب آزمون ' + c.examCoefficient : ' · ضریب تک‌درس نامشخص'}</span>`
+              + `</label><div class="book-list">` + c.books.map(b => {
+                const bk = key + '|' + b.code, checked = (o.books || []).includes(bk);
+                return `<label class="book-row"><input type="checkbox" data-book="${esc(bk)}" ${checked ? 'checked' : ''}><span>${esc(b.title)} · پایهٔ ${b.grade} · کد ${esc(b.code)}</span></label>`;
+              }).join('') + `</div></article>`;
+          }).join('') + `</div>`
+          + `<div class="advice"><span class="advice-mark">i</span><span>دروس عمومی دفترچهٔ آزمون اختصاصی نیستند؛ اثر آن‌ها از مسیر سوابق تحصیلی است. منبع اعداد آزمون، بازنشر متن اطلاعیه است.</span></div>`;
+      }
+    }
+    else if (step === 2) {
+      body = `<p class="card-body">اگر کلاس کنکوری مؤسسه دارید، جلسه‌ها را وارد کنید. رویداد ضبط‌شده غیرهم‌زمان است و در همان بازه ظرفیت نمی‌گیرد.</p>`
+        + `<div class="button-row"><label class="setup-inline"><input type="radio" name="attend" data-flow="attend" value="yes" ${o.attend === 'yes' ? 'checked' : ''}> کلاس دارم</label>`
+        + `<label class="setup-inline"><input type="radio" name="attend" data-flow="attend" value="no" ${o.attend === 'no' ? 'checked' : ''}> کلاس ندارم</label></div>`
+        + (o.attend === 'yes'
+          ? `<div class="button-row">${actionBtn('＋ افزودن جلسه', 'wizard-add-class')}</div>`
+            + ((o.classes || []).map((e, i) => `<div class="list-row"><span>${DAYS[e.weekday]} ${esc(e.start)}–${esc(e.end)} · ${esc(e.title)}${e.subjectName ? ' · ' + esc(e.subjectName) : ''}${e.recorded ? ' · ضبط‌شده' : ''}</span><span>${actionBtn('حذف', 'wizard-delete-class:' + i, 'danger')}</span></div>`).join('') || '<p class="card-body">جلسه‌ای ثبت نشده است.</p>')
+          : '')
+        + `<p class="card-body">رفت‌وآمد، آزمون آزمایشی و دیگر تعهدهای ثابت هفتگی:</p>`
+        + `<div class="button-row">${actionBtn('＋ افزودن تعهد/آزمون', 'wizard-add-event')}</div>`
+        + ((o.commitments || []).map((e, i) => `<div class="list-row"><span>${DAYS[e.weekday]} ${esc(e.start)}–${esc(e.end)} · ${esc(e.title)}${e.recorded ? ' · ضبط‌شده' : ''}</span><span>${actionBtn('حذف', 'wizard-delete-event:' + i, 'danger')}</span></div>`).join('') || '<p class="card-body">تعهدی ثبت نشده است.</p>')
+        + setupConflictBlock();
+    }
+    else if (step === 3) {
+      body = `<div class="form-grid">`
+        + `<label>بیداری<input type="time" data-flow="wake" value="${esc(o.wake || state.settings.wake)}"></label>`
+        + `<label>خواب<input type="time" data-flow="sleep" value="${esc(o.sleep || state.settings.sleep)}"></label>`
+        + `<label>حداقل خواب مورد نظر (دقیقه)<input type="number" min="180" max="720" step="15" data-flow="sleepTarget" value="${esc(o.sleepTarget ?? num(state.settings.sleepTargetMinutes, 480))}"></label>`
+        + `<label>انرژی<select data-flow="energy"><option value="1" ${num(o.energy, 2) === 1 ? 'selected' : ''}>کم</option><option value="2" ${num(o.energy, 2) === 2 ? 'selected' : ''}>متوسط</option><option value="3" ${num(o.energy, 2) === 3 ? 'selected' : ''}>خوب</option></select></label>`
+        + `<label>ساعت‌های پربازده<input data-flow="peak" value="${esc(o.peak || '')}" placeholder="۱۶:۰۰–۱۸:۰۰"></label>`
+        + `</div>`
+        + `<p class="card-body">وعدهٔ غذا، استراحت، بهداشت/حمام یک‌روزدرمیان و رفت‌وآمد را با بازه و روزهای تکرار اضافه کنید؛ این بازه‌ها از ساعت مطالعه کم می‌شوند.</p>`
+        + `<div class="button-row">${actionBtn('＋ افزودن روال', 'wizard-add-routine')}</div>`
+        + ((o.routines || []).map((r, i) => `<div class="list-row"><span>${esc(r.title)} · ${esc(r.start)}–${esc(r.end)} · ${(r.days || []).map(d => DAYS[d]).join('، ')}</span><span>${actionBtn('حذف', 'wizard-delete-routine:' + i, 'danger')}</span></div>`).join('') || '<p class="card-body">روال اضافی ثبت نشده است.</p>');
+    }
+    else if (step === 4) {
+      const s = ensureExamSeries();
+      const on = s.enabled !== false;
+      body = `<p class="card-body">آزمون جامع و تحلیل آن دو فعالیت مستقل‌اند. تاریخ رسمی ابلاغ نشده؛ بازه و تاریخ شروع را خودت تأیید کن. اگر نمی‌خواهی حالا ثبت کنی، این گام را رد کن.</p>`
+        + `<div class="form-grid">`
+        + `<label class="check-label"><input type="checkbox" data-flow="examEnabled" ${on ? 'checked' : ''}> چرخهٔ آزمون جامع فعال باشد</label>`
+        + `<label>بازهٔ تکرار (روز)<input type="number" min="1" max="90" data-flow="examInterval" value="${Math.round(num(s.intervalDays, 14))}"></label>`
+        + `<label>تاریخ اولین نوبت<input type="date" data-flow="examStart" value="${esc(s.startISO)}"></label>`
+        + `<label>مدت خودِ آزمون (دقیقه)<input type="number" min="15" max="600" data-flow="examDuration" value="${Math.round(num(s.durationMinutes, 210))}"></label>`
+        + `<label>مدت تحلیل (دقیقه)<input type="number" min="5" max="600" data-flow="examAnalysis" value="${Math.round(num(s.analysisMinutes, 60))}"></label>`
+        + `<label>یادداشت منبع تاریخ<input data-flow="examNote" value="${esc(s.startNote || '')}" placeholder="مثلاً اطلاعیهٔ مرکز سنجش"></label>`
+        + `</div>`
+        + `<p class="card-body">معادل شمسی تاریخ انتخابی: <strong>${esc(jalaliLabel(s.startISO))}</strong>. اگر «۳۰ مهر» را داری، سال آن را از تقویم خودت تأیید کن؛ سال حدس زده نمی‌شود.</p>`;
+    }
+    else if (step === 5) {
+      const topics = state.topics || [];
+      const est = state.settings.estimateDefaults || {};
+      // جدول سطح فقط وقتی ساخته می‌شود که مبحث واقعی وجود داشته باشد؛ هیچ
+      // مبحثی از پیش ساخته نمی‌شود (D-023).
+      const levelRows = topics.length
+        ? `<div class="table-wrap"><table><thead><tr><th>مبحث</th><th>درس</th><th>سطح اولیه (۰ تا ۴)</th></tr></thead><tbody>`
+          + topics.map(t => `<tr><td>${esc(t.name)}</td><td>${esc(t.subjectName || '—')}</td>`
+            + `<td><select data-flow="topicLevel:${esc(t.id)}"><option value="">هنوز سنجش نشده</option>`
+            + [0, 1, 2, 3, 4].map(v => `<option value="${v}" ${num(t.selfAssessed, -1) === v ? 'selected' : ''}>${v} از ۴</option>`).join('')
+            + `</select></td></tr>`).join('') + `</tbody></table></div>`
+        : `<p class="card-body">هنوز مبحثی ثبت نشده. مبحث/مهارت واقعی را در صفحهٔ «مباحث و تسلط» اضافه کن؛ این گام اختیاری است و بعداً تکمیل می‌شود.</p>`;
+      body = `<p class="card-body">سطح در سطح <strong>مبحث</strong> ثبت می‌شود، نه یک برچسب کلی برای همهٔ درس. خودسنجی به‌تنهایی کافی نیست و اطمینان پایین می‌گیرد.</p>`
+        + levelRows
+        // این گام عمداً اختیاری است: پاسخ ندادن به آن راه‌اندازی را متوقف نمی‌کند.
+        + `<div class="advice"><span class="advice-mark">i</span><span>این گام را می‌توانی رد کنی و بعداً در «مباحث و تسلط» تکمیل کنی؛ سطح هر مبحث جدا ذخیره می‌شود.</span></div>`
+        + `<p class="card-body">طول معمول هر نوع کار را هم تعیین کن. این اعداد <strong>فرضیهٔ محافظه‌کارانه</strong> هستند و بعد از نمونه‌های واقعی‌ات کالیبره می‌شوند.</p>`
+        + `<div class="form-grid">` + ESTIMATE_DEFAULT_KEYS.map(([k, label]) =>
+          `<label>${label} (دقیقه)<input type="number" min="5" max="600" step="5" data-flow="est:${k}" value="${esc(est[k] ?? 30)}"></label>`).join('') + `</div>`;
+    }
+    else {
+      body = `<div class="form-grid">`
+        + `<label>اولویت‌بندی<select data-flow="priority"><option value="auto" ${o.priority !== 'personal' ? 'selected' : ''}>خودکار؛ ضریب آزمون تعدیل‌گر</option><option value="personal" ${o.priority === 'personal' ? 'selected' : ''}>فقط وزن شخصی</option></select></label>`
+        + `<label>شدت تعدیل‌گر (۰٫۵ تا ۱٫۵)<input type="number" min="0.5" max="1.5" step="0.1" data-flow="coefficientFactor" value="${esc(o.coefficientFactor || 1)}"></label>`
+        + `</div>`
+        + `<article class="card"><h3 class="card-title">بازبینی پیش از ذخیره</h3><p class="card-body">`
+        + `رشته: ${esc(group || '—')} · درس: ${(o.subjects || []).length} · کتاب: ${(o.books || []).length}<br>`
+        + `کلاس: ${(o.attend === 'yes' ? (o.classes || []).length : 0)} · تعهد: ${(o.commitments || []).length} · روال: ${(o.routines || []).length}<br>`
+        + `مبحث سنجش‌شده: ${Object.keys(o.topicLevels || {}).length} · حداقل خواب: ${esc(o.sleepTarget ?? num(state.settings.sleepTargetMinutes, 480))} دقیقه<br>`
+        + `ضرایب سوابق تحصیلی حدس زده نمی‌شوند.</p></article>`
+        + setupConflictBlock()
+        + `<label class="check-label"><input type="checkbox" data-flow="confirm" ${o.confirm ? 'checked' : ''}> اطلاعات را بررسی کرده و ذخیره می‌کنم.</label>`;
+    }
+    const nav = `<div class="setup-actions">`
+      + (step > 0 ? actionBtn('مرحلهٔ قبل', 'wizard-back') : '<span></span>')
+      + (SETUP_OPTIONAL[step] ? actionBtn('رد کردن این گام', 'wizard-skip') : '<span></span>')
+      + (step < SETUP_TOTAL - 1
+        ? actionBtn('ذخیره و ادامه', 'wizard-next', 'primary')
+        : actionBtn('ذخیره و ورود', 'wizard-finish', 'primary'))
+      + `</div>`;
+    return `<div class="page-scroll"><div class="setup-shell">`
+       + `<div class="setup-head"><div><h2 class="page-heading">راه‌اندازی · گام ${faNum(step + 1)} از ${faNum(SETUP_TOTAL)}</h2>`
+      + `<p class="page-intro">پیشرفت ذخیره می‌شود؛ هر وقت خواستی ادامه بده.</p></div>`
+      + `${actionBtn('داشبورد', 'go-dashboard')}</div>`
+      + `<div class="modal-progress"><i style="width:${(step + 1) / SETUP_TOTAL * 100}%"></i></div>`
+      + `<article class="card setup-card"><h3 class="card-title">${SETUP_TITLES[step]}</h3>${body}${nav}</article>`
+      + `</div></div>`;
+  }
+
+  function updateFlow(key, value) {
+    const o = state.onboarding.values;
+    // سطح اولیهٔ هر مبحث: در سطح مبحث ثبت می‌شود، نه برچسب کلی درس.
+    if (key.startsWith('topicLevel:')) {
+      const tid = key.split(':')[1];
+      o.topicLevels = o.topicLevels || {};
+      if (value === null || value === undefined || value === '') delete o.topicLevels[tid];
+      else o.topicLevels[tid] = num(value);
+      persist('');
+      return;
+    }
+    // برآورد زمان هر نوع کار؛ فرضیهٔ محافظه‌کارانه و قابل کالیبراسیون.
+    if (key.startsWith('est:')) {
+      const kind = key.split(':')[1];
+      o.estimates = o.estimates || {};
+      const n = num(value, 0);
+      if (n > 0) o.estimates[kind] = n; else delete o.estimates[kind];
+      persist('');
+      return;
+    }
+    if (key.startsWith('exam')) {
+      // گام آزمون جامع: مقادیر روی state.examSeries ذخیره می‌شوند تا همان
+      // چیزی باشد که صفحهٔ آزمون‌های جامع می‌خواند.
+      const s2 = ensureExamSeries();
+      if (key === 'examEnabled') s2.enabled = !!value;
+      if (key === 'examInterval') s2.intervalDays = Math.max(1, Math.round(num(value, 14)));
+      if (key === 'examStart') s2.startISO = String(value || '');
+      if (key === 'examDuration') s2.durationMinutes = Math.max(15, Math.round(num(value, 210)));
+      if (key === 'examAnalysis') s2.analysisMinutes = Math.max(5, Math.round(num(value, 60)));
+      if (key === 'examNote') s2.startNote = String(value || '');
+      persist('');
+      return;
+    }
+    o[key] = value;
+    persist('');
+  }
+
   function pushWizardItem(type){if(type==='class'||type==='event'){dialog(type==='class'?'افزودن جلسهٔ کلاس':'افزودن آزمون/تعهد',`<form id="modalForm"><label>عنوان<input name="title" required></label><div class="form-grid"><label>نوع<select name="kind">${Object.entries(EVENT_KINDS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></label>${weekdaySelect()}<label>درس<select name="subject">${subjectOptions()}</select></label>${timeInputs()}</div><div class="modal-actions"><button class="btn" type="button" data-action="close">انصراف</button><button class="btn primary" type="submit">افزودن</button></div></form>`);$('#modalForm').dataset.wizard=type;return}routineForm();$('#modalForm').dataset.wizard='routine'}
-  function advanceWizard(finish=false){const step=num(state.onboarding.step),o=state.onboarding.values;if(step===0&&(!o.group||!o.year)){notify('رشته و سال آزمون را انتخاب کنید');return}if(step===1&&!(o.subjects||[]).length){notify('حداقل یک درس انتخاب کنید');return}if(step===2&&!o.attend){notify('پاسخ حضور در کلاس را مشخص کنید');return}if(step===4){o.wake=o.wake||state.settings.wake;o.sleep=o.sleep||state.settings.sleep;o.energy=o.energy||state.settings.energy;if(!o.wake||!o.sleep){notify('خواب و بیداری را وارد کنید');return}}if(finish&&!o.confirm){notify('تأیید نهایی را علامت بزنید');return}if(finish){const group=o.group,catalog=window.K2_CATALOG[group]||[],normalizedYear=String(o.year||'').replace(/[۰-۹]/g,d=>'۰۱۲۳۴۵۶۷۸۹'.indexOf(d)),contribution=normalizedYear==='1406'?window.K2_GROUP_WEIGHTS?.[group]:null,subjectMap=new Map(state.subjects.map(s=>[`${s.group||state.profile?.group||''}|${s.name}`,{...s,selected:false}]));for(const k of (o.subjects||[]).filter(x=>x.startsWith(group+'|'))){const [,name]=k.split('|'),c=catalog.find(x=>x.name===name),key=`${group}|${name}`,old=subjectMap.get(key)||{};subjectMap.set(key,{id:old.id||id(),group,name,kind:c?.type||'درس',examCoefficient:c?.examCoefficient??null,selected:true,personalWeight:old.personalWeight||1,coefficientSource:'گزارش بازنشرشدهٔ اطلاعیه'});}state.subjects=[...subjectMap.values()];const bookMap=new Map(state.books.map(b=>[`${b.group}|${b.code}`,{...b,selected:false}]));for(const k of(o.books||[]).filter(x=>x.startsWith(group+'|'))){const [g,n,code]=k.split('|'),c=(window.K2_CATALOG[g]||[]).find(x=>x.name===n),b=c?.books.find(x=>x.code===code),key=`${g}|${code}`,old=bookMap.get(key)||{};bookMap.set(key,{...old,id:old.id||id(),group:g,subject:n,title:b?.title||old.title||'',code,grade:b?.grade||old.grade||null,selected:true});}state.books=[...bookMap.values()];state.profile={id:state.profile?.id||id(),name:o.name||'آزمون هدف',examName:o.examName||'کنکور سراسری',group,year:o.year,date:o.date||'',dateStatus:o.dateStatus||'unknown',source:o.source||'',examShare:contribution?.exam??null,transcriptShare:contribution?.transcript??null,contributionSource:contribution?.source||'not_loaded'};state.settings={...state.settings,wake:o.wake||state.settings.wake,sleep:o.sleep||state.settings.sleep,energy:num(o.energy,2),peak:o.peak||'',useExamCoefficients:o.priority!=='personal',coefficientFactor:Math.max(.5,Math.min(1.5,num(o.coefficientFactor,1)))};state.events=[...state.events.filter(e=>!e.fromWizard),...((o.attend==='yes'?o.classes:[])||[]).map(e=>({...e,id:id(),fromWizard:true})),...(o.commitments||[]).map(e=>({...e,id:id(),fromWizard:true}))];state.events.forEach(e=>{const s=state.subjects.find(x=>x.id===e.subjectId||x.name===e.subjectId||x.name===e.subjectName);if(s){e.subjectId=s.id;e.subjectName=s.name}});state.routines=[...state.routines.filter(r=>!r.fromWizard),...(o.routines||[]).map(r=>({...r,id:id(),fromWizard:true}))];state.onboarding.completed=true;state.profile.savedAt=new Date().toISOString();persist('راه‌اندازی ذخیره شد');currentPage='dashboard';render();return}state.onboarding.step=Math.min(5,step+1);persist('گام ذخیره شد');render()}
+  function advanceWizard(finish = false) {
+    const step = num(state.onboarding.step), o = state.onboarding.values;
+    if (step === 0 && (!o.group || !o.year)) { notify('رشته و سال آزمون را انتخاب کنید'); return; }
+    if (step === 1 && !(o.subjects || []).length) { notify('حداقل یک درس انتخاب کنید'); return; }
+    if (step === 2 && !o.attend) { notify('پاسخ حضور در کلاس را مشخص کنید'); return; }
+    if (step === 2 && o.attend === 'yes' && !(o.classes || []).length) {
+      notify('گفتید کلاس دارید؛ دست‌کم یک جلسه وارد کنید'); return;
+    }
+    if (step === 4) {
+      const s2 = ensureExamSeries();
+      if (s2.enabled !== false && (!s2.startISO || s2.intervalDays < 1)) {
+        notify('تاریخ اولین نوبت و بازهٔ تکرار را وارد کنید یا چرخه را خاموش کنید'); return;
+      }
+    }
+    if (finish) {
+      // تعارض حل‌نشده = برنامهٔ قطعی ساخته نمی‌شود (D-023: فقط رویداد واقعی).
+      const conflicts = setupConflicts();
+      if (conflicts.length) {
+        notify('تعارض زمانی حل نشده؛ یکی را ضبط‌شده علامت بزنید یا زمان را اصلاح کنید');
+        return;
+      }
+      if (!o.confirm) { notify('تأیید نهایی را علامت بزنید'); return; }
+      const group = o.group, catalog = window.K2_CATALOG[group] || [];
+      const normalizedYear = String(o.year || '').replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+      const contribution = normalizedYear === '1406' ? window.K2_GROUP_WEIGHTS?.[group] : null;
+      const subjectMap = new Map(state.subjects.map(s => [`${s.group || state.profile?.group || ''}|${s.name}`, { ...s, selected: false }]));
+      for (const k of (o.subjects || []).filter(x => x.startsWith(group + '|'))) {
+        const [, name] = k.split('|'), c = catalog.find(x => x.name === name), key = `${group}|${name}`, old = subjectMap.get(key) || {};
+        subjectMap.set(key, {
+          id: old.id || id(), group, name, kind: c?.type || 'درس',
+          examCoefficient: c?.examCoefficient ?? null, selected: true,
+          personalWeight: old.personalWeight || 1,
+          coefficientSource: 'گزارش بازنشرشدهٔ اطلاعیه'
+        });
+      }
+      state.subjects = [...subjectMap.values()];
+      const bookMap = new Map(state.books.map(b => [`${b.group}|${b.code}`, { ...b, selected: false }]));
+      for (const k of (o.books || []).filter(x => x.startsWith(group + '|'))) {
+        const [g, n, code] = k.split('|'), c = (window.K2_CATALOG[g] || []).find(x => x.name === n),
+          b = c?.books.find(x => x.code === code), key = `${g}|${code}`, old = bookMap.get(key) || {};
+        bookMap.set(key, {
+          ...old, id: old.id || id(), group: g, subject: n,
+          title: b?.title || old.title || '', code, grade: b?.grade || (old.grade ?? null), selected: true
+        });
+      }
+      state.books = [...bookMap.values()];
+      state.profile = {
+        id: state.profile?.id || id(), name: o.name || 'آزمون هدف',
+        examName: o.examName || 'کنکور سراسری', group, year: o.year,
+        date: o.date || '', dateStatus: o.dateStatus || 'unknown', source: o.source || '',
+        examShare: contribution?.exam ?? null, transcriptShare: contribution?.transcript ?? null,
+        contributionSource: contribution?.source || 'not_loaded'
+      };
+      state.settings = {
+        ...state.settings,
+        wake: o.wake || state.settings.wake, sleep: o.sleep || state.settings.sleep,
+        // حداقل خواب مورد نظر؛ خواب هرگز قربانی جبران عقب‌افتادگی نمی‌شود.
+        sleepTargetMinutes: Math.max(180, Math.round(num(o.sleepTarget, num(state.settings.sleepTargetMinutes, 480)))),
+        energy: num(o.energy, 2), peak: o.peak || '',
+        useExamCoefficients: o.priority !== 'personal',
+        coefficientFactor: Math.max(.5, Math.min(1.5, num(o.coefficientFactor, 1))),
+        // برآورد زمان هر نوع کار؛ فرضیهٔ محافظه‌کارانه تا کالیبراسیون.
+        estimateDefaults: {
+          ...(state.settings.estimateDefaults || {}),
+          ...(o.estimates || {})
+        }
+      };
+      state.events = [...state.events.filter(e => !e.fromWizard),
+        ...((o.attend === 'yes' ? o.classes : []) || []).map(e => ({ ...e, id: id(), fromWizard: true })),
+        ...(o.commitments || []).map(e => ({ ...e, id: id(), fromWizard: true }))];
+      state.events.forEach(e => {
+        const s = state.subjects.find(x => x.id === e.subjectId || x.name === e.subjectId || x.name === e.subjectName);
+        if (s) { e.subjectId = s.id; e.subjectName = s.name; }
+      });
+      state.routines = [...state.routines.filter(r => !r.fromWizard),
+        ...(o.routines || []).map(r => ({ ...r, id: id(), fromWizard: true }))];
+      // سطح اولیهٔ مبحث‌ها: خودسنجی جدا از شاهد عملکردی می‌ماند.
+      const levels = o.topicLevels || {};
+      for (const t of state.topics) {
+        if (t.id in levels) t.selfAssessed = num(levels[t.id]);
+      }
+      state.onboarding.completed = true;
+      state.profile.savedAt = new Date().toISOString();
+      persist('راه‌اندازی ذخیره شد');
+      currentPage = 'dashboard';
+      render();
+      return;
+    }
+    state.onboarding.step = Math.min(SETUP_TOTAL - 1, step + 1);
+    persist('گام ذخیره شد');
+    render();
+  }
+
 
   const CONTENT_METHODS={
     memorization:['بازیابی فعال بدون نگاه‌کردن','پرسش‌سازی و پاسخ کوتاه','مرور فاصله‌دار بر مبنای عملکرد'],

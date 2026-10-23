@@ -16,6 +16,7 @@
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const id=()=>`${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`;
   const num=(v,d=0)=>Number.isFinite(Number(v))?Number(v):d;
+  const faNum=(v)=>String(v??'').replace(/[0-9]/g,d=>'۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
   const minOf=t=>{const [h,m]=String(t||'0:0').split(':').map(Number);return (h||0)*60+(m||0)};
   const clock=m=>`${String(Math.floor((m%1440)/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
   const fmtMin=m=>{m=Math.max(0,Math.round(m||0));return `${Math.floor(m/60)} ساعت و ${m%60} دقیقه`};

@@ -144,6 +144,81 @@ def test_weekly_schedule_is_optional_and_no_fake_sunday_step():
     assert "تعارض" not in steps["weekly_schedule"].description
 
 
+def test_all_essential_interview_questions_are_covered():
+    """هر هفت پرسش ضروری سند onboarding در مصاحبه پرسیده می‌شود.
+
+    مرجع: docs/USER_SCHEDULE_AND_ONBOARDING.md بخش ۳.
+    """
+    keys = {step.key: step for step in ONBOARDING_STEPS}
+    # ۱) رشته/گروه و آزمون هدف و وضعیت تاریخ
+    assert keys["exam_group"].required and keys["exam_name"].required
+    assert keys["exam_date_status"].required
+    assert set(keys["exam_date_status"].options) == {
+        "رسمی (منبع ثبت‌شده)", "تخمینی", "نامشخص"
+    }
+    # ۲) خواب/بیداری و حداقل خواب مورد نظر
+    assert keys["sleep_time"].required
+    assert "min_sleep" in keys, "حداقل خواب مورد نظر پرسیده نشده است"
+    assert keys["min_sleep"].kind == "choice"
+    # ۳) منابع/کتاب
+    assert keys["books"].kind == "books"
+    # ۴) کلاس‌ها و تعهدات
+    assert keys["classes"].kind == "events"
+    assert keys["weekly_schedule"].kind == "events"
+    # ۵) آزمون جامع: تکرار و سال تاریخ
+    assert "comprehensive_exam_cycle" in keys, "چرخهٔ آزمون جامع پرسیده نشده است"
+    assert "comprehensive_exam_date" in keys, "سال تاریخ ۳۰ مهر پرسیده نشده است"
+    # ۶) طول معمول تست/تحلیل/تثبیت/تکلیف (کالیبراسیون)
+    assert "typical_durations" in keys, "برآورد زمان هر نوع کار پرسیده نشده است"
+    # ۷) سطح مبحثی (ONB-04)
+    assert "topic_levels" in keys, "سطح اولیهٔ مبحث پرسیده نشده است"
+
+
+def test_optional_steps_can_be_skipped_without_blocking():
+    """گام‌های اختیاری قابل رد شدن‌اند؛ الزامی‌ها نه (تکمیل تدریجی)."""
+    optional = [s.key for s in ONBOARDING_STEPS if not s.required]
+    for key in ("min_sleep", "comprehensive_exam_cycle", "comprehensive_exam_date",
+                "typical_durations", "topic_levels", "previous_results",
+                "books", "classes", "weekly_schedule", "routines"):
+        assert key in optional, f"گام {key} باید اختیاری باشد"
+    # گام‌های اختیاری نباید پرسش مسدودکننده بسازند
+    state = OnboardingState()
+    for key in optional:
+        state.complete_step(key)
+    assert state.unresolved_blocking_questions() == []
+    # گام سطح مبحثی عمداً به صفحهٔ مباحث ارجاع می‌دهد، نه برچسب کلی
+    levels = {s.key: s for s in ONBOARDING_STEPS}["topic_levels"]
+    assert "مبحث" in levels.description
+    assert "اختیاری" in levels.description
+
+
+def test_min_sleep_and_typical_durations_are_stored(service: AdvisorService, qapp, tmp_path):
+    """حداقل خواب و برآورد زمان هر نوع کار در تنظیمات ذخیره می‌شوند."""
+    from k2.ui.views.onboarding import OnboardingWizard
+
+    wizard = OnboardingWizard(service)
+    wizard.state.set_value("min_sleep", "۴۵۰")
+    wizard.state.set_value("typical_durations", "۵۰، ۳۵، ۲۵، ۴۰")
+    wizard._apply_to_profile()
+    assert service.repo.get_setting("daily.sleep_target_minutes") == "450"
+    import json
+
+    defaults = json.loads(service.repo.get_setting("estimate.defaults") or "{}")
+    assert defaults == {
+        "testing": 50, "analysis": 35, "consolidation": 25, "homework": 40
+    }
+
+
+def test_min_sleep_rejects_non_numeric(service: AdvisorService, qapp, tmp_path):
+    """مقدار نامعتبر حداقل خواب ذخیره نمی‌شود."""
+    from k2.ui.views.onboarding import OnboardingWizard
+
+    wizard = OnboardingWizard(service)
+    wizard.state.set_value("min_sleep", "نامشخص")
+    wizard._apply_to_profile()
+    assert service.repo.get_setting("daily.sleep_target_minutes") is None
+
+
 def test_onboarding_state_is_resumable():
     state = OnboardingState()
     state.set_value("student_name", "رضا")

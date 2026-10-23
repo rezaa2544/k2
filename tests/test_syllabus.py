@@ -1418,6 +1418,255 @@ def test_subject_preference_order_is_a_preference_not_a_law(preview_js, tmp_path
     assert "FAIL" not in stdout, stdout
 
 
+_SETUP_SCRIPT = r"""
+// ===== راه‌اندازی: مو‌به‌مو طبق پرامپت =====
+// مرجع: docs/USER_SCHEDULE_AND_ONBOARDING.md §3، MASTER_PRODUCT_BLUEPRINT بخش A
+// و UNIFIED_REQUIREMENTS_CATALOG (ONB-01..05، EST-02).
+// قاعدهٔ D-023: هیچ گام Sample نیست و تعارض فقط از رویداد واقعی کاربر ساخته می‌شود.
+
+const FA = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
+const fa = n => String(n).replace(/[0-9]/g, d => FA[Number(d)]);
+
+// ---- الف) صفحه جمع‌وجور است و تمام هفت گام را دارد ----
+try {
+  const st0 = preview.getState();
+  st0.onboarding = { step: 0, values: {}, completed: false };
+  persistSilently(st0);clickNav('onboarding');
+  clickNav('onboarding');
+  let html = pageHtml();
+  ok(html.includes('setup-shell'), 'صفحهٔ راه‌اندازی ستون جمع‌وجود داشته باشد');
+  ok(html.includes('گام ۱ از ۷'), 'شمارهٔ گام از هفت گام باشد، یافت: '
+     + (html.match(/گام ۱ از \d+/) || ['ندارد'])[0]);
+  const titles = ['پروفایل آزمون', 'درس و کتاب', 'کلاس‌ها و تعهدات',
+    'خواب، غذا و روال‌ها', 'آزمون جامع', 'سطح مبحثی و برآورد زمان',
+    'اولویت و تأیید نهایی'];
+  for (let i = 0; i < titles.length; i++) {
+    st0.onboarding.step = i;
+    persistSilently(st0);clickNav('onboarding');
+    clickNav('onboarding');
+    html = pageHtml();
+    ok(html.includes(titles[i]), 'گام ' + (i + 1) + ' عنوان «' + titles[i] + '» را داشته باشد');
+    ok(html.includes('گام ' + fa(i + 1) + ' از ۷'), 'گام ' + (i + 1) + ' شمارش درست داشته باشد');
+    // گام‌های اختیاری (۴ آزمون جامع، ۵ سطح مبحثی) صریحاً قابل رد کردن‌اند.
+    const skipLabel = 'رد کردن این گام';
+    const hasSkip = html.includes(skipLabel);
+    if (i === 4 || i === 5) ok(hasSkip, 'گام اختیاری ' + (i + 1) + ' دکمهٔ «' + skipLabel + '» داشته باشد');
+    else ok(!hasSkip, 'گام الزامی ' + (i + 1) + ' دکمهٔ رد کردن نداشته باشد');
+  }
+} catch (e) { failures++; console.log('FAIL setup steps: ' + e.message) }
+
+// ---- الف۲) زدن «رد کردن این گام» روی گام اختیاری جلو می‌برد و ذخیره می‌شود ----
+try {
+  const st0 = preview.getState();
+  st0.onboarding = { step: 4, values: {}, completed: false };
+  persistSilently(st0);clickNav('onboarding');
+  clickNav('onboarding');
+  clickAction('wizard-skip');
+  ok(preview.getState().onboarding.step === 5, 'رد کردن گام آزمون جامع به گام سطح مبحثی برود');
+  clickNav('onboarding');
+  clickAction('wizard-skip');
+  ok(preview.getState().onboarding.step === 6, 'رد کردن گام سطح مبحثی به گام تأیید برود');
+} catch (e) { ok(false, 'رد کردن گام اختیاری خطا داد: ' + e.message); }
+
+// ---- ب) گام ۰: رشته، سال، وضعیت تاریخ و منبع ----
+try {
+  const st0 = preview.getState();
+  st0.onboarding = { step: 0, values: {}, completed: false };
+  persistSilently(st0);clickNav('onboarding');
+  const html = pageHtml();
+  for (const flow of ['name', 'group', 'year', 'examName', 'date', 'dateStatus', 'source']) {
+    ok(html.includes('data-flow="' + flow + '"'), 'گام ۰ ورودی ' + flow + ' را بپوشاند');
+  }
+  ok(html.includes('رسمی با منبع') && html.includes('تخمینی') && html.includes('نامشخص'),
+     'وضعیت تاریخ سه‌حالته (رسمی/تخمینی/نامشخص) باشد');
+} catch (e) { failures++; console.log('FAIL setup step0: ' + e.message) }
+
+// ---- ج) گام ۳: حداقل خواب مورد نظر (پرسش ۲ سند onboarding) ----
+try {
+  const st0 = preview.getState();
+  st0.onboarding = { step: 3, values: {}, completed: false };
+  persistSilently(st0);clickNav('onboarding');
+  const html = pageHtml();
+  ok(html.includes('حداقل خواب مورد نظر'), 'حداقل خواب مورد نظر در راه‌اندازی پرسیده شود');
+  ok(html.includes('data-flow="sleepTarget"'), 'ورودی حداقل خواب ثبت شود');
+  ok(html.includes('data-flow="wake"') && html.includes('data-flow="sleep"'),
+     'بیداری و خواب ثبت شوند');
+  ok(html.includes('حمام') || html.includes('بهداشت'), 'روال بهداشت/حمام یک‌روزدرمیان پوشش یابد');
+} catch (e) { failures++; console.log('FAIL setup sleep: ' + e.message) }
+
+// ---- د) گام ۴: آزمون جامع و سال تاریخ حدس زده نشود ----
+try {
+  const st0 = preview.getState();
+  st0.onboarding = { step: 4, values: {}, completed: false };
+  persistSilently(st0);clickNav('onboarding');
+  const html = pageHtml();
+  ok(html.includes('بازهٔ تکرار'), 'بازهٔ تکرار آزمون جامع پرسیده شود');
+  ok(html.includes('تاریخ اولین نوبت'), 'تاریخ اولین نوبت آزمون جامع پرسیده شود');
+  ok(html.includes('سال آن را از تقویم خودت تأیید کن'), 'به کاربر گفته شود سال ۳۰ مهر را حدس نزند');
+  ok(html.includes('data-flow="examEnabled"'), 'امکان خاموش‌کردن چرخه باشد');
+} catch (e) { failures++; console.log('FAIL setup exam series: ' + e.message) }
+
+// ---- ه) گام ۵: سطح مبحثی و برآورد زمان، قابل رد شدن ----
+try {
+  const st0 = preview.getState();
+  st0.onboarding = { step: 5, values: {}, completed: false };
+  persistSilently(st0);clickNav('onboarding');
+  let html = pageHtml();
+  ok(html.includes('سطح در سطح'), 'سطح در سطح مبحث سنجیده شود، نه برچسب کلی درس');
+  ok(html.includes('این گام را می‌توانی رد کنی'), 'گام سطح مبحثی صریحاً قابل رد شدن باشد (تکمیل تدریجی)');
+  ok(html.includes('هنوز مبحثی ثبت نشده'), 'بدون مبحث، پیام صریح بدهد به‌جای جدول خالی');
+  ok(html.includes('فرضیهٔ محافظه‌کارانه'), 'برآورد زمان به‌عنوان فرضیه برچسب بخورد');
+  for (const kind of ['testing', 'analysis', 'consolidation', 'homework', 'review']) {
+    ok(html.includes('data-flow="est:' + kind + '"'), 'برآورد زمان ' + kind + ' ثبت شود');
+  }
+  // با مبحث واقعی، جدول سطح ساخته می‌شود
+  st0.topics = [{ id: 't1', name: 'ژنتیک', subjectName: 'زیست‌شناسی', contentType: 'conceptual', selfAssessed: null }];
+  persistSilently(st0);clickNav('onboarding');
+  html = pageHtml();
+  ok(html.includes('data-flow="topicLevel:t1"'), 'برای هر مبحث ورودی سطح ساخته شود');
+  ok(html.includes('ژنتیک'), 'نام مبحث در جدول سطح دیده شود');
+  ok(html.includes('هنوز سنجش نشده'), 'برای مبحث بی‌سطح گزینهٔ «سنجش نشده» باشد');
+  ok(html.includes('از ۴'), 'مقادیر سطح ۰ تا ۴ قابل انتخاب باشند');
+} catch (e) { failures++; console.log('FAIL setup topic level: ' + e.message) }
+
+// ---- و) تعارض واقعی: پرسش می‌شود و پایان را مسدود می‌کند ----
+try {
+  const st0 = preview.getState();
+  st0.onboarding = {
+    step: 6, completed: false,
+    values: {
+      group: 'علوم تجربی', year: '۱۴۰۶', examName: 'کنکور سراسری',
+      subjects: ['علوم تجربی|زیست‌شناسی', 'علوم تجربی|شیمی'],
+      attend: 'yes', confirm: true,
+      // دو رویداد واقعیِ هم‌پوشان در یکشنبه — همان الگوی سند onboarding
+      classes: [{ id: 'c1', title: 'شیمی', weekday: 1, start: '15:00', end: '19:00' },
+                { id: 'c2', title: 'دینی', weekday: 1, start: '15:15', end: '20:45' }],
+      commitments: []
+    }
+  };
+  persistSilently(st0);clickNav('onboarding');
+  clickNav('onboarding');
+  const html = pageHtml();
+  ok(html.includes('تعارض حل‌نشده'), 'تعارض واقعی صریحاً «حل‌نشده» اعلام شود');
+  ok(html.includes('کدام‌یک ضبط‌شده/غیرهم‌زمان است؟'), 'پرسش «کدام‌یک ضبط‌شده است» پرسیده شود');
+  ok(html.includes('تا حل این تعارض، پایان راه‌اندازی باز است'), 'گفته شود تا حل تعارض برنامه قطعی نمی‌شود');
+  ok(preview.setupConflicts().length === 1, 'یک تعارض واقعی تشخیص داده شود، یافت: '
+     + preview.setupConflicts().length);
+  // پایان مسدود است
+  preview.advanceWizard(true);
+  ok(preview.getState().onboarding.completed === false,
+     'با تعارض حل‌نشده، راه‌اندازی تمام نشود');
+  // علامت‌زدن یکی به‌عنوان ضبط‌شده، تعارض را حل می‌کند
+  clickAction('wizard-recorded:class:1');
+  ok(preview.setupConflicts().length === 0, 'علامت ضبط‌شده تعارض را حل کند، یافت: '
+     + preview.setupConflicts().length);
+  const st = preview.getState();
+  ok(st.onboarding.values.classes[1].recorded === true, 'رویداد ضبط‌شده علامت بخورد');
+  // حالا پایان باز است و تأیید نهایی لازم است
+  preview.advanceWizard(true);
+  ok(preview.getState().onboarding.completed === true, 'پس از حل تعارض، راه‌اندازی تمام شود');
+} catch (e) { failures++; console.log('FAIL setup conflict: ' + e.message) }
+
+// ---- ز) پایان راه‌اندازی همهٔ مقادیر تازه را می‌نویسد ----
+try {
+  const st0 = preview.getState();
+  st0.onboarding = {
+    step: 6, completed: false,
+    values: {
+      group: 'علوم تجربی', year: '۱۴۰۶', examName: 'کنکور سراسری',
+      subjects: ['علوم تجربی|زیست‌شناسی'], attend: 'no', confirm: true,
+      wake: '06:30', sleep: '23:15', sleepTarget: 450, energy: 2,
+      estimates: { testing: 50, analysis: 35 },
+      topicLevels: {}
+    }
+  };
+  persistSilently(st0);clickNav('onboarding');
+  preview.advanceWizard(true);
+  const st = preview.getState();
+  ok(st.settings.sleepTargetMinutes === 450, 'حداقل خواب مورد نظر ذخیره شود، یافت: ' + st.settings.sleepTargetMinutes);
+  ok(st.settings.estimateDefaults.testing === 50, 'برآورد تست ذخیره شود، یافت: ' + st.settings.estimateDefaults.testing);
+  ok(st.settings.estimateDefaults.analysis === 35, 'برآورد تحلیل ذخیره شود');
+  ok(st.settings.wake === '06:30' && st.settings.sleep === '23:15', 'بیداری و خواب ذخیره شوند');
+  ok(st.onboarding.completed === true, 'راه‌اندازی تمام شود');
+  // سطح اولیهٔ مبحث روی خود مبحث می‌نشیند
+  st0.topics = [{ id: 't9', name: 'سلول', subjectName: 'زیست‌شناسی', contentType: 'conceptual', selfAssessed: null }];
+  st0.onboarding = {
+    step: 6, completed: false,
+    values: {
+      group: 'علوم تجربی', year: '۱۴۰۶', subjects: ['علوم تجربی|زیست‌شناسی'],
+      attend: 'no', confirm: true, topicLevels: { t9: 3 }
+    }
+  };
+  persistSilently(st0);clickNav('onboarding');
+  preview.advanceWizard(true);
+  const st2 = preview.getState();
+  const t = st2.topics.find(x => x.id === 't9');
+  ok(t.selfAssessed === 3, 'سطح اولیهٔ مبحث ذخیره شود، یافت: ' + t.selfAssessed);
+} catch (e) { failures++; console.log('FAIL setup persist: ' + e.message) }
+
+// ---- ح) گام ۵ قابل رد شدن است: تکمیل تدریجی ----
+try {
+  const st0 = preview.getState();
+  st0.onboarding = {
+    step: 5, completed: false,
+    values: { group: 'علوم تجربی', year: '۱۴۰۶', subjects: ['علوم تجربی|زیست‌شناسی'] }
+  };
+  persistSilently(st0);clickNav('onboarding');
+  const html = pageHtml();
+  ok(html.includes('این گام را می‌توانی رد کنی'),
+     'گام سطح مبحثی صریحاً قابل رد شدن باشد (تکمیل تدریجی)');
+  ok(!html.includes('required'), 'گام اختیاری الزامی نشان نشود');
+} catch (e) { failures++; console.log('FAIL setup skippable: ' + e.message) }
+
+// ---- ط) هیچ دادهٔ نمونه‌ای ساخته نمی‌شود ----
+try {
+  const st0 = preview.getState();
+  st0.onboarding = { step: 2, values: { attend: 'no' }, completed: false };
+  persistSilently(st0);clickNav('onboarding');
+  clickNav('onboarding');
+  const html = pageHtml();
+  ok(!html.includes('شیمی ۱۵:۰۰'), 'هیچ برنامهٔ نمونه‌ای از پیش پر نشود');
+  ok(!html.includes('دینی ۱۵:۱۵'), 'هیچ رویداد ساختگی یکشنبه ساخته نشود');
+  ok(preview.setupConflicts().length === 0, 'بدون ورود کاربر هیچ تعارضی وجود ندارد');
+} catch (e) { failures++; console.log('FAIL setup no sample: ' + e.message) }
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node برای اجرای پیش‌نمایش لازم است")
+def test_setup_interview_matches_prompt_and_is_compact(preview_js, tmp_path):
+    """راه‌اندازی مو‌به‌مو طبق سند onboarding: هفت گام، حداقل خواب، سطح مبحثی،
+    برآورد زمان، آزمون جامع، و تعارض واقعی که پایان را مسدود می‌کند."""
+    payload = tmp_path / "preview-bundle.js"
+    payload.write_text(preview_js, encoding="utf-8")
+    syllabus_json = tmp_path / "syllabus.json"
+    import json as _json
+
+    m = re.search(
+        r'id="syllabusData"[^>]*>(.*?)</script>',
+        PREVIEW.read_text(encoding="utf-8"),
+        re.S,
+    )
+    syllabus_json.write_text(m.group(1).replace("\\u003c", "<"), encoding="utf-8")
+    harness = _harness(payload, _seed_state(), syllabus_json)
+    body = Path(harness).read_text(encoding="utf-8")
+    marker = "console.log(JSON.stringify({failures}));\nprocess.exit(failures ? 1 : 0);"
+    assert marker in body, "setup harness marker"
+    body = body.replace(marker, _SETUP_SCRIPT.strip() + "\n", 1)
+    Path(harness).write_text(body, encoding="utf-8")
+    result = subprocess.run(
+        [NODE, harness],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=180,
+        cwd=str(ROOT),
+    )
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    assert result.returncode == 0, stdout + stderr
+    assert "FAIL" not in stdout, stdout
+
+
 _SECTIONCOUNTS_SCRIPT = r"""
 // ===== ورود تعداد گفتارهای درس نامشخص (مورد شیمی) =====
 function g12Count() { return preview.syllabusChapters('شیمی', 12).length }
