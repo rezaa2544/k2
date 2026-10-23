@@ -129,7 +129,7 @@ class OnboardingWizard(QDialog):
         self._refresh_nav()
 
     def _build_step(self, step) -> QWidget:
-        card = Card(step.title)
+        card = Card(step.title, tone="accent")
         description = QLabel(step.description)
         description.setObjectName("muted")
         description.setWordWrap(True)

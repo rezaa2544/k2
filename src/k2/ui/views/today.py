@@ -57,7 +57,7 @@ class TodayPlanPage(QWidget):
 
         splitter = QSplitter(Qt.Vertical)
 
-        plan_card = Card("بلوک‌های برنامه")
+        plan_card = Card("بلوک‌های برنامه", tone="study")
         self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels(
             ["ساعت", "مدت", "کار", "دلیل جای‌گذاری", "وضعیت"]
@@ -70,7 +70,7 @@ class TodayPlanPage(QWidget):
         plan_card.add(self.table)
         splitter.addWidget(plan_card)
 
-        unplaced_card = Card("کارهایی که امروز جا نشدند (پنهان نشده‌اند)")
+        unplaced_card = Card("کارهایی که امروز جا نشدند (پنهان نشده‌اند)", tone="backlog")
         self.unplaced_table = QTableWidget(0, 4)
         self.unplaced_table.setHorizontalHeaderLabels(
             ["کار", "مدت لازم", "دلیل", "جزئیات"]

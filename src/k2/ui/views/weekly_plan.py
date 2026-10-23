@@ -78,7 +78,7 @@ class WeeklyPlanPage(QWidget):
 
         splitter = QSplitter(Qt.Vertical)
 
-        week_card = Card("نمای هفت روز")
+        week_card = Card("نمای هفت روز", tone="study")
         self.week_table = QTableWidget(0, 6)
         self.week_table.setHorizontalHeaderLabels(
             ["روز", "تاریخ", "ظرفیت", "برنامه‌ریزی", "اجراشده", "وضعیت"]
@@ -90,7 +90,7 @@ class WeeklyPlanPage(QWidget):
         week_card.add(self.week_table)
         splitter.addWidget(week_card)
 
-        plan_card = Card("کارهای روز انتخاب‌شده")
+        plan_card = Card("کارهای روز انتخاب‌شده", tone="study")
         self.plan_table = QTableWidget(0, 5)
         self.plan_table.setHorizontalHeaderLabels(
             ["ساعت", "مدت", "کار", "دلیل جای‌گذاری", "وضعیت"]

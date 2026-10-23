@@ -70,7 +70,7 @@ class SettingsPage(QWidget):
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(12)
 
-        daily_card = Card("پنجرهٔ روز و انرژی")
+        daily_card = Card("پنجرهٔ روز و انرژی", tone="timer")
         form = QFormLayout()
         self.wake_edit = QLineEdit()
         self.wake_edit.setPlaceholderText("۰۶:۰۰")
@@ -93,7 +93,7 @@ class SettingsPage(QWidget):
         daily_card.add_layout(form)
         root.addWidget(daily_card)
 
-        mastery_card = Card("معیارهای تطبیقیِ تسلط · فرضیهٔ قابل تنظیم")
+        mastery_card = Card("معیارهای تطبیقیِ تسلط · فرضیهٔ قابل تنظیم", tone="review")
         mastery_form = QFormLayout()
         self.mastery_sessions_spin = QSpinBox()
         self.mastery_sessions_spin.setRange(2, 6)
@@ -121,7 +121,7 @@ class SettingsPage(QWidget):
         mastery_card.add_layout(mastery_form)
         root.addWidget(mastery_card)
 
-        consolidation_card = Card("نردبان تثبیت و سه مسیر · فرضیهٔ قابل تنظیم")
+        consolidation_card = Card("نردبان تثبیت و سه مسیر · فرضیهٔ قابل تنظیم", tone="review")
         consolidation_form = QFormLayout()
         self.target_retention_spin = QDoubleSpinBox()
         self.target_retention_spin.setRange(0.50, 0.99)
@@ -172,7 +172,7 @@ class SettingsPage(QWidget):
         consolidation_card.add_layout(consolidation_form)
         root.addWidget(consolidation_card)
 
-        exam_card = Card("پروفایل آزمون هدف (قابل ویرایش)")
+        exam_card = Card("پروفایل آزمون هدف (قابل ویرایش)", tone="exam")
         exam_form = QFormLayout()
         self.exam_name_edit = QLineEdit()
         exam_form.addRow("نام آزمون:", self.exam_name_edit)
@@ -224,7 +224,7 @@ class SettingsPage(QWidget):
         exam_card.add_layout(exam_form)
         root.addWidget(exam_card)
 
-        schedule_card = Card("برنامهٔ کلاس‌ها و تعهدات هفتگی")
+        schedule_card = Card("برنامهٔ کلاس‌ها و تعهدات هفتگی", tone="class")
         self.schedule_text = QLabel("رویدادها و تعهدات ثبت‌شده")
         self.schedule_text.setObjectName("sectionTitle")
         schedule_card.add(self.schedule_text)
@@ -268,7 +268,7 @@ class SettingsPage(QWidget):
         schedule_card.add_layout(routine_buttons)
         root.addWidget(schedule_card)
 
-        backup_card = Card("پشتیبان‌گیری و بازیابی")
+        backup_card = Card("پشتیبان‌گیری و بازیابی", tone="info")
         backup_buttons = QHBoxLayout()
         btn_backup = QPushButton("ساخت نسخهٔ پشتیبان")
         btn_backup.clicked.connect(self._backup)

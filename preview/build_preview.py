@@ -1,5 +1,6 @@
 """Assemble the offline, single-file K2 browser preview from local sources."""
 from __future__ import annotations
+import base64
 import json
 import sys
 from pathlib import Path
@@ -51,6 +52,33 @@ weights = {
     newline="\n",
 )
 _weights_json = json.dumps(weights, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
+
+# ---------------------------------------------------------------------------
+# فونت همراه پیش‌نمایش: داخل خود فایل HTML embed می‌شود تا آفلاین و تک‌فایلی
+# بماند (هیچ نشانی https لازم نیست). وزن‌ها همان سلسله‌مراتب دسکتاپ است.
+# ---------------------------------------------------------------------------
+
+#: وزن‌های فونت استعداد که همراه پیش‌نمایش می‌شوند.
+FONT_WEIGHTS = (400, 600, 700, 800)
+
+
+def _font_face() -> str:
+    """قواعد ``@font-face`` با دادهٔ base64 فونت‌های استعداد."""
+    rules = []
+    for weight in FONT_WEIGHTS:
+        path = ROOT / "fonts" / f"estedad-arabic-{weight}-normal.woff2"
+        if not path.exists():
+            continue
+        payload = base64.b64encode(path.read_bytes()).decode("ascii")
+        rules.append(
+            "@font-face{font-family:'Estedad';font-style:normal;"
+            f"font-weight:{weight};font-display:swap;"
+            f"src:url(data:font/woff2;base64,{payload}) format('woff2')}}"
+        )
+    return "\n".join(rules)
+
+
+_font_css = _font_face()
 css = (ROOT / "base.css").read_text(encoding="utf-8")
 app_js = "\n".join((ROOT / name).read_text(encoding="utf-8") for name in ("core.js", "forms.js", "app.js"))
 extra_css = r'''
@@ -73,7 +101,7 @@ html = f'''<!doctype html>
 <html lang="fa" dir="rtl" data-source-revision="pending">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light">
-<title>K2 — پیش‌نمایش آفلاین تعاملی</title><style>{css}\n{extra_css}</style>
+<title>K2 — پیش‌نمایش آفلاین تعاملی</title><style>{_font_css}\n{css}\n{extra_css}</style>
 </head><body>
 <div class="preview-wrap">
   <div class="preview-note" role="note"><div class="note-mark"><span class="note-dot" aria-hidden="true"></span><span><strong>K2 · نسخهٔ HTML تعاملی</strong> · همهٔ بخش‌های اصلی فعال‌اند؛ دادهٔ نمونه‌ای وجود ندارد. ذخیرهٔ خودکار مرورگر و خروجی HTML داده‌دار.</span></div><span class="note-rev">نسخهٔ محلی: <b id="sourceRevision">working tree</b></span></div>

@@ -198,7 +198,7 @@ class LearningProblemsPage(QWidget):
         self.summary.setWordWrap(True)
         root.addWidget(self.summary)
 
-        card = Card("مشکلات ثبت‌شده (به ترتیب شدت)")
+        card = Card("مشکلات ثبت‌شده (به ترتیب شدت)", tone="problem")
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(
             ["عنوان", "نوع", "درس/مبحث", "شدت", "وضعیت", "اولین ظهور"]
@@ -210,7 +210,7 @@ class LearningProblemsPage(QWidget):
         card.add(self.table)
         root.addWidget(card, 1)
 
-        self.detail = Card("پیگیری مشکل انتخاب‌شده")
+        self.detail = Card("پیگیری مشکل انتخاب‌شده", tone="problem")
         self.detail_text = QLabel("یک مشکل را انتخاب کن.")
         self.detail_text.setWordWrap(True)
         self.detail.add(self.detail_text)

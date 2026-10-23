@@ -86,7 +86,7 @@ class ConsolidationPage(QWidget):
         root.addLayout(header)
 
         # --- توزیع بار امروز ---
-        streams_card = Card("توزیع ظرفیت امروز بین سه مسیر")
+        streams_card = Card("توزیع ظرفیت امروز بین سه مسیر", tone="review")
         self.streams_summary = QLabel("—")
         self.streams_summary.setObjectName("muted")
         streams_card.add(self.streams_summary)
@@ -110,7 +110,7 @@ class ConsolidationPage(QWidget):
         root.addWidget(streams_card)
 
         # --- امکان‌سنجی ---
-        feasibility_card = Card("آیا کارهای باقی‌مانده تا آزمون جا می‌شود؟")
+        feasibility_card = Card("آیا کارهای باقی‌مانده تا آزمون جا می‌شود؟", tone="exam")
         self.feasibility_label = QLabel("—")
         self.feasibility_label.setWordWrap(True)
         feasibility_card.add(self.feasibility_label)
@@ -121,7 +121,7 @@ class ConsolidationPage(QWidget):
         root.addWidget(feasibility_card)
 
         # --- صف جبران ---
-        catchup_card = Card("صف جبران قدم‌به‌قدم")
+        catchup_card = Card("صف جبران قدم‌به‌قدم", tone="backlog")
         self.catchup_summary = QLabel("—")
         self.catchup_summary.setWordWrap(True)
         self.catchup_summary.setObjectName("muted")
@@ -129,7 +129,7 @@ class ConsolidationPage(QWidget):
         root.addWidget(catchup_card)
 
         # --- جدول مبحث‌ها ---
-        topics_card = Card("نردبان تثبیت مبحث‌ها")
+        topics_card = Card("نردبان تثبیت مبحث‌ها", tone="review")
         self.subject_filter = QComboBox()
         self.subject_filter.addItem("همهٔ درس‌ها", None)
         self.subject_filter.currentIndexChanged.connect(self._reload_table)

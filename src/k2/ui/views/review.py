@@ -131,7 +131,7 @@ class ReviewPage(QWidget):
         self.summary.setObjectName("muted")
         root.addWidget(self.summary)
 
-        card = Card("مرورهای سررسیدشده")
+        card = Card("مرورهای سررسیدشده", tone="review")
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(
             ["مورد", "نوع", "فاصله (روز)", "فراموشی", "سررسید", "وضعیت"]

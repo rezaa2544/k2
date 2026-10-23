@@ -192,7 +192,7 @@ class CourseBankPage(QWidget):
         self.alert.setVisible(False)
         root.addWidget(self.alert)
 
-        card = Card("مباحث ثبت‌شده")
+        card = Card("مباحث ثبت‌شده", tone="study")
         self.table = QTableWidget(0, 8)
         self.table.setHorizontalHeaderLabels(
             [
@@ -207,7 +207,7 @@ class CourseBankPage(QWidget):
         card.add(self.table)
         root.addWidget(card, 1)
 
-        self.detail = Card("جزئیات مبحث انتخاب‌شده")
+        self.detail = Card("جزئیات مبحث انتخاب‌شده", tone="study")
         self.detail_text = QLabel("یک مبحث را انتخاب کن.")
         self.detail_text.setWordWrap(True)
         self.detail_text.setTextInteractionFlags(Qt.TextSelectableByMouse)

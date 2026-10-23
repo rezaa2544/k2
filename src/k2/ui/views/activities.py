@@ -161,7 +161,7 @@ class ActivitiesPage(QWidget):
         header.addWidget(btn_add)
         root.addLayout(header)
 
-        card = Card("همهٔ فعالیت‌ها")
+        card = Card("همهٔ فعالیت‌ها", tone="study")
         self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels(
             ["عنوان", "نوع", "درس", "برآورد", "باقی‌مانده", "مهلت", "وضعیت"]

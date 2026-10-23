@@ -74,7 +74,7 @@ class ComprehensiveExamsPage(QWidget):
         root.addWidget(self.alert)
 
         splitter = QHBoxLayout()
-        exams_card = Card("آزمون‌های ثبت‌شده")
+        exams_card = Card("آزمون‌های ثبت‌شده", tone="exam")
         self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels(
             ["نام", "نوع", "تاریخ", "درصد", "درست/کل", "مدت", "درس"]
@@ -86,7 +86,7 @@ class ComprehensiveExamsPage(QWidget):
         exams_card.add(self.table)
         splitter.addWidget(exams_card, 3)
 
-        trend_card = Card("روند درصد")
+        trend_card = Card("روند درصد", tone="exam")
         self.trend_table = QTableWidget(0, 3)
         self.trend_table.setHorizontalHeaderLabels(
             ["آزمون", "درصد", "تغییر"]
