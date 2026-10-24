@@ -103,6 +103,15 @@ $Exe = Join-Path $OutputDir 'K2\K2.exe'
 if (-not (Test-Path $Exe)) { throw "EXE ساخته نشد: $Exe" }
 Write-Ok "EXE ساخته شد: $Exe"
 
+Write-Step "بررسی نشستن آیکن روی EXE"
+# «مسیر آیکن داده شده» به‌معنای «آیکن روی EXE نشسته» نیست. اگر فایل نباشد یا
+# PyInstaller آن را جا ندهد، build موفق می‌شود ولی کاربر آیکن پیش‌فرض را می‌بیند.
+$Icon = Join-Path $RepoRoot "src\k2\ui\assets\k2.ico"
+if (-not (Test-Path $Icon)) { throw "فایل آیکن پیدا نشد: $Icon" }
+& $VenvPy (Join-Path $RepoRoot "packaging\verify_exe_icon.py") $Exe $Icon
+if ($LASTEXITCODE -ne 0) { throw "آیکن برنامه داخل EXE نشسته نیست (exit=$LASTEXITCODE)." }
+Write-Ok "آیکن برنامه داخل EXE نشسته است."
+
 Write-Step "اجرای واقعی EXE (حالت headless)"
 # خروجی PyInstaller این پروژه windowed است؛ Start-Process کد خروج را
 # مستقل از نوع GUI/console فایل EXE به‌درستی برمی‌گرداند.
@@ -120,6 +129,38 @@ foreach ($LogFile in @($SmokeStdout, $SmokeStderr)) {
 if ($smokeExit -ne 0) { throw "اجرای EXE با exit=$smokeExit شکست خورد." }
 if (-not (Test-Path $SmokeDb)) { throw "EXE پایگاه دادهٔ smoke test را نساخت." }
 Write-Ok "EXE اجرا شد، پایگاه داده ساخت و کد خروج صفر داد."
+
+Write-Step "امضای دیجیتال (اختیاری)"
+# اگر گواهی در محیط تنظیم شده باشد امضا می‌کنیم؛ وگرنه با اعلام صریح رد می‌شویم.
+function Get-Signtool {
+  $cmd = Get-Command signtool -ErrorAction SilentlyContinue
+  if ($cmd) { return $cmd.Source }
+  foreach ($root in @("${env:ProgramFiles(x86)}", "$env:ProgramFiles")) {
+    foreach ($kit in (Get-ChildItem (Join-Path $root "Windows Kits\10\bin") -Directory -ErrorAction SilentlyContinue |
+                      Sort-Object Name -Descending)) {
+      foreach ($arch in @("x64", "x86")) {
+        $candidate = Join-Path $kit.FullName "$arch\signtool.exe"
+        if (Test-Path $candidate) { return $candidate }
+      }
+    }
+  }
+  return $null
+}
+$PfxPath = $env:K2_CERTIFICATE_PFX
+if (-not $PfxPath) {
+  Write-Warn "K2_CERTIFICATE_PFX تنظیم نشده؛ artifact بدون امضا می‌ماند (هشدار SmartScreen)."
+} elseif (-not (Test-Path $PfxPath)) {
+  throw "K2_CERTIFICATE_PFX به فایل غیرموجود اشاره می‌کند: $PfxPath"
+} else {
+  $signtool = Get-Signtool
+  if (-not $signtool) { throw "signtool پیدا نشد." }
+  & $signtool sign /f $PfxPath /p $env:K2_CERTIFICATE_PASSWORD /fd SHA256 `
+    /tr "http://timestamp.digicert.com" /td SHA256 $Exe
+  if ($LASTEXITCODE -ne 0) { throw "امضای K2.exe با exit=$LASTEXITCODE شکست خورد." }
+  & $signtool verify /pa $Exe
+  if ($LASTEXITCODE -ne 0) { throw "امضای K2.exe راستی‌آزمایی نشد." }
+  Write-Ok "K2.exe امضا شد."
+}
 
 Write-Step "ساخت نصب‌کنندهٔ استاندارد (Inno Setup)"
 # نصب‌کننده گام اجباری است: کاربر نباید ZIP را باز کند و دنبال K2.exe بگردد.
@@ -139,6 +180,20 @@ $Setup = Get-ChildItem -Path $OutputDir -Filter 'K2-Setup-*.exe' |
     Sort-Object LastWriteTime | Select-Object -Last 1
 if (-not $Setup) { throw "فایل نصب‌کننده ساخته نشد." }
 Write-Ok "نصب‌کننده ساخته شد: $($Setup.FullName) ($($Setup.Length) بایت)"
+
+Write-Step "امضای نصب‌کننده (اختیاری)"
+$PfxPath = $env:K2_CERTIFICATE_PFX
+if ($PfxPath -and (Test-Path $PfxPath)) {
+  $signtool = Get-Signtool
+  & $signtool sign /f $PfxPath /p $env:K2_CERTIFICATE_PASSWORD /fd SHA256 `
+    /tr "http://timestamp.digicert.com" /td SHA256 $Setup.FullName
+  if ($LASTEXITCODE -ne 0) { throw "امضای نصب‌کننده با exit=$LASTEXITCODE شکست خورد." }
+  & $signtool verify /pa $Setup.FullName
+  if ($LASTEXITCODE -ne 0) { throw "امضای نصب‌کننده راستی‌آزمایی نشد." }
+  Write-Ok "نصب‌کننده امضا شد."
+} else {
+  Write-Warn "نصب‌کننده بدون امضا می‌ماند."
+}
 
 Write-Step "خلاصه"
 Write-Host "خروجی : $OutputDir"

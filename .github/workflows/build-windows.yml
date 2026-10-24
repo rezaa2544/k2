@@ -60,6 +60,20 @@ jobs:
           $env:PYTHONPATH = "$PWD\src"
           python -m PyInstaller k2.spec --noconfirm --distpath packaging/output --workpath packaging/work
 
+      - name: Verify the application icon is embedded in the EXE
+        shell: pwsh
+        run: |
+          # «مسیر آیکن داده شده» به‌معنای «آیکن روی EXE نشسته» نیست. اگر فایل
+          # نباشد یا PyInstaller آن را جا ندهد، build موفق می‌شود ولی کاربر
+          # آیکن پیش‌فرض را می‌بیند. پس خودِ منابع PE را می‌خوانیم.
+          $exe = "packaging\output\K2\K2.exe"
+          $ico = "src\k2\ui\assets\k2.ico"
+          if (-not (Test-Path $exe)) { throw "EXE not found: $exe" }
+          if (-not (Test-Path $ico)) { throw "icon not found: $ico" }
+          python packaging\verify_exe_icon.py $exe $ico
+          if ($LASTEXITCODE -ne 0) {
+            throw "آیکن برنامه داخل EXE نشسته نیست (exit=$LASTEXITCODE)."
+          }
       - name: Verify the built EXE actually runs
         shell: pwsh
         run: |
@@ -80,6 +94,145 @@ jobs:
           if (-not (Test-Path $db)) { throw "EXE did not create the database" }
           Write-Host "EXE ran successfully and created $db"
 
+      - name: Signing pipeline self-test (ephemeral certificate)
+        shell: pwsh
+        run: |
+          function Get-Signtool {
+            $cmd = Get-Command signtool -ErrorAction SilentlyContinue
+            if ($cmd) { return $cmd.Source }
+            foreach ($root in @("${env:ProgramFiles(x86)}", "$env:ProgramFiles")) {
+              foreach ($kit in (Get-ChildItem (Join-Path $root "Windows Kits\10\bin") -Directory -ErrorAction SilentlyContinue |
+                                Sort-Object Name -Descending)) {
+                foreach ($arch in @("x64", "x86")) {
+                  $candidate = Join-Path $kit.FullName "$arch\signtool.exe"
+                  if (Test-Path $candidate) { return $candidate }
+                }
+              }
+            }
+            return $null
+          }
+          $signtool = Get-Signtool
+          if (-not $signtool) { throw "signtool پیدا نشد." }
+          Write-Host "signtool: $signtool"
+
+          # خط لولهٔ امضا را واقعاً می‌آزماییم، بی‌آنکه فایل منتشرشده را با
+          # گواهی خودامضا آلوده کنیم: گواهی موقت می‌سازیم، یک کپی از EXE را
+          # امضا و راستی‌آزمایی می‌کنیم، بعد همه چیز را پاک می‌کنیم.
+          $cert = New-SelfSignedCertificate `
+            -Type CodeSigningCert `
+            -Subject "CN=K2 CI Self-Test" `
+            -KeyUsage DigitalSignature `
+            -KeyExportPolicy Exportable `
+            -FriendlyName "K2 CI self-test" `
+            -CertStoreLocation Cert:\CurrentUser\My `
+            -NotAfter (Get-Date).AddHours(2)
+          try {
+            $rootStore = New-Object System.Security.Cryptography.X509Certificates.X509Store(
+              "Root", "CurrentUser")
+            $rootStore.Open("ReadWrite")
+            $rootStore.Add($cert)
+            $rootStore.Close()
+
+            $sample = Join-Path $env:RUNNER_TEMP "signing-selftest.exe"
+            Copy-Item "packaging\output\K2\K2.exe" $sample -Force
+            $pfx = Join-Path $env:RUNNER_TEMP "signing-selftest.pfx"
+            Export-PfxCertificate -Cert $cert -FilePath $pfx `
+              -Password (ConvertTo-SecureString -String "selftest" -Force -AsPlainText) | Out-Null
+
+            & $signtool sign /f $pfx /p "selftest" /fd SHA256 $sample
+            if ($LASTEXITCODE -ne 0) { throw "signtool sign با exit=$LASTEXITCODE شکست خورد." }
+
+            & $signtool verify /pa $sample
+            if ($LASTEXITCODE -ne 0) { throw "signtool verify با exit=$LASTEXITCODE شکست خورد." }
+
+            $signature = Get-AuthenticodeSignature $sample
+            if ($signature.Status -ne "Valid") {
+              throw "وضعیت امضا معتبر نیست: $($signature.Status)"
+            }
+            Write-Host "خط لولهٔ امضا (signtool sign + verify) کار می‌کند."
+          } finally {
+            Remove-Item (Join-Path $env:RUNNER_TEMP "signing-selftest*") -Force -ErrorAction SilentlyContinue
+            if ($cert) {
+              Remove-Item "Cert:\CurrentUser\My\$($cert.Thumbprint)" -Force -ErrorAction SilentlyContinue
+              $rootStore = New-Object System.Security.Cryptography.X509Certificates.X509Store(
+                "Root", "CurrentUser")
+              $rootStore.Open("ReadWrite")
+              $rootStore.Remove($cert)
+              $rootStore.Close()
+            }
+          }
+      - name: Sign artifacts for release (only when a certificate is configured)
+        id: sign
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_PFX_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_PFX_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_SIGNING_ENABLED: ${{ vars.WINDOWS_SIGNING_ENABLED }}
+        run: |
+          function Get-Signtool {
+            $cmd = Get-Command signtool -ErrorAction SilentlyContinue
+            if ($cmd) { return $cmd.Source }
+            foreach ($root in @("${env:ProgramFiles(x86)}", "$env:ProgramFiles")) {
+              foreach ($kit in (Get-ChildItem (Join-Path $root "Windows Kits\10\bin") -Directory -ErrorAction SilentlyContinue |
+                                Sort-Object Name -Descending)) {
+                foreach ($arch in @("x64", "x86")) {
+                  $candidate = Join-Path $kit.FullName "$arch\signtool.exe"
+                  if (Test-Path $candidate) { return $candidate }
+                }
+              }
+            }
+            return $null
+          }
+          $signtool = Get-Signtool
+          if (-not $signtool) { throw "signtool پیدا نشد." }
+
+          $requested = $env:WINDOWS_SIGNING_ENABLED -eq 'true'
+          $hasCert = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PFX_BASE64)
+          if (-not $requested -and -not $hasCert) {
+            Write-Host "::notice::امضای دیجیتال پیکربندی نشده است؛ artifact بدون امضا منتشر می‌شود."
+            "signed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            exit 0
+          }
+          if (-not $hasCert) {
+            throw "امضا درخواست شده (WINDOWS_SIGNING_ENABLED=true) ولی گواهی داده نشده. سکرت WINDOWS_CERTIFICATE_PFX_BASE64 را تنظیم کنید."
+          }
+
+          $pfx = Join-Path $env:RUNNER_TEMP "k2-release.pfx"
+          [System.IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_PFX_BASE64))
+
+          $exe = "packaging\output\K2\K2.exe"
+          & $signtool sign /f $pfx /p $env:WINDOWS_CERTIFICATE_PASSWORD /fd SHA256 `
+            /tr "http://timestamp.digicert.com" /td SHA256 $exe
+          if ($LASTEXITCODE -ne 0) { throw "امضای K2.exe با exit=$LASTEXITCODE شکست خورد." }
+
+            "signed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Remove-Item $pfx -Force -ErrorAction SilentlyContinue
+            Write-Host "K2.exe امضا شد."
+      - name: Verify the EXE signature (when signing is enabled)
+        if: steps.sign.outputs.signed == 'true'
+        shell: pwsh
+        run: |
+          function Get-Signtool {
+            $cmd = Get-Command signtool -ErrorAction SilentlyContinue
+            if ($cmd) { return $cmd.Source }
+            foreach ($root in @("${env:ProgramFiles(x86)}", "$env:ProgramFiles")) {
+              foreach ($kit in (Get-ChildItem (Join-Path $root "Windows Kits\10\bin") -Directory -ErrorAction SilentlyContinue |
+                                Sort-Object Name -Descending)) {
+                foreach ($arch in @("x64", "x86")) {
+                  $candidate = Join-Path $kit.FullName "$arch\signtool.exe"
+                  if (Test-Path $candidate) { return $candidate }
+                }
+              }
+            }
+            return $null
+          }
+          $signtool = Get-Signtool
+          if (-not $signtool) { throw "signtool پیدا نشد." }
+          & $signtool verify /pa "packaging\output\K2\K2.exe"
+          if ($LASTEXITCODE -ne 0) {
+            throw "امضای K2.exe راستی‌آزمایی نشد (exit=$LASTEXITCODE)."
+          }
+          Write-Host "امضای K2.exe معتبر است."
       - name: Locate Inno Setup
         shell: pwsh
         run: |
@@ -126,6 +279,168 @@ jobs:
           $info = (Get-Item $setup.FullName).VersionInfo
           if (-not $info.ProductName) { throw "نصب‌کننده متادیتای ProductName ندارد." }
           Write-Host "نصب‌کننده: $($info.ProductName) $($info.ProductVersion)"
+      - name: Sign the installer (only when a certificate is configured)
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_PFX_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_PFX_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          function Get-Signtool {
+            $cmd = Get-Command signtool -ErrorAction SilentlyContinue
+            if ($cmd) { return $cmd.Source }
+            foreach ($root in @("${env:ProgramFiles(x86)}", "$env:ProgramFiles")) {
+              foreach ($kit in (Get-ChildItem (Join-Path $root "Windows Kits\10\bin") -Directory -ErrorAction SilentlyContinue |
+                                Sort-Object Name -Descending)) {
+                foreach ($arch in @("x64", "x86")) {
+                  $candidate = Join-Path $kit.FullName "$arch\signtool.exe"
+                  if (Test-Path $candidate) { return $candidate }
+                }
+              }
+            }
+            return $null
+          }
+          $signtool = Get-Signtool
+          if (-not $signtool) { throw "signtool پیدا نشد." }
+
+          $hasCert = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PFX_BASE64)
+          if (-not $hasCert) {
+            Write-Host "::notice::گواهی امضا پیکربندی نشده؛ نصب‌کننده بدون امضا می‌ماند."
+            exit 0
+          }
+
+          $pfx = Join-Path $env:RUNNER_TEMP "k2-setup.pfx"
+          [System.IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_PFX_BASE64))
+          $setup = Get-ChildItem -Path "packaging\output" -Filter "K2-Setup-*.exe" |
+            Sort-Object LastWriteTime | Select-Object -Last 1
+          & $signtool sign /f $pfx /p $env:WINDOWS_CERTIFICATE_PASSWORD /fd SHA256 `
+            /tr "http://timestamp.digicert.com" /td SHA256 $setup.FullName
+          if ($LASTEXITCODE -ne 0) { throw "امضای نصب‌کننده با exit=$LASTEXITCODE شکست خورد." }
+
+          & $signtool verify /pa $setup.FullName
+          if ($LASTEXITCODE -ne 0) { throw "امضای نصب‌کننده راستی‌آزمایی نشد." }
+          Remove-Item $pfx -Force -ErrorAction SilentlyContinue
+          Write-Host "نصب‌کننده امضا و راستی‌آزمایی شد."
+      - name: Install the built installer on Windows and verify a standard install
+        id: install_test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = Get-ChildItem -Path "packaging\output" -Filter "K2-Setup-*.exe" |
+            Sort-Object LastWriteTime | Select-Object -Last 1
+          if (-not $setup) { throw "نصب‌کننده پیدا نشد." }
+
+          $installDir = Join-Path $env:RUNNER_TEMP "K2-Install"
+          $dataDir = Join-Path $env:RUNNER_TEMP "K2-UserData"
+          Remove-Item $installDir, $dataDir -Recurse -Force -ErrorAction SilentlyContinue
+
+          Write-Host "--- نصب خاموش روی $installDir ---"
+          $p = Start-Process -FilePath $setup.FullName -Wait -PassThru `
+            -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/DIR=`"$installDir`""
+          if ($p.ExitCode -ne 0) { throw "نصب با exit=$($p.ExitCode) شکست خورد." }
+
+          # ۱) فایل‌های برنامه باید کامل رفته باشند
+          $exe = Join-Path $installDir "K2.exe"
+          if (-not (Test-Path $exe)) { throw "K2.exe بعد از نصب وجود ندارد: $exe" }
+          $internal = Join-Path $installDir "_internal"
+          if (-not (Test-Path $internal)) { throw "پوشهٔ _internal بعد از نصب وجود ندارد." }
+          $dllCount = (Get-ChildItem $internal -Recurse -Filter "*.dll" | Measure-Object).Count
+          if ($dllCount -lt 50) { throw "فقط $dllCount DLL نصب شد؛ پوشهٔ _internal کامل نیست." }
+          Write-Host "OK فایل‌های برنامه نصب شدند ($dllCount DLL)."
+
+          # ۲) ثبت در «برنامه‌ها و قابلیت‌ها» با نام، آیکن و مسیر حذف
+          $uninstallKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$env:K2_APP_ID`_is1"
+          if (-not (Test-Path $uninstallKey)) {
+            $uninstallKey = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$env:K2_APP_ID`_is1"
+          }
+          if (-not (Test-Path $uninstallKey)) { throw "نصب در رجیستری ثبت نشد." }
+          $props = Get-ItemProperty $uninstallKey
+          if (-not $props.DisplayName) { throw "ورودی رجیستری DisplayName ندارد." }
+          if (-not $props.UninstallString) { throw "ورودی رجیستری UninstallString ندارد." }
+          if (-not $props.DisplayIcon) { throw "ورودی رجیستری DisplayIcon ندارد." }
+          Write-Host "OK ثبت در رجیستری: $($props.DisplayName)"
+
+          # ۳) میان‌برها: فهرست Start-Menu و میزکار
+          $startMenu = Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs"
+          $shortcut = Get-ChildItem $startMenu -Recurse -Filter "*.lnk" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -like "*K2*" } | Select-Object -First 1
+          if (-not $shortcut) { throw "میان‌بر فهرست شروع ساخته نشد." }
+          Write-Host "OK میان‌بر فهرست شروع: $($shortcut.FullName)"
+
+          $desktopDirs = @([Environment]::GetFolderPath("CommonDesktopDirectory"),
+                           [Environment]::GetFolderPath("Desktop")) | Where-Object { $_ }
+          $desktopIcon = foreach ($d in $desktopDirs) {
+            Get-ChildItem $d -Filter "*.lnk" -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -like "*K2*" } | Select-Object -First 1
+          }
+          if (-not $desktopIcon) { throw "میان‌بر میزکار ساخته نشد." }
+          Write-Host "OK میان‌بر میزکار: $($desktopIcon.FullName)"
+
+          # ۴) برنامهٔ نصب‌شده واقعاً اجرا می‌شود و پایگاه داده می‌سازد
+          $db = Join-Path $dataDir "k2.db"
+          $stdout = Join-Path $env:RUNNER_TEMP "installed.stdout.txt"
+          $stderr = Join-Path $env:RUNNER_TEMP "installed.stderr.txt"
+          $env:K2_DATA_DIR = $dataDir
+          $proc = Start-Process -FilePath $exe -ArgumentList "--db","`"$db`"","--headless" `
+            -PassThru -Wait -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          if ($proc.ExitCode -ne 0) {
+            foreach ($log in @($stdout, $stderr)) {
+              if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host $_ } }
+            }
+            throw "برنامهٔ نصب‌شده با exit=$($proc.ExitCode) اجرا نشد."
+          }
+          if (-not (Test-Path $db)) { throw "برنامهٔ نصب‌شده پایگاه داده نساخت." }
+          Write-Host "OK برنامهٔ نصب‌شده اجرا شد و پایگاه داده ساخت."
+
+          # ۵) نصب دوم باید ارتقا باشد، نه نصب تکراری
+          $p2 = Start-Process -FilePath $setup.FullName -Wait -PassThru `
+            -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/DIR=`"$installDir`""
+          if ($p2.ExitCode -ne 0) { throw "نصب دوم با exit=$($p2.ExitCode) شکست خورد." }
+          $keys = Get-ChildItem "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall" -ErrorAction SilentlyContinue |
+            Where-Object { $_.PSChildName -like "$env:K2_APP_ID*" }
+          if (($keys | Measure-Object).Count -ne 1) { throw "نصب دوم، ورودی رجیستری تکراری ساخت." }
+          Write-Host "OK نصب دوم ارتقا بود، نه نصب تکراری."
+
+          "installDir=$installDir" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "dataDir=$dataDir" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "uninstallKey=$uninstallKey" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+      - name: Uninstall and verify the user's data survives
+        if: steps.install_test.outcome == 'success'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installDir = "${{ steps.install_test.outputs.installDir }}"
+          $dataDir = "${{ steps.install_test.outputs.dataDir }}"
+          $uninstallKey = "${{ steps.install_test.outputs.uninstallKey }}"
+          $db = Join-Path $dataDir "k2.db"
+          if (-not (Test-Path $db)) { throw "پیش‌نیاز: پایگاه دادهٔ کاربر وجود ندارد." }
+
+          Write-Host "--- حذف نصب خاموش ---"
+          $props = Get-ItemProperty $uninstallKey
+          $uninstaller = $props.UninstallString
+          if ($uninstaller -like '"*"') { $uninstaller = $uninstaller.Trim('"') }
+          if (-not (Test-Path $uninstaller)) { throw "فایل حذف نصب پیدا نشد: $uninstaller" }
+          $p = Start-Process -FilePath $uninstaller -Wait -PassThru `
+            -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART"
+          if ($p.ExitCode -ne 0) { throw "حذف نصب با exit=$($p.ExitCode) شکست خورد." }
+
+          # ۱) پوشهٔ برنامه باید کاملاً پاک شده باشد
+          if (Test-Path $installDir) {
+            $left = Get-ChildItem $installDir -Recurse -File | Measure-Object
+            throw "پوشهٔ برنامه بعد از حذف نصب پاک نشد ($($left.Count) فایل باقی مانده)."
+          }
+          Write-Host "OK پوشهٔ برنامه کاملاً پاک شد."
+
+          # ۲) ورودی رجیستری باید رفته باشد
+          if (Test-Path $uninstallKey) { throw "ورودی رجیستری بعد از حذف نصب مانده است." }
+          Write-Host "OK ورودی رجیستری حذف شد."
+
+          # ۳) دادهٔ کاربر باید حفظ شده باشد
+          if (-not (Test-Path $db)) { throw "حذف نصب، پایگاه دادهٔ کاربر را هم پاک کرد." }
+          Write-Host "OK دادهٔ کاربر حفظ شد: $db"
+
+          # ۴) اجرایی برنامه هم دیگر نباید باشد
+          if (Test-Path (Join-Path $installDir "K2.exe")) { throw "K2.exe بعد از حذف نصب هنوز هست." }
+          Write-Host "OK حذف نصب تمیز و کامل بود."
       - name: Refresh the repository download bundle (main branch only)
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         shell: pwsh
