@@ -236,6 +236,7 @@ jobs:
       - name: Build the standard Windows installer (Inno Setup)
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Continue'
           $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
           if (-not $iscc) {
             foreach ($candidate in @(
@@ -245,13 +246,24 @@ jobs:
             }
           }
           if (-not $iscc) { throw "Inno Setup (iscc) روی این runner پیدا نشد." }
-          & $iscc "packaging\\k2_installer.iss"
-          if ($LASTEXITCODE -ne 0) { throw "ساخت نصب‌کننده با exit=$LASTEXITCODE شکست خورد." }
+
+          # خروجی iscc را می‌گیریم تا خطای کامپایل در UI Actions دیده شود، نه فقط در لاگ.
+          $output = & $iscc "packaging\\k2_installer.iss" 2>&1
+          $code = $LASTEXITCODE
+          foreach ($line in $output) {
+            $safe = "$line" -replace "[\r\n]+", " "
+            if ($safe -match "Error|error|Warning|warning") { Write-Host "::warning::$safe" }
+          }
+          if ($code -ne 0) {
+            foreach ($line in $output) { Write-Host "::error::$($line -replace '[\r\n]+', ' ')" }
+            throw "ساخت نصب‌کننده با exit=$code شکست خورد."
+          }
+          foreach ($line in $output) { Write-Host "$line" }
+
           $setup = Get-ChildItem -Path "packaging\\output" -Filter "K2-Setup-*.exe" |
             Sort-Object LastWriteTime | Select-Object -Last 1
           if (-not $setup) { throw "فایل نصب‌کننده ساخته نشد." }
           Write-Host "نصب‌کننده ساخته شد: $($setup.FullName) ($($setup.Length) بایت)"
-
       - name: Verify the installer is a standard Windows package
         shell: pwsh
         run: |
