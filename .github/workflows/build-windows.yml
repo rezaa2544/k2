@@ -80,12 +80,60 @@ jobs:
           if (-not (Test-Path $db)) { throw "EXE did not create the database" }
           Write-Host "EXE ran successfully and created $db"
 
+      - name: Locate Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = Get-Command iscc -ErrorAction SilentlyContinue
+          if ($iscc) { Write-Host "Inno Setup on PATH: $($iscc.Source)" }
+          else {
+            foreach ($candidate in @(
+              "${env:ProgramFiles(x86)}\\Inno Setup 6\\ISCC.exe",
+              "$env:ProgramFiles\\Inno Setup 6\\ISCC.exe")) {
+              if (Test-Path $candidate) { Write-Host "Inno Setup found: $candidate" }
+            }
+          }
+
+      - name: Build the standard Windows installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) {
+            foreach ($candidate in @(
+              "${env:ProgramFiles(x86)}\\Inno Setup 6\\ISCC.exe",
+              "$env:ProgramFiles\\Inno Setup 6\\ISCC.exe")) {
+              if (Test-Path $candidate) { $iscc = $candidate; break }
+            }
+          }
+          if (-not $iscc) { throw "Inno Setup (iscc) روی این runner پیدا نشد." }
+          & $iscc "packaging\\k2_installer.iss"
+          if ($LASTEXITCODE -ne 0) { throw "ساخت نصب‌کننده با exit=$LASTEXITCODE شکست خورد." }
+          $setup = Get-ChildItem -Path "packaging\\output" -Filter "K2-Setup-*.exe" |
+            Sort-Object LastWriteTime | Select-Object -Last 1
+          if (-not $setup) { throw "فایل نصب‌کننده ساخته نشد." }
+          Write-Host "نصب‌کننده ساخته شد: $($setup.FullName) ($($setup.Length) بایت)"
+
+      - name: Verify the installer is a standard Windows package
+        shell: pwsh
+        run: |
+          # نصب‌کننده باید یک اجرایی استاندارد ویندوزی باشد با متادیتای نسخه؛
+          # بدون این، ویندوز آن را برنامهٔ ناشناخته می‌بیند.
+          $setup = Get-ChildItem -Path "packaging\\output" -Filter "K2-Setup-*.exe" |
+            Sort-Object LastWriteTime | Select-Object -Last 1
+          $bytes = [System.IO.File]::ReadAllBytes($setup.FullName)
+          if ($bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) {
+            throw "فایل نصب‌کننده امضای MZ ویندوزی ندارد."
+          }
+          $info = (Get-Item $setup.FullName).VersionInfo
+          if (-not $info.ProductName) { throw "نصب‌کننده متادیتای ProductName ندارد." }
+          Write-Host "نصب‌کننده: $($info.ProductName) $($info.ProductVersion)"
       - name: Refresh the repository download bundle (main branch only)
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         shell: pwsh
         run: |
-          python packaging/create_windows_download.py --source packaging/output/K2 --destination downloads/K2-windows-x64.zip --source-revision $env:GITHUB_SHA
-          if ($LASTEXITCODE -ne 0) { throw "ZIP packaging failed with $LASTEXITCODE" }
+          $setup = Get-ChildItem -Path "packaging\\output" -Filter "K2-Setup-*.exe" |
+            Sort-Object LastWriteTime | Select-Object -Last 1
+          if (-not $setup) { throw "نصب‌کننده برای بسته‌بندی پیدا نشد." }
+          python packaging/create_windows_download.py --source packaging/output/K2 --destination downloads/K2-windows-x64.zip --source-revision $env:GITHUB_SHA --installer $setup.FullName
           git fetch origin main
           if ($LASTEXITCODE -ne 0) { throw "Could not check the current main branch" }
           $builtCommit = git rev-parse HEAD
@@ -94,6 +142,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add downloads/K2-windows-x64.zip downloads/K2-preview-html.zip README.md docs/RELEASE_AND_WINDOWS_PACKAGING.md preview/K2-preview.html
+          git add downloads/K2-Setup-*.exe
           git diff --cached --quiet
           if ($LASTEXITCODE -ne 0) {
             git commit -m "build: refresh Windows download bundle"
@@ -110,11 +159,18 @@ jobs:
           name: K2-windows-x64
           path: packaging/output/K2
 
+      - name: Upload the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: K2-windows-installer
+          path: packaging/output/K2-Setup-*.exe
+
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
+            packaging/output/K2-Setup-*.exe
             packaging/output/K2/**/*
           draft: true
           generate_release_notes: true

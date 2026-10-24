@@ -95,6 +95,7 @@ def update_release_metadata(
     exe_path: Path,
     archive_path: Path,
     source_revision: str | None = None,
+    installer_path: Path | None = None,
 ) -> tuple[str, str]:
     if source_revision is not None and not re.fullmatch(r"[0-9a-f]{7,40}", source_revision):
         raise ValueError("source_revision باید SHA کوتاه یا کامل Git باشد.")
@@ -147,6 +148,30 @@ def update_release_metadata(
     )
     doc_path.write_text(doc, encoding="utf-8", newline="\n")
 
+    if installer_path is not None and installer_path.is_file():
+        installer_hash = sha256(installer_path)
+        installer_size = persian_grouped_number(installer_path.stat().st_size)
+        readme = _replace_once(
+            readme,
+            r"^SHA-256 نصب‌کننده: `[0-9a-f]{64}`$",
+            f"SHA-256 نصب‌کننده: `{installer_hash}`",
+            path=readme_path,
+        )
+        readme_path.write_text(readme, encoding="utf-8", newline="\n")
+        doc = _replace_once(
+            doc,
+            r"^[0-9a-f]{64}(?=  K2-Setup-[0-9.]+\.exe$)",
+            installer_hash,
+            path=doc_path,
+        )
+        doc = _replace_once(
+            doc,
+            r"(downloads/K2-Setup-[0-9.]+\.exe` نیز در مخزن ثبت شده است \()[0-9۰-۹٬,]+ بایت",
+            rf"\g<1>{installer_size} بایت",
+            path=doc_path,
+        )
+        doc_path.write_text(doc, encoding="utf-8", newline="\n")
+
     if source_revision is not None:
         preview_path = ROOT / "preview" / "K2-preview.html"
         preview = preview_path.read_text(encoding="utf-8")
@@ -159,6 +184,21 @@ def update_release_metadata(
         preview_path.write_text(preview, encoding="utf-8", newline="\n")
 
     return exe_hash, archive_hash
+
+
+def install_installer(installer: Path, destination: Path) -> Path:
+    """نصب‌کنندهٔ Inno Setup را در ``downloads/`` کپی و بازمی‌گرداند.
+
+    چرا لازم است: کاربر نباید مجبور شود فشردهٔ ZIP را باز کند و بین
+    ``K2.exe`` و پوشهٔ ``_internal`` بگردد. نصب‌کنندهٔ استاندارد باید همان
+    چیزی باشد که مستقیماً دانلود و اجرا می‌شود.
+    """
+    installer = installer.resolve()
+    if not installer.is_file():
+        raise FileNotFoundError(f"نصب‌کننده پیدا نشد: {installer}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(installer.read_bytes())
+    return destination
 
 
 def refresh_preview_download_bundle() -> tuple[Path, str]:
@@ -204,6 +244,11 @@ def main() -> int:
     parser.add_argument("--destination", type=Path, required=True, help="مسیر ZIP قابل دانلود در مخزن")
     parser.add_argument("--no-metadata", action="store_true", help="ساخت بسته بدون تغییر README/سند release")
     parser.add_argument("--source-revision", help="SHA مبدأ برای ثبت در پیش‌نمایش HTML")
+    parser.add_argument(
+        "--installer",
+        type=Path,
+        help="مسیر نصب‌کنندهٔ Inno Setup برای ثبت در downloads/",
+    )
     args = parser.parse_args()
     create_archive(args.source, args.destination)
     exe_path = args.source / "K2.exe"
@@ -211,7 +256,10 @@ def main() -> int:
         exe_hash, archive_hash = sha256(exe_path), sha256(args.destination)
     else:
         exe_hash, archive_hash = update_release_metadata(
-            exe_path, args.destination, source_revision=args.source_revision
+            exe_path,
+            args.destination,
+            source_revision=args.source_revision,
+            installer_path=args.installer,
         )
         # پس از مهر کردن هش نسخه در پیش‌نمایش، بستهٔ ZIP دانلود را هم
         # همگام می‌کنیم؛ وگرنه ZIP و HTML از هم جدا می‌افتند.
@@ -220,8 +268,17 @@ def main() -> int:
         print(f"PREVIEW_ZIP_SHA256={preview_sha}")
     print(f"EXE_SIZE={exe_path.stat().st_size}")
     print(f"EXE_SHA256={exe_hash}")
+    installer_dest = None
+    if args.installer:
+        installer_dest = install_installer(
+            args.installer, ROOT / "downloads" / args.installer.name
+        )
     print(f"ZIP_SIZE={args.destination.stat().st_size}")
     print(f"ZIP_SHA256={archive_hash}")
+    if installer_dest is not None:
+        print(f"INSTALLER_PATH={installer_dest}")
+        print(f"INSTALLER_SIZE={installer_dest.stat().st_size}")
+        print(f"INSTALLER_SHA256={sha256(installer_dest)}")
     if args.source_revision:
         print(f"SOURCE_REVISION={args.source_revision}")
     return 0

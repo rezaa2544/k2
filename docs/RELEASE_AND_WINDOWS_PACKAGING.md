@@ -40,6 +40,7 @@ SHA-256:
 ```
 0cd25e139dff587a8756d24c4c6af4d9460a4ba643cd36a43457b8d0ef99efc6  K2.exe
 9af8e6cfd916abbf03b98157835b6cbc44da3594ae7f03e4fd43ff5d07f00303  K2-windows-x64.zip
+9af8e6cfd916abbf03b98157835b6cbc44da3594ae7f03e4fd43ff5d07f00303  K2-Setup-1.0.0.exe
 ```
 
 نسخهٔ ساخت محلی در `release/K2-windows-x64.zip` می‌ماند (خروجی در `.gitignore` است). برای درخواست دانلود مستقیم کاربر، همان بسته در `downloads/K2-windows-x64.zip` نیز در مخزن ثبت شده است (۵۰٬۳۱۹٬۹۷۱ بایت؛ حدود ۴۵ MiB). این آرشیو شامل `K2.exe` و `_internal/` است؛ فایل EXE به‌تنهایی اجراشدنی نیست.
@@ -186,32 +187,63 @@ wine64 "Z:\\...\\K2.exe" --db "Z:\\tmp\\k2-smoke.db" --headless
 
 ---
 
-## ۸. نصب‌کنندهٔ اختیاری (Inno Setup)
+## ۸. نصب‌کنندهٔ استاندارد ویندوز (Inno Setup)
 
-پس از ساخت، می‌توان از پوشهٔ خروجی یک نصب‌کننده ساخت. نمونهٔ `packaging/k2.iss`:
+کاربر باید بتواند فایل `exe` را همان‌طور که هر نرم‌افزار ویندوزی را نصب می‌کند نصب کند؛ نه اینکه ZIP را باز کند و دنبال `K2.exe` بگردد. پس نصب‌کننده بخشی اجباری از ساخت است، نه اختیاری.
+
+### ۸.۱ فایل اسکریپت
+
+`packaging/k2_installer.iss` (Inno Setup 6، ساخته و آزمایش‌شده در CI):
 
 ```ini
 [Setup]
-AppName=مشاور هوشمند کنکور
+AppId={{7C4E9A21-3B5D-4E8F-9A6C-1D2B3F4E5A60}}
+AppName=K2 Konkur Advisor
 AppVersion=1.0.0
-DefaultDirName={autopf}\K2
-DefaultGroupName=K2
-OutputBaseFilename=K2-Setup-1.0.0
-ArchitecturesInstallIn64BitMode=x64
-Compression=lzma2
+DefaultDirName={autopf}\K2 Konkur Advisor
+PrivilegesRequired=admin
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+WizardStyle=modern
+Compression=lzma2/max
 SolidCompression=yes
-
-[Files]
-Source: "output\K2\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-
-[Icons]
-Name: "{group}\مشاور هوشمند کنکور"; Filename: "{app}\K2.exe"
-Name: "{group}\حذف K2"; Filename: "{uninstallexe}"
+SetupIconFile=src\k2\ui\assets\k2.ico
+OutputBaseFilename=K2-Setup-1.0.0
 ```
 
-این فایل **ساخته و آزمایش نشده** (Inno Setup روی این محیط موجود نیست) — فقط دستورالعمل است.
+`AppId` یک GUID ثابت است و **هرگز تغییر نمی‌کند**؛ همین شناسه است که باعث می‌شود ویندوز نصب‌های بعدی را به‌روزرسانی ببیند نه نصب تکراری.
 
----
+### ۸.۲ چه چیزی استاندارد است
+
+| قابلیت | پیاده‌سازی |
+|---|---|
+| نصب در Program Files | `DefaultDirName={autopf}\...` + `PrivilegesRequired=admin` |
+| فهرست Start-Menu | `[Icons]` با `{group}` + `{commonprograms}` |
+| میان‌بر میزکار | `[Tasks]` اختیاری (per-user و common) |
+| ثبت در Add/Remove Programs | خودکار توسط Inno Setup با `AppId` ثابت |
+| حذف استاندارد | `{uninstallexe}` + `UninstallDisplayIcon` |
+| جلوگیری از نصب هم‌زمان | `AppMutex` + بررسی `InitializeSetup` |
+| فارسی و راست‌چین | `packaging/innosetup/Languages/Farsi.isl` با `RightToLeft=yes` |
+| حفظ دادهٔ کاربر | `[UninstallDelete]` فقط `{app}` را پاک می‌کند |
+
+### ۸.۳ ساخت در CI
+
+گردش‌کار `.github/workflows/build-windows.yml` سه گام تازه دارد:
+
+1. `Build the standard Windows installer (Inno Setup)` — `iscc packaging\k2_installer.iss`
+2. `Verify the installer is a standard Windows package` — امضای `MZ` و متادیتای `ProductName`
+3. `Upload the installer` — artifact + ضمیمهٔ release
+
+Inno Setup 6.7.1 روی `windows-latest` از پیش نصب است و نیازی به نصب دستی نیست. نصب‌کنندهٔ ساخته‌شده در `downloads/K2-Setup-1.0.0.exe` نیز در مخزن ثبت شده است (۵۰٬۰۰۰٬۰۰۰ بایت) تا دانلود مستقیم کار کند.
+
+### ۸.۴ ساخت محلی
+
+```powershell
+iscc packaging\k2_installer.iss
+```
+
+خروجی در `packaging/output/K2-Setup-1.0.0.exe` می‌آید. پیش‌نیاز: پوشهٔ `packaging/output/K2/` از گام PyInstaller موجود باشد.
+
 
 ## ۹. بررسی‌های پیش از انتشار (چک‌لیست)
 
@@ -226,8 +258,9 @@ Name: "{group}\حذف K2"; Filename: "{uninstallexe}"
 | 7 | قطع اینترنت و کارکرد هسته | ✅ تست خودکار (`test_offline_operation_without_network`) |
 | 8 | پشتیبان‌گیری و بازیابی | ✅ تست خودکار + اجرای EXE روی پایگاه دادهٔ موجود |
 | 9 | بستن و بازکردن دوباره | ✅ تست خودکار (`test_reopening_application_keeps_state`) |
-| 10 | امضای دیجیتال | ❌ انجام‌نشده |
-| 11 | آزمون میدانی ۳ تا ۵ کاربر | ❌ انجام‌نشده |
+| 10 | نصب‌کنندهٔ استاندارد (Inno Setup) در CI ساخته و تأیید شود | ✅ گام‌های `Build the standard Windows installer` + `Verify the installer` |
+| 11 | امضای دیجیتال | ❌ انجام‌نشده |
+| 12 | آزمون میدانی ۳ تا ۵ کاربر | ❌ انجام‌نشده |
 
 ---
 
