@@ -348,6 +348,14 @@ jobs:
           if ($dllCount -lt 50) { throw "فقط $dllCount DLL نصب شد؛ پوشهٔ _internal کامل نیست." }
           Note "install test: $dllCount DLL installed alongside K2.exe"
 
+          # لاگ نصب‌کننده می‌گوید دقیقاً چه میان‌برهایی ساخته شده‌اند؛ این
+          # مستقیم‌ترین منبع حقیقت است و به حدس زدن نیاز ندارد.
+          if (Test-Path $setupLog) {
+            $pattern = "shortcut", "Shortcut", "Creating directory", "icon"
+            $hits = Select-String -Path $setupLog -Pattern $pattern -ErrorAction SilentlyContinue
+            foreach ($line in $hits) { Note "setup log: $($line.Line.Trim())" }
+          }
+
           # ۲) ثبت در «برنامه‌ها و قابلیت‌ها» با نام، آیکن و مسیر حذف
           Note "install test: looking for the uninstall registry entry (AppId=$env:K2_APP_ID)"
           $uninstallKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$env:K2_APP_ID`_is1"
