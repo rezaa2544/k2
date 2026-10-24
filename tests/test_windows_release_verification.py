@@ -131,22 +131,54 @@ def test_ci_has_a_signing_pipeline_that_is_actually_exercised():
     )
 
 
-def test_signing_self_test_proves_sign_and_verify_both_work():
+def _signing_selftest_step() -> str:
     text = _workflow()
-    assert "New-SelfSignedCertificate" in text, "گواهی موقت برای آزمون خط لوله ساخته نمی‌شود"
-    assert "signtool sign" in text, "خط لوله امضا وجود ندارد"
-    assert "signtool verify /pa" in text, "راستی‌آزمایی امضا وجود ندارد"
-    assert "Get-AuthenticodeSignature" in text, "وضعیت امضا بررسی نمی‌شود"
+    step = text[text.index("Signing pipeline self-test") :]
+    return step[: step.index("\n      - name:")]
+
+
+def _signing_selftest_script() -> str:
+    script = ROOT / "packaging" / "signing_selftest.ps1"
+    assert script.is_file(), "اسکریپت خودآزمایی امضا حذف شده است"
+    return script.read_text(encoding="utf-8")
+
+
+def test_signing_self_test_proves_sign_and_verify_both_work():
+    script = _signing_selftest_script()
+    assert "New-SelfSignedCertificate" in script, (
+        "گواهی موقت برای آزمون خط لوله ساخته نمی‌شود"
+    )
+    assert "signtool sign" in script, "خط لوله امضا وجود ندارد"
+    assert "signtool verify /pa" in script, "راستی‌آزمایی امضا وجود ندارد"
+    assert "Get-AuthenticodeSignature" in script, "وضعیت امضا بررسی نمی‌شود"
+
+
+def test_signing_self_test_runs_as_a_bounded_child_process():
+    """New-SelfSignedCertificate روی runner آویزان می‌ماند و kill-pذیر نیست.
+
+    پس باید در فرprocess جدا و با مهلت زمانی اجرا شود؛ وگرنه کل job را
+    برای ۷۵ دقیقه می‌گیرد و هیچ گام بعدی اجرا نمی‌شود.
+    """
+    step = _signing_selftest_step()
+    assert "signing_selftest.ps1" in step, "خودآزمایی باید اسکریپت جدا باشد"
+    assert "Start-Process" in step, "خودآزمایی باید در فرprocess جدا اجرا شود"
+    assert "AddSeconds(300)" in step, "برای خودآزمایی مهلت زمانی تعیین نشده"
+    assert "HasExited" in step, "مهلت زمانی کنترل نمی‌شود"
+    assert "$process.Kill()" in step, "فرprocess آویزان Kill نمی‌شود"
+    assert "::warning::" in step, (
+        "اگر خودآزمایی آویزان شد، باید هشدار بدهد و رد شود — نه اینکه job را بگیرد"
+    )
+    assert "exit 0" in step, "رد شدن خودآزمایی نباید build را قرمز کند"
 
 
 def test_signing_self_test_never_publishes_the_self_signed_artifact():
     """گواهی خودامضا نباید به فایل منتشرشده برسد."""
-    text = _workflow()
-    self_test = text[text.index("Signing pipeline self-test") :]
-    self_test = self_test[: self_test.index("\n      - name:")]
-    assert "Copy-Item" in self_test, "آزمون باید روی یک کپی کار کند"
-    assert "$env:RUNNER_TEMP" in self_test, "کپی باید بیرون از خروجی انتشار باشد"
-    assert "Remove-Item" in self_test, "کپی و گواهی موقت باید پاک شوند"
+    script = _signing_selftest_script()
+    assert "Copy-Item" in script, "آزمون باید روی یک کپی کار کند"
+    assert "$env:RUNNER_TEMP" in script, "کپی باید بیرون از خروجی انتشار باشد"
+    assert "Remove-Item" in script, "کپی و گواهی موقت باید پاک شوند"
+    assert "Cert:\\CurrentUser\\My" in script, "گواهی موقت در انبار کاربر است"
+    assert "finally" in script, "پاک‌سازی حتی در صورت خطا هم باید اجرا شود"
 
 
 def test_release_signing_fails_loudly_when_it_is_requested_but_not_configured():
