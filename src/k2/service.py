@@ -25,7 +25,15 @@ from . import (
     nightly_replan,
     study_timer,
 )
-from . import exam_analysis, konkur_catalog, onboarding, reporting, review_engine, streams
+from . import (
+    exam_analysis,
+    konkur_catalog,
+    onboarding,
+    reporting,
+    review_engine,
+    streams,
+    syllabus,
+)
 from .config import Settings, app_data_dir, database_path
 from .domain.enums import (
     ActivityState,
@@ -59,6 +67,8 @@ from .domain.models import (
     StudySession,
     StudySessionRevision,
     Subject,
+    SyllabusChapterEdit,
+    SyllabusSection,
     Topic,
     TopicDeadline,
     TopicDeadlinePlan,
@@ -1001,6 +1011,197 @@ class AdvisorService:
         self.conn.commit()
         return created
 
+    # ------------------------------------------------------------------
+    # سرفصل رسمی: فصل و گفتار
+    # ------------------------------------------------------------------
+
+    def syllabus_courses(self) -> list[str]:
+        """درس‌هایی که سرفصل فصل/گفتار برایشان ثبت شده است.
+
+        درس‌های عمومی هم می‌آیند: فهرست فصل ندارند، ولی کاربر باید بتواند
+        برایشان تعداد گفتار وارد و وضعیت ثبت کند.
+        """
+        names = set(konkur_catalog.SYLLABUS_BY_COURSE.keys())
+        names.update(konkur_catalog.GENERAL_SUBJECT_SYLLABUS.keys())
+        return sorted(names)
+
+    def syllabus_grades(self, subject: str) -> list[int]:
+        if subject in konkur_catalog.SYLLABUS_BY_COURSE:
+            return sorted(konkur_catalog.SYLLABUS_BY_COURSE[subject].keys())
+        if subject in konkur_catalog.GENERAL_SUBJECT_SYLLABUS:
+            return sorted(syllabus.general_grades(subject))
+        return []
+
+    def syllabus_chapter_views(self, subject: str, grade: int) -> list[syllabus.ChapterView]:
+        """فصل‌های یک درس/پایه با ادغام ویرایش‌های کاربر."""
+        edits = self.repo.list_syllabus_chapter_edits(subject, grade)
+        return syllabus.chapters(subject, grade, edits)
+
+    def syllabus_section_views(
+        self, subject: str, grade: int, chapter_no: int
+    ) -> list[syllabus.SectionView]:
+        """گفتارهای یک فصل با وضعیت واقعی کاربر."""
+        views = self.syllabus_chapter_views(subject, grade)
+        chapter = next((c for c in views if c.no == int(chapter_no)), None)
+        if chapter is None:
+            return []
+        records = self.repo.list_syllabus_sections(subject, grade)
+        return syllabus.sections(subject, grade, chapter, records)
+
+    def syllabus_section_record(
+        self, subject: str, grade: int, chapter_no: int, section_no: int
+    ) -> Optional[SyllabusSection]:
+        return self.repo.get_syllabus_section(subject, grade, chapter_no, section_no)
+
+    def syllabus_save_section(
+        self,
+        subject: str,
+        grade: int,
+        chapter_no: int,
+        section_no: int,
+        answers: dict,
+        mastery: Optional[float] = None,
+        notes: str = "",
+    ) -> SyllabusSection:
+        """ثبت/به‌روزرسانی وضعیت یک گفتار (idempotent روی کلید طبیعی).
+
+        گفتاری که در کتاب نیست (بیرون از بازهٔ تعداد گفتار) پذیرفته نمی‌شود تا
+        وضعیت به رکورد بی‌صاحب چسبیده نماند.
+        """
+        chapter = next(
+            (c for c in self.syllabus_chapter_views(subject, grade) if c.no == int(chapter_no)),
+            None,
+        )
+        if chapter is None:
+            raise ValueError("فصل یافت نشد.")
+        if chapter.sections is None:
+            raise ValueError("تعداد گفتار این فصل نامشخص است؛ اول تعداد را وارد کن.")
+        if not 1 <= int(section_no) <= int(chapter.sections):
+            raise ValueError("شمارهٔ گفتار بیرون از بازهٔ این فصل است.")
+        record = self.repo.get_syllabus_section(subject, grade, chapter_no, section_no)
+        if record is None:
+            record = syllabus.new_record(subject, grade, int(chapter_no), int(section_no))
+        syllabus.save_record(record, answers, mastery, notes)
+        self.repo.upsert_syllabus_section(record)
+        self.conn.commit()
+        return record
+
+    def syllabus_rename_section(
+        self, subject: str, grade: int, chapter_no: int, section_no: int, title: str
+    ) -> SyllabusSection:
+        """تغییر نام گفتار؛ نام خالی یعنی بازگشت به نام رسمی کتاب."""
+        record = self.repo.get_syllabus_section(subject, grade, chapter_no, section_no)
+        if record is None:
+            record = syllabus.new_record(subject, grade, int(chapter_no), int(section_no))
+        record.title = title.strip()
+        self.repo.upsert_syllabus_section(record)
+        self.conn.commit()
+        return record
+
+    def syllabus_delete_section(
+        self, subject: str, grade: int, chapter_no: int, section_no: int
+    ) -> bool:
+        """حذف گفتار از فهرست کاربر (با تأیید در رابط کاربری).
+
+        این کار وضعیت ثبت‌شدهٔ گفتار را پاک می‌کند، نه دادهٔ کتاب را؛ چون
+        همین دلیل است که برای آن تأیید گرفته می‌شود.
+        """
+        existed = self.repo.delete_syllabus_section(subject, grade, chapter_no, section_no)
+        if existed:
+            self.conn.commit()
+        return existed
+
+    def syllabus_set_chapter_count(
+        self, subject: str, grade: int, chapter_no: int, count: Optional[int]
+    ) -> SyllabusChapterEdit:
+        """ثبت یا پاک‌کردن تعداد گفتار یک فصل.
+
+        ``None`` یعنی «نامشخص»؛ برنامه هرگز صفر یا عددی که کاربر نگرفته است
+        حدس نمی‌زند.
+        """
+        edit = self.repo.get_syllabus_chapter(subject, grade, chapter_no)
+        if edit is None:
+            edit = SyllabusChapterEdit(
+                subject=subject, grade=int(grade), chapter=int(chapter_no)
+            )
+        edit.sections = None if count is None else max(0, int(count))
+        edit.confirmed = True
+        edit.updated_at = syllabus.now_iso()
+        self.repo.upsert_syllabus_chapter(edit)
+        self.conn.commit()
+        return edit
+
+    def syllabus_rename_chapter(
+        self, subject: str, grade: int, chapter_no: int, title: str
+    ) -> SyllabusChapterEdit:
+        edit = self.repo.get_syllabus_chapter(subject, grade, chapter_no)
+        if edit is None:
+            edit = SyllabusChapterEdit(
+                subject=subject, grade=int(grade), chapter=int(chapter_no)
+            )
+        edit.title = title.strip()
+        edit.updated_at = syllabus.now_iso()
+        self.repo.upsert_syllabus_chapter(edit)
+        self.conn.commit()
+        return edit
+
+    def syllabus_progress(
+        self, subject: Optional[str] = None, grade: Optional[int] = None
+    ) -> syllabus.SyllabusProgress:
+        """خلاصهٔ پوشش سرفصل برای گزارش و «کار بعدی»."""
+        if subject is not None and grade is not None:
+            views = self.syllabus_chapter_views(subject, grade)
+            records = self.repo.list_syllabus_sections(subject, grade)
+            return syllabus.progress(
+                subject, grade, chapter_views=views, records=records
+            )
+        # بدون درس/پایه: همهٔ درس‌ها. قالبی که شناسه گفتار را از روی خود
+        # رکورد می‌سازد لازم است، وگرنه کلیدها با هم تطابق نمی‌کنند.
+        views = []
+        for name in self.syllabus_courses():
+            for grade in self.syllabus_grades(name):
+                views.extend(self.syllabus_chapter_views(name, grade))
+        records = self.repo.list_syllabus_sections()
+        return syllabus.progress("", 0, chapter_views=views, records=records)
+
+    def syllabus_open_needs(self, subject: Optional[str] = None) -> list[dict]:
+        """گفتارهایی که نیاز باز دارند — ورودی مستقیم برنامه‌ریزی.
+
+        هر مورد شناسهٔ پایدار گفتار، درس، پایه، فصل و فهرست نیازهای باز را
+        دارد. گفتار ارزیابی‌نشده اینجا نمی‌آید؛ چون هنوز هیچ نیازی ثبت نشده.
+        """
+        records = self.repo.list_syllabus_sections(subject)
+        by_chapter: dict[tuple[str, int, int], list[SyllabusSection]] = {}
+        for record in records:
+            by_chapter.setdefault((record.subject, record.grade, record.chapter), []).append(
+                record
+            )
+        out: list[dict] = []
+        for (sub, grade, chapter_no), rows in sorted(by_chapter.items()):
+            chapter = next(
+                (c for c in self.syllabus_chapter_views(sub, grade) if c.no == chapter_no),
+                None,
+            )
+            if chapter is None:
+                continue
+            for record in sorted(rows, key=lambda r: r.section):
+                needs = syllabus.section_needs(record)
+                if not needs:
+                    continue
+                out.append(
+                    {
+                        "id": syllabus.topic_id(sub, grade, chapter_no, record.section),
+                        "subject": sub,
+                        "grade": grade,
+                        "chapter": chapter_no,
+                        "chapter_title": chapter.title,
+                        "section": record.section,
+                        "label": syllabus.section_label(chapter, record.section, record),
+                        "needs": needs,
+                    }
+                )
+        return out
+
     def ensure_consolidation_activities(
         self, date: Optional[_dt.date] = None
     ) -> list[Activity]:
@@ -1214,12 +1415,28 @@ class AdvisorService:
         phase = advisor_engine.determine_phase(
             profile.days_remaining if profile else None, self.settings
         )
+        needs = self.syllabus_open_needs()
+        if needs:
+            top = needs[0]
+            labels = "، ".join(n["label"] for n in top["needs"][:3])
+            return AdvisorSuggestion(
+                activity_id=None,
+                title=f"جبران «{top['label']}»",
+                reason=(
+                    f"کارِ بازمانده‌ای در صف نیست، ولی در سرفصل {top['subject']} "
+                    f"(پایهٔ {top['grade']}، فصل {top['chapter']}) این گفتار نیاز "
+                    f"باز دارد: {labels}. فاز فعلی: "
+                    f"«{advisor_engine.PHASE_LABELS[phase]}»."
+                ),
+                action_type="prompt",
+                score=float(len(top["needs"])),
+            )
         return AdvisorSuggestion(
             activity_id=None,
             title="ثبت یک کار تازه یا انجام یک آزمون",
             reason=(
-                f"کارِ بازمانده‌ای در صف نیست. فاز فعلی: "
-                f"«{advisor_engine.PHASE_LABELS[phase]}»."
+                f"کارِ بازمانده‌ای در صف نیست و نیاز باز سرفصلی ثبت نشده. "
+                f"فاز فعلی: «{advisor_engine.PHASE_LABELS[phase]}»."
             ),
             action_type="prompt",
         )
@@ -1229,7 +1446,7 @@ class AdvisorService:
     ) -> WeeklyReport:
         end_date = end_date or _dt.date.today()
         start_date = end_date - _dt.timedelta(days=6)
-        return reporting.build_weekly_report(
+        report = reporting.build_weekly_report(
             start_date=start_date,
             end_date=end_date,
             activities=self.repo.list_activities(),
@@ -1237,6 +1454,36 @@ class AdvisorService:
             errors=self.repo.list_error_records(),
             review_logs=self.repo.list_review_logs(),
         )
+        self._annotate_syllabus(report)
+        return report
+
+    def _annotate_syllabus(self, report) -> None:
+        """پوشش سرفصل و نیازهای باز را به گزارش هفتگی اضافه می‌کند.
+
+        چرا لازم است: گزارش فقط از فعالیت‌ها ساخته می‌شود و نمی‌گوید کجای
+        سرفصل هنوز وضعیت ثبت نشده یا نیاز باز دارد. بدون این خط، تغییر وضعیت
+        یک گفتار هیچ ردپایی در گزارش نمی‌گذارد.
+        """
+        needs = self.syllabus_open_needs()
+        if needs:
+            by_subject: dict[str, int] = {}
+            for item in needs:
+                by_subject[item["subject"]] = by_subject.get(item["subject"], 0) + 1
+            summary = "، ".join(
+                f"{name} ({count} گفتار)" for name, count in sorted(by_subject.items())
+            )
+            report.notes.append(
+                f"نیاز باز سرفصل: {len(needs)} گفتار — {summary}. "
+                "این‌ها از وضعیت واقعی ثبت‌شده می‌آیند و باید در برنامهٔ "
+                "هفتهٔ بعد جبران شوند."
+            )
+        progress = self.syllabus_progress()
+        if progress.sections:
+            report.next_week_changes.append(
+                f"پوشش سرفصل: {progress.assessed} از {progress.sections} گفتار "
+                f"ارزیابی شده ({progress.coverage:.0f}٪)؛ "
+                f"{progress.unknown_chapters} فصل هنوز تعداد گفتار نامشخص دارند."
+            )
 
     def daily_report(self, date: Optional[_dt.date] = None) -> reporting.DailyReport:
         date = date or _dt.date.today()

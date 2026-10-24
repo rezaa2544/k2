@@ -138,7 +138,9 @@ function syllabusChapters(subject, grade) {
     return {
       no: ch.no,
       title: e.title ?? ch.title,
-      sections: e.sections ?? ch.sections,
+      // ادیت تأییدشده از کتاب مقدم است؛ «خالی» یعنی کاربر عمداً نامشخص
+      // کرده است، نه اینکه عدد کتاب برگردد.
+      sections: e.confirmed === true ? e.sections : (e.sections ?? ch.sections),
       confirmed: e.confirmed === true,
     };
   });

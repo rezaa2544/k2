@@ -333,6 +333,65 @@ class Placement:
 
 
 @dataclass
+class SyllabusSection:
+    """وضعیت مطالعهٔ یک گفتار از سرفصل رسمی.
+
+    ``title`` خالی یعنی نام رسمی کتاب استفاده شود. هشت سؤال وضعیت همان
+    پرسش‌های پیش‌نمایش هستند تا دادهٔ دسکتاپ و وب یک معنی داشته باشند.
+    اگر ردیفی نباشد یعنی گفتار هنوز ارزیابی نشده — نه اینکه صفر باشد.
+    """
+
+    subject: str
+    grade: int
+    chapter: int
+    section: int
+    title: str = ""
+    teaching: Optional[str] = None
+    study: Optional[str] = None
+    comprehension: Optional[str] = None
+    consolidation: Optional[str] = None
+    testing: Optional[str] = None
+    analysis: Optional[str] = None
+    essay: Optional[str] = None
+    speed: Optional[str] = None
+    mastery: Optional[float] = None
+    notes: str = ""
+    updated_at: str = ""
+
+    @property
+    def answered(self) -> int:
+        return sum(
+            1
+            for value in (
+                self.teaching, self.study, self.comprehension, self.consolidation,
+                self.testing, self.analysis, self.essay, self.speed,
+            )
+            if value
+        )
+
+    @property
+    def is_assessed(self) -> bool:
+        return bool(self.updated_at)
+
+
+@dataclass
+class SyllabusChapterEdit:
+    """ویرایش کاربر روی یک فصل: تغییر عنوان یا ورود/پاک‌کردن تعداد گفتار.
+
+    ``sections`` مقدار ``None`` یعنی «نامشخص»؛ برنامه هرگز صفر یا عددی که
+    کاربر نگرفته است حدس نمی‌زند.
+    """
+
+    subject: str
+    grade: int
+    chapter: int
+    title: str = ""
+    sections: Optional[int] = None
+    confirmed: bool = False
+    updated_at: str = ""
+
+
+@dataclass
 class UnplacedActivity:
     """فعالیتی که جا نشده است به‌همراه دلیل صریح (SCH-03)."""
 
@@ -855,6 +914,8 @@ __all__ = [
     "SessionTotals",
     "StudyPhase",
     "StudySession",
+    "SyllabusChapterEdit",
+    "SyllabusSection",
     "StudySessionRevision",
     "Subject",
     "Topic",

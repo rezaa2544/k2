@@ -44,21 +44,23 @@ def test_persian_font_is_loaded(qapp):
 
 
 def test_main_window_has_all_navigation_pages(window: MainWindow):
-    """دقیقاً سیزده صفحهٔ خواسته‌شده در ناوبری هستند (بند ۱۷)."""
+    """صفحه‌های ناوبری کامل‌اند و صفحهٔ سرفصل هم اضافه شده است (بند ۱۷)."""
     from k2.ui.app import NAV_ITEMS
 
-    assert len(NAV_ITEMS) == 13
-    assert window.nav.count() == 13
-    assert window.stack.count() == 14  # ۱۳ صفحهٔ ناوبری + «برنامهٔ امروز» فرعی
+    assert len(NAV_ITEMS) == 14
+    assert window.nav.count() == 14
+    assert window.stack.count() == 15  # ۱۴ صفحهٔ ناوبری + «برنامهٔ امروز» فرعی
     assert window.windowTitle() == APP_TITLE
     titles = [title for _, title, _ in NAV_ITEMS]
     for expected in (
-        "داشبورد امروز", "برنامه هفتگی", "بانک دروس", "عقب‌افتادگی‌ها",
-        "کلاس‌های من", "مشکلات یادگیری", "تست و تحلیل", "مرورهای من",
-        "آزمون‌های جامع", "مهلت‌های من", "ساعت مطالعه", "گزارش مشاور",
-        "تنظیمات",
+        "داشبورد امروز", "برنامه هفتگی", "بانک دروس", "سرفصل درس‌ها",
+        "عقب‌افتادگی‌ها", "کلاس‌های من", "مشکلات یادگیری", "تست و تحلیل",
+        "مرورهای من", "آزمون‌های جامع", "مهلت‌های من", "ساعت مطالعه",
+        "گزارش مشاور", "تنظیمات",
     ):
         assert expected in titles
+    # هیچ عنوان تکراری نباشد؛ وگرنه ناوبری دو معنا می‌شود
+    assert len(set(titles)) == len(titles)
 
 
 def test_window_has_reasonable_default_size(window: MainWindow):
