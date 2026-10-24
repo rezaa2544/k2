@@ -36,6 +36,30 @@ def _steps() -> list[str]:
 # --------------------------------------------------------------------------
 
 
+def test_every_workflow_yaml_file_is_valid():
+    """گردش‌کار خراب باید در تست شکست بخورد، نه در اجرای CI."""
+    import yaml
+
+    workflows = sorted((ROOT / ".github" / "workflows").glob("*.yml"))
+    assert workflows, "هیچ گردش‌کاری پیدا نشد"
+    for workflow in workflows:
+        data = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+        assert isinstance(data, dict), f"{workflow.name}: ساختار گردش‌کار درست نیست"
+        assert "jobs" in data, f"{workflow.name}: بخش jobs نیست"
+
+
+def test_every_windows_build_step_has_a_name_and_a_body():
+    """گام بی‌نام یا بی‌بدن در UI Actions خوانا نیست."""
+    import yaml
+
+    data = yaml.safe_load(_workflow())
+    steps = data["jobs"]["test-and-build"]["steps"]
+    assert len(steps) >= 15, "گردش‌کار build-windows گام کافی ندارد"
+    for step in steps:
+        assert step.get("name"), f"گام بی‌نام: {step}"
+        assert step.get("run") or step.get("uses"), f"گام بی‌بدن: {step.get('name')}"
+
+
 def test_ci_installs_the_installer_on_a_real_windows_machine():
     steps = _steps()
     assert any("Install the built installer on Windows" in name for name in steps), (
