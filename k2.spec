@@ -31,6 +31,10 @@ hiddenimports = [
     "PySide6.QtSvg",
     "jdatetime",
     "sqlite3",
+    # خواندن تصویر کارت پاسخ (آفلاین). بدون آن برنامه کار می‌کند ولی
+    # خواندن کارت پاسخ غیرفعال می‌شود.
+    "PIL",
+    "PIL.Image",
 ]
 
 # --- کتابخانه‌هایی که نباید جمع شوند (کاهش حجم و رفع خطای جمع) ---
@@ -40,7 +44,6 @@ excludes = [
     "numpy",
     "pandas",
     "scipy",
-    "PIL",
     "PySide6.QtWebEngineCore",
     "PySide6.QtWebEngineWidgets",
     "PySide6.Qt3DCore",

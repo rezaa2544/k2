@@ -133,27 +133,90 @@ def test_fully_unknown_chapters_stay_none_never_zero():
             assert ch["sections"] is None, (course, grade, ch["no"])
 
 
-def test_general_subjects_never_claim_chapter_lists():
-    """درس‌های عمومی فقط شمار درس اولیه دارند؛ فصل/گفتار جعل نمی‌شود."""
+def test_general_subjects_claim_only_verified_chapter_lists():
+    """درس‌های عمومی فقط فهرست تأییدشدهٔ کتاب درسی دارند؛ بقیه «نامشخص».
+
+    قاعدهٔ صادقانه: پایه‌ای که فهرست رسمی برایش ثبت شده، نام‌دار است؛
+    پایه‌ای که ثبت نشده، هیچ عدد یا نام جعلی نمی‌گیرد.
+    """
     from k2.konkur_catalog import (
+        GENERAL_SUBJECT_CHAPTERS,
         GENERAL_SUBJECT_SYLLABUS,
         SYLLABUS_BY_COURSE,
     )
 
     for name, info in GENERAL_SUBJECT_SYLLABUS.items():
         assert name not in SYLLABUS_BY_COURSE, name
-        assert set(info) == {"lessons", "note"}
-        assert info["lessons"] is None or isinstance(info["lessons"], int)
-        assert "تأییدنشده" in info["note"] or "نامشخص" in info["note"]
+        assert set(info) == {"note"}, (name, set(info))
+        assert info["note"], name
+    # هر فصل تأییدشده یا نام گفتار دارد یا عدد دارد؛ هیچ‌کدام خالی نیست.
+    for name, by_grade in GENERAL_SUBJECT_CHAPTERS.items():
+        for grade, chapters in by_grade.items():
+            for chapter in chapters:
+                topics = chapter.get("topics")
+                assert topics, (name, grade, chapter["no"])
+                for title, verified in topics:
+                    assert title and title.strip(), (name, grade, chapter["no"])
+                    assert verified is True, (name, grade, chapter["no"], title)
+
+
+def test_general_subject_grades_match_the_real_curriculum():
+    """«سلامت و بهداشت» و «هویت اجتماعی» درس پایهٔ دوازدهم‌اند، نه دهم."""
+    from k2.konkur_catalog import GENERAL_GRADES, GENERAL_SUBJECT_CHAPTERS
+
+    assert GENERAL_GRADES["سلامت و بهداشت"] == (12,)
+    assert GENERAL_GRADES["هویت اجتماعی"] == (12,)
+    for name in ("فارسی", "عربی", "دینی", "زبان انگلیسی"):
+        assert GENERAL_GRADES[name] == (10, 11, 12), name
+    # پایه‌ای که تدریس نمی‌شود هیچ فصلی ندارد
+    for name in ("سلامت و بهداشت", "هویت اجتماعی"):
+        assert 10 not in GENERAL_SUBJECT_CHAPTERS.get(name, {}), name
+        assert 12 in GENERAL_SUBJECT_CHAPTERS.get(name, {}), name
+
+
+def test_general_subject_lesson_counts_match_the_book():
+    """شمار درس‌های تأییدشدهٔ هر درس عمومی با کتاب درسی می‌خواند."""
+    from k2.konkur_catalog import GENERAL_SUBJECT_CHAPTERS as G
+
+    expected = {
+        ("فارسی", 10): 18, ("فارسی", 12): 18,
+        ("عربی", 10): 8, ("عربی", 12): 4,
+        ("دینی", 10): 12, ("دینی", 11): 12,
+        ("زبان انگلیسی", 10): 4, ("زبان انگلیسی", 12): 3,
+        ("سلامت و بهداشت", 12): 14,
+        ("هویت اجتماعی", 12): 10,
+    }
+    for (name, grade), total in expected.items():
+        rows = G[name][grade]
+        got = sum(len(c["topics"]) for c in rows)
+        assert got == total, (name, grade, got, total)
+
+
+def test_riazi_only_physics_chapter_is_marked():
+    """فصل ترمودینامیک فقط برای رشتهٔ ریاضی علامت خورده است."""
+    from k2.konkur_catalog import SYLLABUS_BY_COURSE
+
+    chapters = SYLLABUS_BY_COURSE["فیزیک"][10]
+    thermo = next(c for c in chapters if c["no"] == 5)
+    assert thermo["group_only"] == "علوم ریاضی و فنی"
+    assert thermo["sections"] == 7
+    assert len(thermo["topics"]) == 7
+    # بقیهٔ فصل‌ها مشترک‌اند
+    for chapter in chapters:
+        if chapter["no"] != 5:
+            assert "group_only" not in chapter, chapter["no"]
 
 
 def test_syllabus_helpers_report_unknown_as_none():
     from k2.konkur_catalog import section_count, syllabus_for
 
-    # درس‌های عمومی هنوز فهرست فصل ندارند (نبود داده، نه فرض).
-    assert section_count("فارسی", 10) is None
+    # درس‌های عمومی: پایهٔ یازدهم هنوز فهرست فصل ندارد (نبود داده، نه فرض).
+    assert section_count("فارسی", 11) is None
+    assert syllabus_for("فارسی", 11) == ()
+    # فارسی دهم و دوازدهم فهرست تأییدشده دارند
+    assert section_count("فارسی", 10) == 18
+    assert section_count("فارسی", 12) == 18
     assert section_count("ورزشه", 10) is None
-    assert syllabus_for("فارسی", 10) == ()
     # شیمی دهم از این پس نام‌دار است (۷/۷/۷ گفتار، فهرست رسمی چاپ ۱۴۰۵).
     assert section_count("شیمی", 10) == 21
     assert section_count("زیست‌شناسی", 10) == 22

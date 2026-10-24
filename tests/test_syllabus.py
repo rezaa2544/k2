@@ -453,10 +453,12 @@ def test_syllabus_data_is_structured_and_honest():
     # شیمی دهم: فهرست رسمی چاپ ۱۴۰۵-۱۴۰۶ تأیید شده (۷/۷/۷ گفتار) — عدد جعلی نیست
     assert [c["sections"] for c in data["courses"]["شیمی"]["10"]] == [7, 7, 7]
     assert sum(len(r["topics"]) for r in data["courses"]["شیمی"]["10"]) == 21
-    # ریاضی دهم/یازدهم و فیزیک دهم/یازدهم هم گفتارهای نام‌دار تأییدشده دارند
+    # ریاضی دهم/یازدهم و فیزیک دهم/یازدهم هم گفتارهای نام‌دار تأییدشده دارند.
+    # فیزیک دهم ۳۰ گفتار دارد چون فصل پنجم «ترمودینامیک» فقط رشتهٔ ریاضی است
+    # و در دادهٔ مشترک می‌ماند (با برچسب group_only).
     for name, grade, total in (
         ("ریاضی", "10", 23), ("ریاضی", "11", 20),
-        ("فیزیک", "10", 23), ("فیزیک", "11", 28),
+        ("فیزیک", "10", 30), ("فیزیک", "11", 28),
     ):
         rows = data["courses"][name][grade]
         assert sum(len(r["topics"]) for r in rows) == total, (name, grade)
@@ -473,17 +475,46 @@ def test_syllabus_data_is_structured_and_honest():
             for i, t in enumerate(row["topics"], start=1):
                 assert t["id"] == f"شیمی|{grade}|{row['no']}|{i}"
                 assert t["verified"] is True
-    # درس‌های عمومی: یک فصل در هر پایه، بدون عدد جعلی گفتار
-    for name in ("فارسی", "عربی", "دینی",
-                 "زبان انگلیسی",
-                 "سلامت و بهداشت",
-                 "هویت اجتماعی"):
+    # درس‌های عمومی: پایه‌های تأییدشده نام‌دارند و پایه‌های بی‌فهرست
+    # «نامشخص» می‌مانند. هیچ عدد یا نام جعلی ندارند.
+    for name, expected in (
+        ("فارسی", {"10": 18, "11": None, "12": 18}),
+        ("عربی", {"10": 8, "11": None, "12": 4}),
+        ("دینی", {"10": 12, "11": 12, "12": None}),
+        ("زبان انگلیسی", {"10": 4, "11": None, "12": 3}),
+        ("سلامت و بهداشت", {"12": 14}),
+        ("هویت اجتماعی", {"12": 10}),
+    ):
         grades = data["courses"][name]
         assert grades, name
-        for grade, rows in grades.items():
-            assert len(rows) == 1
-            assert rows[0]["sections"] is None
-            assert rows[0]["note"]
+        for grade, total in expected.items():
+            rows = grades.get(grade)
+            assert rows is not None, (name, grade)
+            got = sum(len(r.get("topics") or []) for r in rows)
+            if total is None:
+                assert got == 0, (name, grade, got)
+                assert all(r["sections"] is None for r in rows), (name, grade)
+            else:
+                assert got == total, (name, grade, got)
+                for row in rows:
+                    assert row["sections"] == len(row.get("topics") or [])
+                    for i, t in enumerate(row.get("topics") or [], start=1):
+                        assert t["id"] == f"{name}|{grade}|{row['no']}|{i}"
+                        assert t["verified"] is True
+        # پایه‌ای که درس در آن تدریس نمی‌شود وجود ندارد
+        for grade in set(grades) - set(expected):
+            assert grade not in grades, (name, grade)
+    # «سلامت و بهداشت» و «هویت اجتماعی» فقط دوازدهم‌اند و فهرست رسمی دارند
+    for name in ("سلامت و بهداشت", "هویت اجتماعی"):
+        assert set(data["courses"][name]) == {"12"}, name
+        rows = data["courses"][name]["12"]
+        assert sum(len(r.get("topics") or []) for r in rows) > 0
+    # فصل مخصوص رشته (ترمودینامیک) برچسب group_only دارد
+    thermo = [
+        r for r in data["courses"]["فیزیک"]["10"] if r.get("group_only")
+    ]
+    assert len(thermo) == 1
+    assert thermo[0]["group_only"] == "علوم ریاضی و فنی"
     # هیچ نام گفتاری خالی یا الکی در داده نیست
     for course, by_grade in data["courses"].items():
         for grade, rows in by_grade.items():
@@ -1716,17 +1747,32 @@ _SECTIONCOUNTS_SCRIPT = r"""
 // در مقابل، شیمی/ریاضی/فیزیک دهم و یازدهم از این پس فهرست رسمی کتاب
 // چاپ ۱۴۰۵ دارند و باید عدد واقعی (نه صفر، نه حدس) نشان دهند.
 
+// فارسی دهم و دوازدهم فهرست رسمی تأییدشده دارند؛ فارسی یازدهم ندارد.
 function genChapters(grade) { return preview.syllabusChapters('فارسی', Number(grade)) }
 
 try {
-  // درس عمومی: یک فصل در هر پایه، نامشخص
+  // پایهٔ دهم: ۸ فصل با ۱۸ گفتار رسمی — نه «نامشخص»، نه عدد جعلی
   const g10 = genChapters(10);
-  ok(g10.length === 1, 'فارسی دهم یک فصل دارد، یافت: ' + g10.length);
+  ok(g10.length === 8, 'فارسی دهم ۸ فصل دارد، یافت: ' + g10.length);
   const c10 = g10.map(c => preview.chapterSectionCount(c));
-  ok(c10.every(c => c === null),
-     'فصل درس عمومی نامشخص باشد (هیچ عدد جعلی)، یافت: ' + JSON.stringify(c10));
-  ok(genChapters(11).length === 1 && genChapters(12).length === 1,
-     'فارسی در سه پایه یک فصل دارد');
+  ok(c10.every(c => typeof c === 'number' && c > 0),
+     'همهٔ فصل‌های فارسی دهم عدد رسمی دارند، یافت: ' + JSON.stringify(c10));
+  ok(c10.reduce((a, b) => a + b, 0) === 18,
+     'فارسی دهم ۱۸ گفتار دارد، یافت: ' + c10.reduce((a, b) => a + b, 0));
+  ok(g10[0].title === 'ادبیات تعلیمی', 'فصل ۱ فارسی دهم نام رسمی دارد');
+  ok(preview.chapterTopics('فارسی', 10, g10[0]).length === 2,
+     'فصل ۱ فارسی دهم دو گفتار دارد');
+  // پایهٔ یازدهم: فهرست رسمی ندارد → یک فصل نامشخص
+  const g11 = genChapters(11);
+  ok(g11.length === 1, 'فارسی یازدهم یک فصل دارد، یافت: ' + g11.length);
+  ok(preview.chapterSectionCount(g11[0]) === null,
+     'فصل فارسی یازدهم نامشخص است (هیچ عدد جعلی)، یافت: '
+     + JSON.stringify(preview.chapterSectionCount(g11[0])));
+  // پایهٔ دوازدهم: ۸ فصل / ۱۸ گفتار رسمی
+  const g12 = genChapters(12);
+  ok(g12.length === 8, 'فارسی دوازدهم ۸ فصل دارد، یافت: ' + g12.length);
+  ok(g12.map(c => preview.chapterSectionCount(c)).reduce((a, b) => a + b, 0) === 18,
+     'فارسی دوازدهم ۱۸ گفتار دارد');
   // شیمی دهم: فهرست رسمی چاپ ۱۴۰۵ → ۷/۷/۷ گفتار، نه صفر و نه حدس
   const chem10 = preview.syllabusChapters('شیمی', 10).map(c => preview.chapterSectionCount(c));
   ok(chem10.length === 3 && chem10.every(c => c === 7),
@@ -1737,8 +1783,10 @@ try {
   ok(tp && tp.length === 7 && tp[0].id === 'شیمی|10|1|1',
      'گفتارهای شیمی دهم نام‌دار با شناسهٔ پایدار، یافت: ' + (tp ? tp.length : 'null'));
   // ریاضی/فیزیک دهم و یازدهم هم عدد واقعی دارند
+  // فیزیک دهم ۳۰ گفتار دارد چون فصل پنجم «ترمودینامیک» فقط رشتهٔ ریاضی است
+  // و در دادهٔ مشترک می‌ماند (با برچسب group_only).
   for (const [name, grade, total] of [['ریاضی', 10, 23], ['ریاضی', 11, 20],
-    ['فیزیک', 10, 23], ['فیزیک', 11, 28]]) {
+    ['فیزیک', 10, 30], ['فیزیک', 11, 28]]) {
     const cs = preview.syllabusChapters(name, grade).map(c => preview.chapterSectionCount(c));
     ok(cs.reduce((a, b) => a + b, 0) === total,
        name + ' پایه ' + grade + ' ' + total + ' گفتار، یافت: ' + JSON.stringify(cs));
@@ -1772,55 +1820,59 @@ try {
   ok(!/شیمی[\s\S]{0,80}نامشخص/.test(html), 'شیمی دهم برچسب نامشخص نگیرد');
 } catch (e) { failures++; console.log('FAIL overview prompt: ' + e.message) }
 
-// ۲) ورود گروهی برای درس عمومی: عددها ذخیره می‌شوند و خالی «نامشخص» می‌ماند
+// ۲) ورود گروهی برای پایهٔ بی‌فهرست (فارسی یازدهم): عدد ذخیره می‌شود و
+//    خالی گذاشتن «نامشخص» می‌ماند، نه صفر.
 try {
   const st0 = preview.getState();
   st0.syllabusEdits = {};
   persistSilently(st0);
-  preview.sylCountsForm('فارسی', 10);
+  preview.sylCountsForm('فارسی', 11);
   const form = makeEl('form');
   form.id = 'modalForm';
-  const N = genChapters(10).length;
   const fd = new Map();
-  // کاربر فقط پایهٔ دهم را وارد می‌کند؛ ۱۱ و ۱۲ خالی می‌مانند
-  fd.set('sec_10', '17');
+  // کاربر ۱۷ درس برای فارسی یازدهم وارد می‌کند
+  fd.set('sec_11', '17');
   global.__fd = fd;
   preview.submitSylCounts(form);
   const st = preview.getState();
   const edits = st.syllabusEdits || {};
-  ok((edits['فارسی|10|10'] || {}).sections === 17,
-     'عدد وارد‌شده ذخیره شود، یافت: ' + JSON.stringify(edits['فارسی|10|10']));
-  ok((edits['فارسی|11|11'] || {}).sections === undefined,
-     'پایهٔ خالی هیچ ردیفی نگیرد (نه null، نه صفر)');
-  ok(preview.chapterSectionCount(genChapters(10)[0]) === 17,
+  ok((edits['فارسی|11|11'] || {}).sections === 17,
+     'عدد وارد‌شده ذخیره شود، یافت: ' + JSON.stringify(edits['فارسی|11|11']));
+  ok((edits['فارسی|10|10'] || {}).sections === undefined,
+     'پایهٔ تأییدشده هیچ ردیف ویرایش نگیرد');
+  ok(preview.chapterSectionCount(genChapters(11)[0]) === 17,
      'خواندن پس از ذخیره درست باشد');
   // گفتارهای فصل وارد‌شده ساخته می‌شوند
-  const secs = preview.chapterTopics('فارسی', 10, genChapters(10)[0]);
+  const secs = preview.chapterTopics('فارسی', 11, genChapters(11)[0]);
   ok(secs === null || secs.length === 17,
      'گفتارهای ساخته‌شده با عدد وارد‌شده بخوانند: ' + (secs ? secs.length : 'null'));
 } catch (e) { failures++; console.log('FAIL counts save: ' + e.message) }
 
 // ۳) تغییر بعدی: مقدار قبلی عوض می‌شود و پاک‌کردن ممکن است
 try {
-  preview.sylCountsForm('فارسی', 10);
+  preview.sylCountsForm('فارسی', 11);
   const form = makeEl('form');
   form.id = 'modalForm';
   const fd = new Map();
-  fd.set('sec_10', '5');
+  fd.set('sec_11', '5');
   global.__fd = fd;
   preview.submitSylCounts(form);
   const st = preview.getState();
-  ok((st.syllabusEdits['فارسی|10|10'] || {}).sections === 5,
-     'تعداد فصل از ۱۷ به ۵ عوض شود، یافت: ' + (st.syllabusEdits['فارسی|10|10'] || {}).sections);
+  ok((st.syllabusEdits['فارسی|11|11'] || {}).sections === 5,
+     'تعداد فصل از ۱۷ به ۵ عوض شود، یافت: ' + (st.syllabusEdits['فارسی|11|11'] || {}).sections);
   // اکنون خالی می‌کنیم: بازگشت به نامشخص، نه صفر
   const fd2 = new Map();
   global.__fd = fd2;
   preview.submitSylCounts(form);
   const st2 = preview.getState();
-  ok((st2.syllabusEdits['فارسی|10|10'] || {}).sections === null,
-     'خالی کردن، نامشخص شود نه صفر، یافت: ' + (st2.syllabusEdits['فارسی|10|10'] || {}).sections);
-  ok(preview.chapterSectionCount(genChapters(10)[0]) === null,
+  ok((st2.syllabusEdits['فارسی|11|11'] || {}).sections === null,
+     'خالی کردن، نامشخص شود نه صفر، یافت: ' + (st2.syllabusEdits['فارسی|11|11'] || {}).sections);
+  ok(preview.chapterSectionCount(genChapters(11)[0]) === null,
      'پس از خالی کردن، نامشخص بماند');
+  // فصل تأییدشده (فارسی دهم) دست‌نخورده می‌ماند
+  ok(genChapters(10).length === 8
+     && preview.chapterSectionCount(genChapters(10)[0]) === 2,
+     'فهرست رسمی فارسی دهم با ویرایش یازدهم عوض نشود');
 } catch (e) { failures++; console.log('FAIL counts edit: ' + e.message) }
 """
 
@@ -2311,7 +2363,8 @@ try {
 try {
   const st0 = preview.getState();
   st0.subjects = [{ id: 'g1', name: 'فارسی', examCoefficient: null, selected: true },
-                  { id: 'g2', name: 'هویت اجتماعی', examCoefficient: null, selected: true }];
+                  { id: 'g2', name: 'هویت اجتماعی', examCoefficient: null, selected: true },
+                  { id: 'g3', name: 'دینی', examCoefficient: null, selected: true }];
   st0.books = [];
   st0.sections = {}; st0.syllabusEdits = {}; st0.topicTitles = {};
   persistSilently(st0);
@@ -2319,10 +2372,17 @@ try {
   const html = pageHtml();
   ok(html.includes('فارسی'), 'درس عمومی فارسی در بانک دروس دیده شود');
   ok(html.includes('هویت اجتماعی'), 'درس عمومی هویت اجتماعی در بانک دروس دیده شود');
-  ok(html.includes('تعداد گفتار نامشخص'), 'تعداد گفتار درس عمومی «نامشخص» باشد، نه عدد جعلی');
-  ok(html.includes('ورود تعداد گفتارها'), 'برای درس عمومی دکمهٔ ورود تعداد گفتار باشد');
-  // هیچ عدد گفتار جعلی در کارت درس عمومی نباشد
-  ok(!/گفتار ارزیابی‌شده/.test(html), 'برای درس عمومی شمارش گفتار ساخته نشود');
+  ok(html.includes('دینی'), 'درس عمومی دینی در بانک دروس دیده شود');
+  // فارسی دهم و دوازدهم فهرست رسمی تأییدشده دارند (هر کدام ۸ فصل / ۱۸ درس)
+  ok(html.includes('0 از 18 گفتار ارزیابی‌شده'), 'فارسی دهم ۱۸ گفتار رسمی دارد');
+  ok((html.match(/0 از 18 گفتار ارزیابی‌شده/g) || []).length === 2,
+     'فارسی در دو پایهٔ دهم و دوازدهم فهرست رسمی دارد');
+  // پایهٔ بی‌فهرست (فارسی یازدهم) هنوز «نامشخص» است و دکمهٔ ورود دارد
+  ok(html.includes('تعداد گفتار نامشخص'), 'پایهٔ بی‌فهرست «نامشخص» می‌ماند، نه عدد جعلی');
+  ok(html.includes('ورود تعداد گفتارها'), 'برای پایهٔ بی‌فهرست دکمهٔ ورود تعداد گفتار باشد');
+  ok(html.includes('هیچ عددی حدس نمی‌زند'), 'متن صداقت دربارهٔ حدس زدن عدد بیاید');
+  // هویت اجتماعی فقط دوازدهم است و ۱۰ گفتار دارد
+  ok(html.includes('0 از 10 گفتار ارزیابی‌شده'), 'هویت اجتماعی ۱۰ گفتار رسمی دارد');
 } catch (e) { failures++; console.log('FAIL general subjects: ' + e.message) }
 
 // ---- د) شیمی دهم گفتارهای نام‌دار رسمی دارد و صفر فرض نمی‌شود ----
@@ -2342,7 +2402,7 @@ try {
      'شیمی دهم دیگر برچسب «نامشخص» نگیرد');
   openTree('شیمی', 10);
   html = pageHtml();
-  ok(html.includes('کیهان، زادگاه الفبای هستی'), 'فصل ۱ شیمی دهم در نمای درختی دیده شود');
+  ok(html.includes('کیهان زادگاه عنصرها'), 'فصل ۱ شیمی دهم در نمای درختی دیده شود');
   ok(html.includes('رد پای گازها در زندگی'), 'فصل ۲ شیمی دهم در نمای درختی دیده شود');
   ok(html.includes('عنصرها چگونه پدید آمدند؟'), 'گفتار ۱ فصل ۱ با نام رسمی دیده شود');
   ok(html.includes('استوکیومتری واکنش‌ها'), 'گفتار ۷ فصل ۲ با نام رسمی دیده شود');

@@ -87,12 +87,21 @@ class RecordAttemptDialog(QDialog):
         btn_attach = QPushButton("انتخاب تصویر/فایل نتیجهٔ آزمون")
         btn_attach.setToolTip(
             "تصویر کارت پاسخ یا فایل نتیجه را به پوشهٔ محلی برنامه کپی می‌کند. "
-            "برنامه تصویر را نمی‌خوانَد؛ اعداد را خودت وارد می‌کنی و پیوست فقط "
-            "منبع اعداد را نگه می‌دارد."
+            "خواندن کارت پاسخ آفلاین است و تصویر هیچ‌جا فرستاده نمی‌شود؛ پیوست "
+            "فقط منبع اعداد را نگه می‌دارد."
         )
         btn_attach.clicked.connect(self._pick_attachment)
         form.addRow("پیوست (اختیاری):", self.attachment_label)
         form.addRow("", btn_attach)
+
+        btn_card = QPushButton("خواندن کارت پاسخ")
+        btn_card.setToolTip(
+            "تصویر کارت پاسخ را می‌خواند و گزینهٔ پر‌شدهٔ هر سؤال را نشان "
+            "می‌دهد. هیچ سؤالی حدس زده نمی‌شود و قبل از ثبت همه را تأیید "
+            "می‌کنی. خواندن کامل آفلاین است."
+        )
+        btn_card.clicked.connect(self._read_answer_card)
+        form.addRow("", btn_card)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText("ثبت")
@@ -113,6 +122,43 @@ class RecordAttemptDialog(QDialog):
         if path:
             self.attachment_label.setText(Path(path).name)
             self.attachment_path = path
+
+    def _read_answer_card(self) -> None:
+        """کارت پاسخ را می‌خواند و اعداد را در فرم می‌گذارد (با تأیید کاربر)."""
+        from .answer_card import AnswerCardDialog
+
+        dialog = AnswerCardDialog(self.service, self)
+        if dialog.exec() != QDialog.Accepted or dialog.result is None:
+            return
+        result = dialog.result
+        total = int(result.get("total") or 0)
+        if not total:
+            notify(self, "عددی ثبت نشد", "هیچ سؤالی از کارت خوانده نشد.")
+            return
+        correct = int(result.get("correct") or result.get("clean") or 0)
+        wrong = int(result.get("wrong") or 0)
+        blank = int(result.get("blank") or 0)
+        if correct + wrong + blank > total:
+            # جمع بیشتر از کل یعنی داده ناسازگار است؛ اجازهٔ ثبت نمی‌دهیم
+            QMessageBox.warning(
+                self,
+                "اعداد ناسازگار",
+                "جمع درست و غلط و نزده از تعداد سؤال بیشتر است. جدول را "
+                "اصلاح کن.",
+            )
+            return
+        self.total_spin.setValue(total)
+        self.correct_spin.setValue(correct)
+        self.wrong_spin.setValue(wrong)
+        self.blank_spin.setValue(blank)
+        if not self.name_edit.text().strip():
+            self.name_edit.setText("آزمون با کارت پاسخ خوانده‌شده")
+        notify(
+            self,
+            "اعداد از کارت خوانده شد",
+            f"{total} سؤال · {correct} درست · {wrong} غلط · {blank} نزده. "
+            "قبل از ثبت یک بار جدول را بررسی کن.",
+        )
 
     def _accept(self) -> None:
         from ...domain.models import ExamQuestion

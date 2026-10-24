@@ -1032,10 +1032,37 @@ class AdvisorService:
             return sorted(syllabus.general_grades(subject))
         return []
 
-    def syllabus_chapter_views(self, subject: str, grade: int) -> list[syllabus.ChapterView]:
-        """فصل‌های یک درس/پایه با ادغام ویرایش‌های کاربر."""
+    def syllabus_chapter_views(
+        self, subject: str, grade: int, group: Optional[str] = None
+    ) -> list[syllabus.ChapterView]:
+        """فصل‌های یک درس/پایه با ادغام ویرایش‌های کاربر.
+
+        فصل‌هایی که فقط برای یک رشتهٔ دیگر معنا دارند (مثل «ترمودینامیک» در
+        فیزیک دهم که فقط رشتهٔ ریاضی است) وقتی رشتهٔ کاربر شناخته شده باشد
+        کنار گذاشته می‌شوند؛ وگرنه با برچسب صریح می‌مانند تا کاربر گمان نکند
+        باید بخواند.
+        """
         edits = self.repo.list_syllabus_chapter_edits(subject, grade)
-        return syllabus.chapters(subject, grade, edits)
+        views = syllabus.chapters(subject, grade, edits)
+        if group is None:
+            profile = self.active_exam_profile()
+            group = profile.group_name if profile else ""
+        if group:
+            views = [v for v in views if v.applies_to(group)]
+        return views
+
+    def syllabus_hidden_chapters(
+        self, subject: str, grade: int, group: Optional[str] = None
+    ) -> list[syllabus.ChapterView]:
+        """فصل‌هایی که به‌خاطر اختصاص داشتن به رشتهٔ دیگر کنار رفتند."""
+        edits = self.repo.list_syllabus_chapter_edits(subject, grade)
+        views = syllabus.chapters(subject, grade, edits)
+        if group is None:
+            profile = self.active_exam_profile()
+            group = profile.group_name if profile else ""
+        if not group:
+            return []
+        return [v for v in views if not v.applies_to(group)]
 
     def syllabus_section_views(
         self, subject: str, grade: int, chapter_no: int
@@ -1146,11 +1173,18 @@ class AdvisorService:
         return edit
 
     def syllabus_progress(
-        self, subject: Optional[str] = None, grade: Optional[int] = None
+        self,
+        subject: Optional[str] = None,
+        grade: Optional[int] = None,
+        group: Optional[str] = None,
     ) -> syllabus.SyllabusProgress:
-        """خلاصهٔ پوشش سرفصل برای گزارش و «کار بعدی»."""
+        """خلاصهٔ پوشش سرفصل برای گزارش و «کار بعدی».
+
+        فصل‌های مخصوص رشتهٔ دیگر (مثل ترمودینامیک) وقتی رشتهٔ کاربر معلوم
+        باشد شمرده نمی‌شوند؛ وگرنه عدد پوشش بزرگ‌تر از واقعیت می‌شود.
+        """
         if subject is not None and grade is not None:
-            views = self.syllabus_chapter_views(subject, grade)
+            views = self.syllabus_chapter_views(subject, grade, group)
             records = self.repo.list_syllabus_sections(subject, grade)
             return syllabus.progress(
                 subject, grade, chapter_views=views, records=records
@@ -1160,7 +1194,7 @@ class AdvisorService:
         views = []
         for name in self.syllabus_courses():
             for grade in self.syllabus_grades(name):
-                views.extend(self.syllabus_chapter_views(name, grade))
+                views.extend(self.syllabus_chapter_views(name, grade, group))
         records = self.repo.list_syllabus_sections()
         return syllabus.progress("", 0, chapter_views=views, records=records)
 
