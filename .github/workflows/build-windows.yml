@@ -63,17 +63,27 @@ jobs:
       - name: Verify the application icon is embedded in the EXE
         shell: pwsh
         run: |
-          # «مسیر آیکن داده شده» به‌معنای «آیکن روی EXE نشسته» نیست. اگر فایل
-          # نباشد یا PyInstaller آن را جا ندهد، build موفق می‌شود ولی کاربر
-          # آیکن پیش‌فرض را می‌بیند. پس خودِ منابع PE را می‌خوانیم.
+          # «مسیر آیکن داده شده» به‌معنای «آیکن روی EXE نشسته» نیست. اگر فایل نباشد
+          # یا PyInstaller آن را جا ندهد، build موفق می‌شود ولی کاربر آیکن پیش‌فرض را
+          # می‌بیند. پس خودِ منابع PE را می‌خوانیم.
           $exe = "packaging\output\K2\K2.exe"
           $ico = "src\k2\ui\assets\k2.ico"
           if (-not (Test-Path $exe)) { throw "EXE not found: $exe" }
           if (-not (Test-Path $ico)) { throw "icon not found: $ico" }
-          python packaging\verify_exe_icon.py $exe $ico
-          if ($LASTEXITCODE -ne 0) {
-            throw "آیکن برنامه داخل EXE نشسته نیست (exit=$LASTEXITCODE)."
+          $size = (Get-Item $exe).Length
+          Write-Host "::notice::icon check: EXE=$exe size=$size ICO=$ico"
+          # خروجی اسکریپت را می‌گیریم تا در صورت شکست، علت واقعی در UI Actions دیده شود.
+          $output = & python packaging\verify_exe_icon.py $exe $ico 2>&1
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            foreach ($line in $output) {
+              $safe = "$line" -replace "[\r\n]+", " "
+              Write-Host "::error::$safe"
+            }
+            throw "آیکن برنامه داخل EXE نشسته نیست (exit=$code)."
           }
+          foreach ($line in $output) { Write-Host "$line" }
+          Write-Host "آیکن برنامه واقعاً داخل EXE نشسته است."
       - name: Verify the built EXE actually runs
         shell: pwsh
         run: |
