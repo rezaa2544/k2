@@ -35,6 +35,8 @@ packaging/output/
 packaging/work/
 release/
 *.exe
+# نصب‌کنندهٔ ثبت‌شدهٔ مخزن باید قابل commit باشد.
+!downloads/*.exe
 *.spec.lock
 
 # --- سیستم‌عامل و ویرایشگر ---

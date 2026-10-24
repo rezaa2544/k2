@@ -121,12 +121,32 @@ if ($smokeExit -ne 0) { throw "اجرای EXE با exit=$smokeExit شکست خو
 if (-not (Test-Path $SmokeDb)) { throw "EXE پایگاه دادهٔ smoke test را نساخت." }
 Write-Ok "EXE اجرا شد، پایگاه داده ساخت و کد خروج صفر داد."
 
+Write-Step "ساخت نصب‌کنندهٔ استاندارد (Inno Setup)"
+# نصب‌کننده گام اجباری است: کاربر نباید ZIP را باز کند و دنبال K2.exe بگردد.
+$Iscc = Get-Command iscc -ErrorAction SilentlyContinue
+if (-not $Iscc) {
+    foreach ($candidate in @(
+        "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+        "$env:ProgramFiles\Inno Setup 6\ISCC.exe")) {
+        if (Test-Path $candidate) { $Iscc = Get-Item $candidate; break }
+    }
+}
+if (-not $Iscc) { throw "Inno Setup پیدا نشد. از https://jrsoftware.org/isdl.php نصب کنید." }
+Write-Ok "Inno Setup: $($Iscc.Source)"
+& $Iscc.Source (Join-Path $RepoRoot 'packaging\k2_installer.iss')
+if ($LASTEXITCODE -ne 0) { throw "ساخت نصب‌کننده با exit=$LASTEXITCODE شکست خورد." }
+$Setup = Get-ChildItem -Path $OutputDir -Filter 'K2-Setup-*.exe' |
+    Sort-Object LastWriteTime | Select-Object -Last 1
+if (-not $Setup) { throw "فایل نصب‌کننده ساخته نشد." }
+Write-Ok "نصب‌کننده ساخته شد: $($Setup.FullName) ($($Setup.Length) بایت)"
+
 Write-Step "خلاصه"
 Write-Host "خروجی : $OutputDir"
 Write-Host "EXE   : $Exe"
+Write-Host "نصب‌کننده: $($Setup.FullName)"
 Write-Host "اندازه : $((Get-Item $Exe).Length) بایت"
 Write-Host "`nگام‌های باقی‌مانده برای انتشار:"
 Write-Host "  1) امضای دیجیتال کد با گواهی Code Signing (اختیاری ولی توصیه‌شده)"
-Write-Host "  2) ساخت نصب‌کننده با Inno Setup از همین پوشه (اختیاری)"
+Write-Host "  2) آزمون نصب‌کنندهٔ ساخته‌شده روی ویندوز تمیز (بدون پایتون)"
 Write-Host "  3) آزمون روی ویندوز تمیز ۱۰/۱۱ (بدون پایتون نصب‌شده)"
 Write-Host "  4) انتشار در GitHub Releases"
