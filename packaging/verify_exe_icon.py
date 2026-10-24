@@ -460,35 +460,51 @@ def _annotate(level: str, message: str) -> None:
     print(f"::{level}::{one_line}")
 
 
-def _describe(exe: Path) -> list[str]:
-    """یک نگاه خلاصه به ساختار PE برای تشخیص عیب در CI."""
+def _diagnose(exe: Path, ico: Path) -> list[str]:
+    """چند خط خلاصه برای تشخیص عیب در CI.
+
+    Actions فقط ۱۰ annotation برای هر گام نشان می‌دهد، پس این تابع عمداً
+    خلاصه است: جدول بخش‌ها، منابع پیدا‌شده، و نتیجهٔ مقایسه در چند خط.
+    """
+    lines: list[str] = []
     try:
-        pe = PeFile(exe.read_bytes())
+        ico_frames = read_ico(ico)
     except Exception as error:  # noqa: BLE001
-        return [f"خواندن PE نشد: {error!r}"]
-    lines = [f"size={len(pe.blob)} sections={len(pe.sections)}"]
-    for section in pe.sections:
-        lines.append(
-            f"section {section.name} va=0x{section.virtual_address:x} "
-            f"vs=0x{section.virtual_size:x} raw=0x{section.raw_size:x} "
-            f"ptr=0x{section.raw_pointer:x}"
-        )
-    lines.append(f"resource_rva=0x{pe.resource_base:x}")
+        ico_frames = []
+        lines.append(f"ico read failed: {error!r}")
     try:
+        blob = exe.read_bytes()
+        pe = PeFile(blob)
         entries = pe.resources()
     except Exception as error:  # noqa: BLE001
-        lines.append(f"resources() failed: {error!r}")
+        lines.append(f"pe read failed: {error!r}")
         return lines
-    counts: dict[int, int] = {}
-    for entry in entries:
-        counts[entry.resource_type] = counts.get(entry.resource_type, 0) + 1
-    lines.append(f"entries={len(entries)} by_type={counts}")
-    for entry in entries:
-        lines.append(
-            f"res type={entry.resource_type} name={entry.name} "
-            f"lang={entry.language} size={entry.size} data={len(entry.data)} "
-            f"rva=0x{entry.rva:x}"
+
+    lines.append(f"size={len(blob)} sections={len(pe.sections)}")
+    lines.append(
+        "sections="
+        + ",".join(
+            f"{sec.name}:0x{sec.virtual_address:x}/0x{sec.virtual_size:x}"
+            f"/0x{sec.raw_size:x}/0x{sec.raw_pointer:x}"
+            for sec in pe.sections
         )
+    )
+    lines.append(f"resource_rva=0x{pe.resource_base:x}")
+    icons = [e for e in entries if e.resource_type == RT_ICON]
+    groups = [e for e in entries if e.resource_type == RT_GROUP_ICON]
+    lines.append(f"entries={len(entries)} icons={len(icons)} groups={len(groups)}")
+    lines.append(f"exe_icon_sizes={[e.size for e in icons]}")
+    lines.append(f"ico_frames={len(ico_frames)} ico_sizes={[f.size for f in ico_frames]}")
+
+    exe_digests = {sha256(e.data).hexdigest() for e in icons}
+    matched = sum(1 for f in ico_frames if f.digest in exe_digests)
+    lines.append(f"exact_byte_matches={matched}/{len(ico_frames)}")
+
+    for group in groups:
+        declared = sorted(_parse_group_icon(group.data))
+        lines.append(f"group_len={len(group.data)} declared={declared}")
+    expected = sorted({(f.width, f.height, f.bit_count, f.size) for f in ico_frames})
+    lines.append(f"expected={expected}")
     return lines
 
 
@@ -519,12 +535,14 @@ def main(argv: list[str] | None = None) -> int:
         import traceback
 
         _annotate("error", f"بررسی آیکن با خطای غیرمنتظره متوقف شد: {error!r}")
+        for line in _diagnose(args.exe, args.ico):
+            _annotate("error", line)
         print(traceback.format_exc(), file=sys.stderr)
         return 1
 
     if os.environ.get("GITHUB_ACTIONS"):
         # تشخیص عیب‌یابی: بدون این، «CI قرمز است» تنها اطلاعات ممکن بود.
-        for line in _describe(args.exe):
+        for line in _diagnose(args.exe, args.ico):
             _annotate("notice", line)
 
     print(f"EXE            : {report.exe}")
