@@ -18,7 +18,7 @@ permissions:
 jobs:
   test-and-build:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
 
     # روی ویندوز، وقتی stdout یک لوله یا فایل است (و نه کنسول)، پایتون از
     # encoding محلی استفاده می‌کند که روی runner cp1252 است و متن فارسی
@@ -114,6 +114,14 @@ jobs:
       - name: Signing pipeline self-test (ephemeral certificate)
         shell: pwsh
         run: |
+          # خط لولهٔ امضا را واقعاً می‌آزماییم، بی‌آنکه فایل منتشرشده را با گواهی
+          # خودامضا آلوده کنیم: گواهی موقت می‌سازیم، یک کپی از EXE را امضا و
+          # راستی‌آزمایی می‌کنیم، بعد همه چیز را پاک می‌کنیم.
+          #
+          # هر مرحله یک ::notice:: می‌گذارد و هر فرمان بیرونی با مهلت زمانی اجرا
+          # می‌شود، تا اگر چیزی آویزان شد کل job را برای ۴۵ دقیقه نگیرد.
+          function Note($m) { Write-Host "::notice::$m" }
+
           function Get-Signtool {
             $cmd = Get-Command signtool -ErrorAction SilentlyContinue
             if ($cmd) { return $cmd.Source }
@@ -128,13 +136,34 @@ jobs:
             }
             return $null
           }
+
+          Note "signing self-test: locating signtool"
           $signtool = Get-Signtool
           if (-not $signtool) { throw "signtool پیدا نشد." }
-          Write-Host "signtool: $signtool"
+          Note "signing self-test: signtool=$signtool"
 
-          # خط لولهٔ امضا را واقعاً می‌آزماییم، بی‌آنکه فایل منتشرشده را با
-          # گواهی خودامضا آلوده کنیم: گواهی موقت می‌سازیم، یک کپی از EXE را
-          # امضا و راستی‌آزمایی می‌کنیم، بعد همه چیز را پاک می‌کنیم.
+          function Invoke-WithTimeout {
+            param(
+              [Parameter(Mandatory=$true)][string]$FilePath,
+              [string[]]$ArgumentList = @(),
+              [int]$TimeoutSeconds = 240
+            )
+            $arguments = ($ArgumentList | ForEach-Object { $_ }) -join " "
+            Note "run: $FilePath $arguments"
+            $process = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList `
+              -PassThru -WindowStyle Hidden
+            $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+            while (-not $process.HasExited -and (Get-Date) -lt $deadline) {
+              Start-Sleep -Milliseconds 500
+            }
+            if (-not $process.HasExited) {
+              $process.Kill()
+              throw "$FilePath بیش از $TimeoutSeconds ثانیه طول کشید و متوقف شد."
+            }
+            return $process.ExitCode
+          }
+
+          Note "signing self-test: creating an ephemeral self-signed certificate"
           $cert = New-SelfSignedCertificate `
             -Type CodeSigningCert `
             -Subject "CN=K2 CI Self-Test" `
@@ -143,24 +172,37 @@ jobs:
             -FriendlyName "K2 CI self-test" `
             -CertStoreLocation Cert:\CurrentUser\My `
             -NotAfter (Get-Date).AddHours(2)
+          Note "signing self-test: certificate created thumbprint=$($cert.Thumbprint)"
+
           try {
+            # گواهی را به ریشهٔ موقت اضافه می‌کنیم تا «verify /pa» زنجیره را پیدا کند.
             $rootStore = New-Object System.Security.Cryptography.X509Certificates.X509Store(
               "Root", "CurrentUser")
             $rootStore.Open("ReadWrite")
             $rootStore.Add($cert)
             $rootStore.Close()
+            Note "signing self-test: certificate trusted for this user"
 
             $sample = Join-Path $env:RUNNER_TEMP "signing-selftest.exe"
             Copy-Item "packaging\output\K2\K2.exe" $sample -Force
             $pfx = Join-Path $env:RUNNER_TEMP "signing-selftest.pfx"
+            Note "signing self-test: exporting a throwaway PFX"
             Export-PfxCertificate -Cert $cert -FilePath $pfx `
-              -Password (ConvertTo-SecureString -String "selftest" -Force -AsPlainText) | Out-Null
+              -Password (ConvertTo-SecureString -String "selftest" -Force -AsPlainText) |
+              Out-Null
 
-            & $signtool sign /f $pfx /p "selftest" /fd SHA256 $sample
-            if ($LASTEXITCODE -ne 0) { throw "signtool sign با exit=$LASTEXITCODE شکست خورد." }
+            $signExit = Invoke-WithTimeout -FilePath $signtool `
+              -ArgumentList @("sign", "/f", $pfx, "/p", "selftest", "/fd", "SHA256", $sample) `
+              -TimeoutSeconds 240
+            if ($signExit -ne 0) { throw "signtool sign با exit=$signExit شکست خورد." }
+            Note "signing self-test: signtool sign succeeded"
 
-            & $signtool verify /pa $sample
-            if ($LASTEXITCODE -ne 0) { throw "signtool verify با exit=$LASTEXITCODE شکست خورد." }
+            $verifyExit = Invoke-WithTimeout -FilePath $signtool `
+              -ArgumentList @("verify", "/pa", $sample) -TimeoutSeconds 240
+            if ($verifyExit -ne 0) {
+              throw "signtool verify با exit=$verifyExit شکست خورد."
+            }
+            Note "signing self-test: signtool verify succeeded"
 
             $signature = Get-AuthenticodeSignature $sample
             if ($signature.Status -ne "Valid") {
@@ -168,15 +210,18 @@ jobs:
             }
             Write-Host "خط لولهٔ امضا (signtool sign + verify) کار می‌کند."
           } finally {
-            Remove-Item (Join-Path $env:RUNNER_TEMP "signing-selftest*") -Force -ErrorAction SilentlyContinue
+            Remove-Item (Join-Path $env:RUNNER_TEMP "signing-selftest*") -Force `
+              -ErrorAction SilentlyContinue
             if ($cert) {
-              Remove-Item "Cert:\CurrentUser\My\$($cert.Thumbprint)" -Force -ErrorAction SilentlyContinue
+              Remove-Item "Cert:\CurrentUser\My\$($cert.Thumbprint)" -Force `
+                -ErrorAction SilentlyContinue
               $rootStore = New-Object System.Security.Cryptography.X509Certificates.X509Store(
                 "Root", "CurrentUser")
               $rootStore.Open("ReadWrite")
               $rootStore.Remove($cert)
               $rootStore.Close()
             }
+            Note "signing self-test: temporary certificate and copy removed"
           }
       - name: Sign artifacts for release (only when a certificate is configured)
         id: sign
