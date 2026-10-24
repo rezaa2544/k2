@@ -64,15 +64,66 @@ weights = {
 # سرفصل درس‌ها (پایه ← فصل ← گفتار) — دادهٔ اولیه تأییدنشده
 # ---------------------------------------------------------------------------
 #: ساختار سرفصل برای پیش‌نمایش: درس ← پایه ← فهرست فصل‌ها.
+#: هر فصل می‌تواند فهرست ``topics`` داشته باشد؛ شناسهٔ هر گفتار همان کلید
+#: ذخیره‌سازی («درس|پایه|فصل|گفتار») است تا وضعیت étude مستقیماً به آن بچسبد.
 syllabus: dict[str, dict[str, list[dict]]] = {}
 for _course, _by_grade in SYLLABUS_BY_COURSE.items():
-    syllabus[_course] = {
-        str(_grade): [
-            {"no": _ch["no"], "title": _ch["title"], "sections": _ch["sections"]}
-            for _ch in _chapters
+    syllabus[_course] = {}
+    for _grade, _chapters in sorted(_by_grade.items()):
+        _rows = []
+        for _ch in _chapters:
+            _row = {"no": _ch["no"], "title": _ch["title"], "sections": _ch["sections"]}
+            _topics = _ch.get("topics")
+            if _topics:
+                # شناسهٔ پایدار = کلید ذخیره‌سازی؛ renumber نشدن چون شمارهٔ
+                # گفتار فقط با افزودن/حذف صریح کاربر تغییر می‌کند.
+                _row["topics"] = [
+                    {
+                        "id": "%s|%s|%s|%s" % (_course, _grade, _ch["no"], _i),
+                        "title": _title,
+                        "verified": bool(_verified),
+                    }
+                    for _i, (_title, _verified) in enumerate(_topics, start=1)
+                ]
+                _row["sections"] = len(_topics)
+            _rows.append(_row)
+        syllabus[_course][str(_grade)] = _rows
+
+#: درس‌های عمومی و مدرسه: در اطلاعیهٔ کنکور سهم مستقیم ندارند، ولی کاربر
+#: باید بتواند آن‌ها را هم در همین درخت ببیند و وضعیتشان را ثبت کند.
+#: تعداد درس/گفتار برای اکثر آن‌ها تأییدنشده است؛ عددی ساخته نمی‌شود و
+#: کاربر خودش از کتاب سال ۱۴۰۶ وارد می‌کند.
+_GENERAL_GRADES = {
+    "فارسی": (10, 11, 12),
+    "عربی": (10, 11, 12),
+    "دینی": (10, 11, 12),
+    "زبان انگلیسی": (10, 11, 12),
+    "سلامت و بهداشت": (10,),
+    "هویت اجتماعی": (10,),
+}
+_GENERAL_BOOK_LABEL = {
+    "فارسی": "فارسی",
+    "عربی": "عربی",
+    "دینی": "دین و زندگی",
+    "زبان انگلیسی": "زبان انگلیسی",
+    "سلامت و بهداشت": "سلامت و بهداشت",
+    "هویت اجتماعی": "هویت اجتماعی",
+}
+for _gsub, _ginfo in GENERAL_SUBJECT_SYLLABUS.items():
+    if _gsub in syllabus:
+        continue
+    _ggrades = _GENERAL_GRADES.get(_gsub, (10, 11, 12))
+    _gmap: dict[str, list[dict]] = {}
+    for _g in _ggrades:
+        _gmap[str(_g)] = [
+            {
+                "no": _g,
+                "title": "%s · پایهٔ %s" % (_GENERAL_BOOK_LABEL.get(_gsub, _gsub), _g),
+                "sections": None,
+                "note": _ginfo.get("note", ""),
+            }
         ]
-        for _grade, _chapters in sorted(_by_grade.items())
-    }
+    syllabus[_gsub] = _gmap
 _syllabus_meta = {
     "status": SYLLABUS_STATUS,
     "statusLabel": SYLLABUS_STATUS_LABEL,
