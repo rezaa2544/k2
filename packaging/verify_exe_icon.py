@@ -28,6 +28,7 @@ PyInstaller بازکدوانی کرد، به مقایسهٔ تصویر رمزگ�
 from __future__ import annotations
 
 import argparse
+import os
 import struct
 import sys
 from dataclasses import dataclass, field
@@ -325,6 +326,63 @@ def _decode_fingerprint(frame: bytes) -> tuple[int, int, str] | None:
         return None
 
 
+def _parse_group_icon(data: bytes) -> set[tuple[int, int, int, int]]:
+    """اندازه‌های اعلام‌شدهٔ ``RT_GROUP_ICON`` را به شکل
+    ``(width, height, bit_count, declared_size)`` برمی‌گرداند.
+
+    نکتهٔ مهم: قالبِ **داخل منبع** با قالبِ **داخل فایل ‎.ico‎** یکی نیست.
+
+    * فایل ``.ico`` → ``ICONDIRENTRY`` با ``_format_ = "bbbbhhii"`` یعنی
+      **۱۶ بایت**، چون فیلد آخر ``dwImageOffset`` یک ``DWORD`` است.
+    * منبع ``RT_GROUP_ICON`` → ``GRPICONDIRENTRY`` با
+      ``_format_ = "bbbbhhih"`` یعنی **۱۴ بایت**، چون آخرین فیلد
+      ``nID`` یک ``WORD`` است.
+
+    PyInstaller در ``PyInstaller/utils/win32/icon.py`` هم دقیقاً همین
+    ``GRPICONDIRENTRY`` را می‌سازد. پس اگر گام ۱۶ بایت فرض شود، هر entry
+    بعد از اول جابه‌جا خوانده می‌شود و اندازه‌ها خراب می‌شوند.
+
+    پس گام را از روی طول خودِ منبع تشخیص می‌دهیم و هر دو قالب را
+    می‌پذیریم: ``6 + n*14`` برای منبع ویندوزی و ``6 + n*16`` برای هر
+    ابزاری که اشتباهاً قالب فایلی را بنویسد.
+    """
+    if len(data) < 6:
+        return set()
+    count = struct.unpack_from("<H", data, 4)[0]
+    if count <= 0:
+        return set()
+
+    for stride in (14, 16):
+        if 6 + count * stride > len(data):
+            continue
+        found = _read_group_entries(data, count, stride)
+        if found and len(found) == count:
+            return found
+    return set()
+
+
+def _read_group_entries(
+    data: bytes, count: int, stride: int
+) -> set[tuple[int, int, int, int]]:
+    """``count`` تا entry را با گام ``stride`` می‌خواند و معتبر بودنشان را می‌سنجد."""
+    found: set[tuple[int, int, int, int]] = set()
+    for index in range(count):
+        base = 6 + index * stride
+        if base + stride > len(data):
+            return set()
+        width, height, _colors, _reserved, _planes, bits, size = struct.unpack_from(
+            "<BBBBHHI", data, base
+        )
+        del _colors, _reserved, _planes
+        # bWidth/bHeight صفر یعنی ۲۵۶ (ICO بزرگ‌تر از ۲۵۵ را صفر می‌گذارد).
+        if not (0 <= width <= 256 and 0 <= height <= 256):
+            return set()
+        if not (0 < size <= 4 * 1024 * 1024):
+            return set()
+        found.add((width or 256, height or 256, bits, size))
+    return found
+
+
 def verify(exe: Path, ico: Path) -> IconReport:
     ico_frames = read_ico(ico)
     pe = PeFile(exe.read_bytes())
@@ -367,21 +425,9 @@ def verify(exe: Path, ico: Path) -> IconReport:
             )
 
     # ۳) اندازه‌های اعلام‌شده در RT_GROUP_ICON باید با فایل ICO بخواند.
-    declared: set[tuple[int, int]] = set()
+    declared: set[tuple[int, int, int, int]] = set()
     for entry in group_icons:
-        if len(entry.data) < 6:
-            continue
-        count = struct.unpack_from("<H", entry.data, 4)[0]
-        for index in range(count):
-            # ICONDIRENTRY دقیقاً ۱۶ بایت است (BBBB + HH + II + II).
-            base = 6 + index * 16
-            if base + 16 > len(entry.data):
-                continue
-            width, height, _colors, _reserved, _planes, bits, size, _rid = struct.unpack_from(
-                "<BBBBHHII", entry.data, base
-            )
-            del _colors, _reserved, _planes, _rid
-            declared.add((width or 256, height or 256, bits, size))
+        declared |= _parse_group_icon(entry.data)
     expected = {(f.width, f.height, f.bit_count, f.size) for f in ico_frames}
     missing = expected - declared
     if missing:
@@ -401,6 +447,19 @@ def verify(exe: Path, ico: Path) -> IconReport:
     )
 
 
+def _annotate(level: str, message: str) -> None:
+    """یک پیام را در UI Actions نشان می‌دهد (اگر در GitHub Actions باشیم).
+
+    لاگ خام گردش‌کار خوانده نشدن است؛ این‌طور خطا مستقیم روی Pull Request
+    دیده می‌شود.
+    """
+    if not os.environ.get("GITHUB_ACTIONS"):
+        return
+    # ::error:: / ::warning:: / ::notice:: — پیام باید تک‌خطی باشد.
+    one_line = " ".join(str(message).split())
+    print(f"::{level}::{one_line}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("exe", type=Path, help="فایل EXE ساختهٔ PyInstaller")
@@ -414,7 +473,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"فایل آیکن پیدا نشد: {args.ico}", file=sys.stderr)
         return 2
 
-    report = verify(args.exe, args.ico)
+    try:
+        report = verify(args.exe, args.ico)
+    except IconVerificationError as error:
+        # خطاهای ساختاری (فایل PE نیست، بخش منابع نیست، …) هم باید در UI
+        # Actions دیده شوند، نه فقط در لاگ خام.
+        _annotate("error", str(error))
+        print(f"خطا: {error}", file=sys.stderr)
+        return 1
+
     print(f"EXE            : {report.exe}")
     print(f"ICO            : {report.ico}")
     print(f"RT_ICON        : {report.frames}")
@@ -422,6 +489,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"تطابق بایت‌به‌بایت: {report.exact_matches}")
     print(f"تطابق تصویری   : {report.decoded_matches}")
     for problem in report.mismatches:
+        _annotate("error", problem)
         print(f"خطا: {problem}", file=sys.stderr)
     if not report.ok:
         return 1

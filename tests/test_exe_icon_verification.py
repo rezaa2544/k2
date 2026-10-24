@@ -44,11 +44,25 @@ def _align(value: int, alignment: int) -> int:
     return (value + alignment - 1) // alignment * alignment
 
 
-def build_group_icon(frames: list[bytes], sizes: list[tuple[int, int, int, int]] | None = None) -> bytes:
+def build_group_icon(
+    frames: list[bytes],
+    sizes: list[tuple[int, int, int, int]] | None = None,
+    *,
+    entry_stride: int = 14,
+) -> bytes:
     """``RT_GROUP_ICON``: دقیقاً کاری که PyInstaller می‌کند.
 
-    ``ICONDIRHEADER`` + ``ICONDIRENTRY``ها که در آن‌ها ``dwImageOffset``
-    جای خود را به شناسهٔ عددی ``RT_ICON`` داده است.
+    ``ICONDIRHEADER`` + ``GRPICONDIRENTRY``ها.
+
+    اینجا دقت لازم است: قالبِ داخل منبع با قالبِ داخل فایل ‎.ico‎ یکی
+    نیست. در فایل ``ICONDIRENTRY`` شونزده بایت است (``"bbbbhhii"``) چون
+    فیلد آخر ``dwImageOffset`` یک DWORD است. ولی داخل منبع
+    ``GRPICONDIRENTRY`` **چهارده** بایت است (``"bbbbhhih"``) چون آخرین
+    فیلد ``nID`` یک WORD است — و PyInstaller دقیقاً همین را می‌نویسد
+    (``PyInstaller/utils/win32/icon.py::GRPICONDIRENTRY``).
+
+    ``entry_stride=16`` فقط برای آزمودن حالت دفاعی است که یک ابزار دیگر
+    اشتباهاً قالب فایلی را داخل منبع گذاشته باشد.
     """
     entries = b""
     for index, frame in enumerate(frames):
@@ -60,9 +74,33 @@ def build_group_icon(frames: list[bytes], sizes: list[tuple[int, int, int, int]]
             height = struct.unpack_from("<i", frame, 4)[0] // 2
             width = struct.unpack_from("<i", frame, 8)[0]
             bits, declared_size = 32, len(frame)
-        entries += struct.pack(
-            "<BBBBHHII", width % 256, height % 256, 0, 0, 1, bits, declared_size, index + 1
-        )
+        if entry_stride == 16:
+            # قالب فایلی (اشتباهی داخل منبع): dwImageOffset به جای nID.
+            entries += struct.pack(
+                "<BBBBHHII",
+                width % 256,
+                height % 256,
+                0,
+                0,
+                1,
+                bits,
+                declared_size,
+                index + 1,
+            )
+        else:
+            assert entry_stride == 14, entry_stride
+            # قالب واقعی منبع: GRPICONDIRENTRY با nID دو بایتی.
+            entries += struct.pack(
+                "<BBBBHHIH",
+                width % 256,
+                height % 256,
+                0,
+                0,
+                1,
+                bits,
+                declared_size,
+                index + 1,
+            )
     return struct.pack("<HHH", 0, 1, len(frames)) + entries
 
 
@@ -71,6 +109,7 @@ def build_pe_with_icon(
     *,
     include_group: bool = True,
     frame_sizes: list[tuple[int, int, int, int]] | None = None,
+    entry_stride: int = 14,
 ) -> bytes:
     """یک PE حداقلی می‌سازد که منابع آیکن آن از ``frames`` ساخته شده است.
 
@@ -84,7 +123,9 @@ def build_pe_with_icon(
         (RT_ICON, index + 1, frame) for index, frame in enumerate(frames)
     ]
     if include_group:
-        resources.append((RT_GROUP_ICON, 1, build_group_icon(frames, frame_sizes)))
+        resources.append(
+            (RT_GROUP_ICON, 1, build_group_icon(frames, frame_sizes, entry_stride=entry_stride))
+        )
 
     # --- بدنهٔ بخش ‎.rsrc‎ را از پایین به بالا می‌سازیم ---
     body = bytearray()
@@ -290,3 +331,71 @@ def test_pyinstaller_spec_points_at_the_icon_that_gets_verified():
         "گردش‌کار CI باید آیکنِ داخل EXE را واقعاً بررسی کند"
     )
     assert EXE_ICON.is_file()
+
+
+def test_resource_group_icon_entries_are_fourteen_bytes_not_sixteen():
+    """قرارداد اصلی: ``GRPICONDIRENTRY`` چهارده بایت است، نه شونزده.
+
+    ``ICONDIRENTRY`` داخل فایل ``.ico`` شونزده بایت است چون فیلد آخر
+    ``dwImageOffset`` یک DWORD است. ولی ``GRPICONDIRENTRY`` داخل منبع
+    ``RT_GROUP_ICON`` چهارده بایت است چون آخرین فیلد ``nID`` یک WORD است —
+    و PyInstaller دقیقاً همین را می‌نویسد
+    (``PyInstaller/utils/win32/icon.py::GRPICONDIRENTRY`` با
+    ``_format_ = "bbbbhhih"``).
+
+    اگر کسی دوباره گام را شونزده فرض کند، این تست می‌شکند.
+    """
+    frames = [f.data for f in verifier.read_ico(EXE_ICON)]
+    group = build_group_icon(frames)
+
+    count = struct.unpack_from("<H", group, 4)[0]
+    assert count == len(frames)
+    assert len(group) == 6 + count * 14, (
+        "RT_GROUP_ICON باید ۶ + n×۱۴ بایت باشد (GRPICONDIRENTRY)، نه شونزده"
+    )
+    assert struct.calcsize("<BBBBHHIH") == 14
+    assert struct.calcsize("<BBBBHHII") == 16
+
+
+def test_verifier_reads_a_group_icon_written_in_the_file_entry_format(tmp_path: Path):
+    """حالت دفاعی: ابزاری که اشتباهاً قالب فایلی را داخل منبع گذاشته.
+
+    گام ۱۴ بایت است، ولی اگر کسی شونزده بایت بنویسد نباید نتیجهٔ گمراه‌کننده
+    بدهیم؛ همان اندازه‌ها باید خوانده شوند.
+    """
+    ico_frames = verifier.read_ico(EXE_ICON)
+    frames = [f.data for f in ico_frames]
+    sizes = [(f.width, f.height, f.bit_count, f.size) for f in ico_frames]
+
+    exe = tmp_path / "K2.exe"
+    exe.write_bytes(
+        build_pe_with_icon(frames, frame_sizes=sizes, entry_stride=16)
+    )
+
+    report = verifier.verify(exe, EXE_ICON)
+    assert report.ok, report.mismatches
+    assert report.frames == len(frames)
+
+
+def test_verifier_reports_geometry_when_the_group_icon_declares_other_sizes(tmp_path: Path):
+    """اگر group icon اندازه‌های دیگری اعلام کند، build باید شکست بخورد."""
+    ico_frames = verifier.read_ico(EXE_ICON)
+    frames = [f.data for f in ico_frames]
+    wrong = [(16, 16, 32, 999) for _ in frames]
+
+    exe = tmp_path / "K2.exe"
+    exe.write_bytes(build_pe_with_icon(frames, frame_sizes=wrong))
+
+    report = verifier.verify(exe, EXE_ICON)
+    assert not report.ok
+    assert any("RT_GROUP_ICON" in problem for problem in report.mismatches)
+
+
+def test_a_two_hundred_fifty_six_frame_declares_zero_geometry():
+    """ICO فریم ۲۵۶×۲۵۶ را با bWidth=0 اعلام می‌کند؛ صفر یعنی ۲۵۶."""
+    biggest = max((f.data for f in verifier.read_ico(EXE_ICON)), key=len)
+
+    group = build_group_icon([biggest], [(256, 256, 32, len(biggest))])
+    declared = verifier._parse_group_icon(group)
+
+    assert (256, 256, 32, len(biggest)) in declared, sorted(declared)
