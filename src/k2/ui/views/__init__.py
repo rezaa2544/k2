@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .activities import ActivitiesPage, AddActivityDialog
+from .answer_card import AnswerCardDialog
 from .backlogs import BacklogsPage
 from .classes import ClassesPage, FixedEventDialog, RoutineDialog
 from .comprehensive import ComprehensiveExamsPage
@@ -28,6 +29,7 @@ from .weekly_plan import WeeklyPlanPage
 
 __all__ = [
     "ActivitiesPage",
+    "AnswerCardDialog",
     "AddActivityDialog",
     "AddTopicDialog",
     "BacklogsPage",

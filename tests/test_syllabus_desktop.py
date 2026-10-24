@@ -27,10 +27,15 @@ GENERAL = "فارسی"
 @pytest.fixture()
 def page(qapp, tmp_path, monkeypatch):
     """صفحهٔ سرفصل روی پایگاه دادهٔ موقت."""
+    from k2.domain.models import ExamProfile
     from k2.ui.views import settings as settings_view
 
     monkeypatch.setattr(settings_view, "notify", lambda *a, **k: None)
     service = AdvisorService(tmp_path / "syllabus.db")
+    # پروفایل با گروه «علوم تجربی» تا فصل‌های مخصوص رشتهٔ ریاضی کنار بروند
+    service.create_exam_profile(
+        ExamProfile(name="کنکور ۱۴۰۶", group_name="علوم تجربی")
+    )
     widget = SyllabusPage(service)
     yield widget, service
     widget.deleteLater()
@@ -130,6 +135,23 @@ def test_verified_counts_match_official_book(page):
     assert service.syllabus_progress(FIZIK, 11).sections == 28
     assert service.syllabus_progress("زیست‌شناسی", 10).sections == 22
     assert service.syllabus_progress("زمین‌شناسی", 12).sections == 50
+    # درس‌های عمومی: پایه‌های تأییدشده
+    assert service.syllabus_progress("فارسی", 10).sections == 18
+    assert service.syllabus_progress("فارسی", 12).sections == 18
+    assert service.syllabus_progress("عربی", 10).sections == 8
+    assert service.syllabus_progress("عربی", 12).sections == 4
+    assert service.syllabus_progress("دینی", 10).sections == 12
+    assert service.syllabus_progress("دینی", 11).sections == 12
+    assert service.syllabus_progress("زبان انگلیسی", 10).sections == 4
+    assert service.syllabus_progress("زبان انگلیسی", 12).sections == 3
+    assert service.syllabus_progress("سلامت و بهداشت", 12).sections == 14
+    assert service.syllabus_progress("هویت اجتماعی", 12).sections == 10
+    # فصل ترمودینامیک فقط رشتهٔ ریاضی است
+    assert service.syllabus_progress("فیزیک", 10, "علوم تجربی").sections == 23
+    assert len(service.syllabus_hidden_chapters("فیزیک", 10, "علوم تجربی")) == 1
+    assert service.syllabus_progress(
+        "فیزیک", 10, "علوم ریاضی و فنی"
+    ).sections == 30
 
 
 # ---------------------------------------------------------------------------
@@ -203,11 +225,23 @@ def test_section_status_survives_service_restart(tmp_path, monkeypatch):
 
 
 def test_unnamed_section_is_marked_not_invented(page):
-    """گفتار بی‌نامِ فصلِ فقط‌عدد‌دار «نام ثبت نشده» می‌شود، نه نام جعلی."""
+    """گفتار بی‌نام «نام ثبت نشده» می‌شود، نه نام جعلی.
+
+    فارسی دهم از این پس فهرست رسمی دارد؛ پس مورد بی‌نام باید پایه‌ای باشد
+    که فهرست رسمی برایش ثبت نشده (فارسی یازدهم) یا فصلی که کاربر خودش
+    تعدادش را وارد کرده است.
+    """
     widget, service = page
-    service.syllabus_set_chapter_count(GENERAL, 10, 10, 5)
-    _select(widget, GENERAL, 10)
-    _open_chapter(widget, 10)
+    # الف) پایهٔ بدون فهرست رسمی
+    _select(widget, GENERAL, 11)
+    _open_chapter(widget, 11)
+    assert len(widget._sections) == 0
+    assert widget._chapters[0].sections is None
+    assert widget._chapters[0].is_unknown
+    # ب) فصلی که کاربر خودش تعداد گفتارش را وارد کرده است
+    service.syllabus_set_chapter_count(GENERAL, 11, 11, 5)
+    widget._reload()
+    _open_chapter(widget, 11)
     assert len(widget._sections) == 5
     for section in widget._sections:
         assert section.official_title is None
@@ -277,7 +311,8 @@ def test_open_needs_show_up_in_the_weekly_report(page):
     assert "2 گفتار" in joined
     changes = "\n".join(report.next_week_changes)
     assert "پوشش سرفصل" in changes
-    assert "306" in changes
+    # ۴۰۹ گفتار تأییدشده با پروفایل «علوم تجربی» (ترمودینامیک کنار رفت)
+    assert "409" in changes
 
 
 def test_progress_counts_only_real_answers(page):
@@ -299,12 +334,17 @@ def test_progress_counts_only_real_answers(page):
 def test_unknown_chapters_are_reported_as_unknown_not_zero(page):
     """فصل نامشخص در پیشرفت «نامشخص» می‌ماند، نه صفر."""
     _widget, service = page
-    _select(page[0], GENERAL, 10)
-    progress = service.syllabus_progress(GENERAL, 10)
+    _select(page[0], GENERAL, 11)
+    progress = service.syllabus_progress(GENERAL, 11)
     assert progress.chapters == 1
     assert progress.sections == 0
     assert progress.unknown_chapters == 1
     assert progress.coverage is None
+    # فارسی دهم برخلاف یازدهم، فهرست رسمی دارد
+    progress10 = service.syllabus_progress(GENERAL, 10)
+    assert progress10.chapters == 8
+    assert progress10.sections == 18
+    assert progress10.unknown_chapters == 0
 
 
 # ---------------------------------------------------------------------------
@@ -364,3 +404,57 @@ def test_progress_is_not_lost_when_chapter_count_shrinks(page):
     service.syllabus_set_chapter_count(CHEMI, 10, 1, 7)
     record = service.syllabus_section_record(CHEMI, 10, 1, 1)
     assert record is not None and record.study == "complete"
+
+
+def test_verified_general_subject_tree_opens(page):
+    """فصل و گفتار تأییدشدهٔ یک درس عمومی در دسکتاپ باز می‌شود."""
+    widget, _service = page
+    _select(widget, "فارسی", 10)
+    assert len(widget._chapters) == 8
+    assert widget._chapters[0].title == "ادبیات تعلیمی"
+    chapter = _open_chapter(widget, 1)
+    assert chapter is not None
+    assert len(widget._sections) == 2
+    labels = [s.label for s in widget._sections]
+    assert "چشمه" in labels
+    assert "از آموختن ننگ مدار" in labels
+    # فارسی دوازدهم هم فهرست رسمی دارد
+    _select(widget, "فارسی", 12)
+    _open_chapter(widget, 7)
+    labels12 = [s.label for s in widget._sections]
+    assert "سی مرغ و سیمرغ" in labels12
+    assert "کباب غاز" in labels12
+
+
+def test_health_and_identity_are_grade_twelve_only(page):
+    """سلامت و بهداشت و هویت اجتماعی فقط پایهٔ دوازدهم‌اند."""
+    widget, service = page
+    grades = service.syllabus_grades("سلامت و بهداشت")
+    assert grades == [12]
+    grades = service.syllabus_grades("هویت اجتماعی")
+    assert grades == [12]
+    _select(widget, "سلامت و بهداشت", 12)
+    assert len(widget._chapters) == 6
+    chapter = _open_chapter(widget, 2)
+    assert chapter.title == "تغذیهٔ سالم و بهداشت مواد غذایی"
+    assert len(widget._sections) == 3
+    assert [s.label for s in widget._sections] == [
+        "برنامهٔ غذایی سالم",
+        "کنترل وزن و تناسب اندام",
+        "بهداشت و ایمنی مواد غذایی",
+    ]
+
+
+def test_thermodynamics_is_hidden_for_experimental_group(page):
+    """فصل ترمودینامیک برای رشتهٔ تجربی کنار گذاشته می‌شود."""
+    widget, service = page
+    _select(widget, "فیزیک", 10)
+    titles = [c.title for c in widget._chapters]
+    assert "ترمودینامیک" not in titles
+    hidden = service.syllabus_hidden_chapters("فیزیک", 10, "علوم تجربی")
+    assert len(hidden) == 1
+    assert hidden[0].title == "ترمودینامیک"
+    # برای رشتهٔ ریاضی دیده می‌شود
+    views = service.syllabus_chapter_views("فیزیک", 10, "علوم ریاضی و فنی")
+    assert any(c.title == "ترمودینامیک" for c in views)
+    assert sum(c.sections or 0 for c in views) == 30

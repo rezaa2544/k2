@@ -7,6 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT.parent / "src"))
+from k2 import konkur_catalog  # noqa: E402
 from k2.konkur_catalog import (  # noqa: E402
     EXAM_WEIGHT_BY_GROUP,
     GENERAL_SUBJECT_SYLLABUS,
@@ -73,6 +74,9 @@ for _course, _by_grade in SYLLABUS_BY_COURSE.items():
         _rows = []
         for _ch in _chapters:
             _row = {"no": _ch["no"], "title": _ch["title"], "sections": _ch["sections"]}
+            if _ch.get("group_only"):
+                # فصل مخصوص یک رشته (مثل ترمودینامیک که فقط ریاضی است)
+                _row["group_only"] = _ch["group_only"]
             _topics = _ch.get("topics")
             if _topics:
                 # شناسهٔ پایدار = کلید ذخیره‌سازی؛ renumber نشدن چون شمارهٔ
@@ -91,38 +95,44 @@ for _course, _by_grade in SYLLABUS_BY_COURSE.items():
 
 #: درس‌های عمومی و مدرسه: در اطلاعیهٔ کنکور سهم مستقیم ندارند، ولی کاربر
 #: باید بتواند آن‌ها را هم در همین درخت ببیند و وضعیتشان را ثبت کند.
-#: تعداد درس/گفتار برای اکثر آن‌ها تأییدنشده است؛ عددی ساخته نمی‌شود و
-#: کاربر خودش از کتاب سال ۱۴۰۶ وارد می‌کند.
-_GENERAL_GRADES = {
-    "فارسی": (10, 11, 12),
-    "عربی": (10, 11, 12),
-    "دینی": (10, 11, 12),
-    "زبان انگلیسی": (10, 11, 12),
-    "سلامت و بهداشت": (10,),
-    "هویت اجتماعی": (10,),
-}
-_GENERAL_BOOK_LABEL = {
-    "فارسی": "فارسی",
-    "عربی": "عربی",
-    "دینی": "دین و زندگی",
-    "زبان انگلیسی": "زبان انگلیسی",
-    "سلامت و بهداشت": "سلامت و بهداشت",
-    "هویت اجتماعی": "هویت اجتماعی",
-}
-for _gsub, _ginfo in GENERAL_SUBJECT_SYLLABUS.items():
+#: داده از همان کاتالوگ دسکتاپ می‌آید (``GENERAL_SUBJECT_CHAPTERS``) تا
+#: وب و دسکتاپ یک معنی داشته باشند. پایه‌ای که فهرست رسمی ندارد «نامشخص»
+#: می‌ماند و عددی ساخته نمی‌شود.
+for _gsub, _gnote in GENERAL_SUBJECT_SYLLABUS.items():
     if _gsub in syllabus:
         continue
-    _ggrades = _GENERAL_GRADES.get(_gsub, (10, 11, 12))
+    _ggrades = konkur_catalog.general_grades(_gsub)
     _gmap: dict[str, list[dict]] = {}
     for _g in _ggrades:
-        _gmap[str(_g)] = [
-            {
-                "no": _g,
-                "title": "%s · پایهٔ %s" % (_GENERAL_BOOK_LABEL.get(_gsub, _gsub), _g),
-                "sections": None,
-                "note": _ginfo.get("note", ""),
-            }
-        ]
+        _verified = konkur_catalog.GENERAL_SUBJECT_CHAPTERS.get(_gsub, {}).get(_g)
+        if _verified:
+            _rows = []
+            for _ch in _verified:
+                _topics = _ch.get("topics")
+                _row = {
+                    "no": _ch["no"],
+                    "title": _ch["title"],
+                    "sections": len(_topics) if _topics else _ch.get("sections"),
+                }
+                if _ch.get("group_only"):
+                    _row["group_only"] = _ch["group_only"]
+                if _topics:
+                    _row["topics"] = [
+                        {"id": f"{_gsub}|{_g}|{_ch['no']}|{_i}",
+                         "title": _t, "verified": bool(_v)}
+                        for _i, (_t, _v) in enumerate(_topics, start=1)
+                    ]
+                _rows.append(_row)
+            _gmap[str(_g)] = _rows
+        else:
+            _gmap[str(_g)] = [
+                {
+                    "no": _g,
+                    "title": "%s · پایهٔ %s" % (konkur_catalog.GENERAL_BOOK_LABEL.get(_gsub, _gsub), _g),
+                    "sections": None,
+                    "note": _gnote.get("note", ""),
+                }
+            ]
     syllabus[_gsub] = _gmap
 _syllabus_meta = {
     "status": SYLLABUS_STATUS,

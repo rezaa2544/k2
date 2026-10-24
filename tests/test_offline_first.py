@@ -151,7 +151,13 @@ def test_no_unreviewed_network_urls_in_product_source():
     فراداده نگه می‌دارند (بدون رفتن به شبکه). هر نشانیِ دیگری در کد
     محصول یعنی کدی که به شبکه وصل می‌شود.
     """
-    allowed = {"konkur_catalog.py", "learning_science.py", "advisor_engine.py"}
+    allowed = {
+        "konkur_catalog.py",
+        "learning_science.py",
+        "advisor_engine.py",
+        # نشانی منبع تقویم آزمون فقط فرادادهٔ استناد است؛ برنامه وصل نمی‌شود.
+        "exam_calendar.py",
+    }
     offenders: list[str] = []
     for path in _source_files():
         if path.name in allowed:

@@ -191,48 +191,53 @@ def chapter_key(subject: str, grade: int, chapter: int) -> str:
     return f"{subject}|{int(grade)}|{int(chapter)}"
 
 
-#: پایه‌های هر درس عمومی — همان فهرست پیش‌نمایش وب.
-GENERAL_GRADES: dict[str, tuple[int, ...]] = {
-    "فارسی": (10, 11, 12),
-    "عربی": (10, 11, 12),
-    "دینی": (10, 11, 12),
-    "زبان انگلیسی": (10, 11, 12),
-    "سلامت و بهداشت": (10,),
-    "هویت اجتماعی": (10,),
-}
-
-#: نام کتاب درسی هر درس عمومی (فهرست رسمی فصل برایشان ثبت نشده است).
-GENERAL_BOOK_LABEL: dict[str, str] = {
-    "فارسی": "فارسی",
-    "عربی": "عربی",
-    "دینی": "دین و زندگی",
-    "زبان انگلیسی": "زبان انگلیسی",
-    "سلامت و بهداشت": "سلامت و بهداشت",
-    "هویت اجتماعی": "هویت اجتماعی",
-}
+#: نام کتاب درسی هر درس عمومی.
+GENERAL_BOOK_LABEL: dict[str, str] = konkur_catalog.GENERAL_BOOK_LABEL
 
 
 def general_grades(subject: str) -> tuple[int, ...]:
-    return GENERAL_GRADES.get(subject, (10, 11, 12))
+    """پایه‌های یک درس عمومی — منبع حقیقت، کاتالوگ است (نه نسخهٔ موازی)."""
+    return konkur_catalog.general_grades(subject)
+
+
+def general_rows(subject: str, grade: int) -> list[dict]:
+    """ردیف‌های خام فصل یک درس عمومی برای یک پایه.
+
+    ترتیب: فهرست تأییدشدهٔ همان پایه ← فصل فرضیِ «نامشخص». هیچ‌وقت عددی
+    که در کتاب نیست ساخته نمی‌شود.
+    """
+    if subject not in konkur_catalog.GENERAL_SUBJECT_SYLLABUS:
+        return []
+    verified = konkur_catalog.GENERAL_SUBJECT_CHAPTERS.get(subject, {}).get(
+        int(grade)
+    )
+    if verified:
+        return [dict(row) for row in verified]
+    # پایه‌ای که فهرست رسمی ندارد: یک فصل فرضی با عدد نامشخص
+    return [
+        {
+            "no": int(grade),
+            "title": f"{GENERAL_BOOK_LABEL.get(subject, subject)} · پایهٔ {grade}",
+            "sections": None,
+            "note": konkur_catalog.general_subject_note(subject),
+        }
+    ]
 
 
 def general_chapter(subject: str, grade: int) -> Optional[ChapterView]:
-    """فصل فرضی درس عمومی: یک فصل در هر پایه، بدون عدد جعلی گفتار.
-
-    درس‌های عمومی فهرست فصل ندارند (نبود داده، نه فرض)، پس همان «نامشخص»
-    می‌مانند و کاربر خودش وارد می‌کند.
-    """
-    if subject not in konkur_catalog.GENERAL_SUBJECT_SYLLABUS:
+    """فصل فرضی درس عمومی (وقتی فهرست رسمی برای آن پایه ثبت نشده)."""
+    rows = general_rows(subject, grade)
+    if len(rows) != 1 or rows[0].get("topics"):
         return None
-    info = konkur_catalog.GENERAL_SUBJECT_SYLLABUS[subject]
+    row = rows[0]
     return ChapterView(
-        no=int(grade),
-        title=f"{GENERAL_BOOK_LABEL.get(subject, subject)} · پایهٔ {grade}",
-        base_title=f"{GENERAL_BOOK_LABEL.get(subject, subject)} · پایهٔ {grade}",
+        no=int(row["no"]),
+        title=row["title"],
+        base_title=row["title"],
         sections=None,
         base_sections=None,
         topics=None,
-        note=info.get("note", ""),
+        note=row.get("note", ""),
         subject=subject,
         grade=int(grade),
     )
@@ -241,18 +246,9 @@ def general_chapter(subject: str, grade: int) -> Optional[ChapterView]:
 def raw_chapters(subject: str, grade: int) -> list[dict]:
     """ردیف‌های خام فصل برای یک درس/پایه (کاتالوگ + درس‌های عمومی)."""
     base = list(konkur_catalog.syllabus_for(subject, grade))
-    if not base and subject in konkur_catalog.GENERAL_SUBJECT_SYLLABUS:
-        view = general_chapter(subject, grade)
-        if view is not None:
-            return [
-                {
-                    "no": view.no,
-                    "title": view.title,
-                    "sections": None,
-                    "note": view.note,
-                }
-            ]
-    return base
+    if base:
+        return base
+    return general_rows(subject, grade)
 
 
 # ---------------------------------------------------------------------------
@@ -273,10 +269,19 @@ class ChapterView:
     note: str = ""
     subject: str = ""
     grade: int = 0
+    #: اگر پر باشد این فصل فقط برای آن گروه آموزشی معنا دارد (مثل
+    #: «ترمودینامیک» که فقط در فیزیک دهم رشتهٔ ریاضی تدریس می‌شود).
+    group_only: str = ""
 
     @property
     def is_unknown(self) -> bool:
         return self.sections is None
+
+    def applies_to(self, group: str) -> bool:
+        """آیا این فصل برای گروه آموزشی داده‌شده معنا دارد؟"""
+        if not self.group_only:
+            return True
+        return group == self.group_only
 
     @property
     def is_count_only(self) -> bool:
@@ -356,6 +361,7 @@ def chapter_view(
         note=note,
         subject=subject,
         grade=int(grade),
+        group_only=raw.get("group_only", "") or "",
     )
 
 

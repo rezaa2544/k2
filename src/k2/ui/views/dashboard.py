@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from ...advisor_engine import PHASE_LABELS
+from ... import exam_calendar
 from ...domain.enums import DebtLevel
 from ...jdate import format_jalali_long, format_minutes, format_number
 from ...service import AdvisorService
@@ -126,6 +127,10 @@ class DashboardPage(QWidget):
         self.phase_label = QLabel("—")
         self.phase_label.setWordWrap(True)
         self.phase_card.add(self.phase_label)
+        self.calendar_label = QLabel("—")
+        self.calendar_label.setObjectName("muted")
+        self.calendar_label.setWordWrap(True)
+        self.phase_card.add(self.calendar_label)
         self.backlog_card = Card("صف عقب‌افتادگی", tone="backlog")
         self.backlog_label = QLabel("—")
         self.backlog_label.setWordWrap(True)
@@ -181,6 +186,15 @@ class DashboardPage(QWidget):
                 tile.set_value("—", "پس از ثبت اطلاعات نمایش داده می‌شود")
             self.capacity_text.setText("برای محاسبهٔ ظرفیت، ساعت خواب و بیداری یا تعهدهای خود را ثبت کنید.")
             self.phase_label.setText("هنوز آزمون هدفی ثبت نشده است.")
+            calendar = exam_calendar.status()
+            self.calendar_label.setText(
+                calendar.summary() + "\n"
+                + " · ".join(item["effect"] for item in calendar.announced)
+            )
+            self.calendar_label.setToolTip(
+                "بررسی شده در " + format_jalali_long(calendar.checked_on)
+                + "\n\nمنابع: " + "، ".join(src["title"] for src in calendar.sources)
+            )
             self.backlog_label.setText("هنوز فعالیتی ثبت نشده است.")
             self.advice_text.setText("پس از ورود اطلاعات واقعی، پیشنهادهای شخصی در اینجا نمایش داده می‌شوند.")
             self.conflict_box.setVisible(False)
@@ -244,6 +258,19 @@ class DashboardPage(QWidget):
                 f"فاز: {PHASE_LABELS[phase]}"
                 + (f" · {remaining} روز مانده" if remaining is not None else "")
             )
+            hint = exam_calendar.planning_hint(profile)
+            if hint:
+                self.phase_label.setToolTip(hint)
+
+        calendar = exam_calendar.status()
+        self.calendar_label.setText(
+            calendar.summary() + "\n"
+            + " · ".join(item["effect"] for item in calendar.announced)
+        )
+        self.calendar_label.setToolTip(
+            "بررسی شده در " + format_jalali_long(calendar.checked_on)
+            + "\n\nمنابع: " + "، ".join(src["title"] for src in calendar.sources)
+        )
 
         self.backlog_label.setText(
             f"کارهای عقب‌افتاده: {len(backlog.items)}\n"
