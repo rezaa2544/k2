@@ -24,11 +24,11 @@
 
 ## ۲. مشخصات خروجی (ارقام زیر artifact نسخهٔ قبلی‌اند)
 
-Metadata مرجع executable برای اسکریپت ساخت: `packaging/output/K2/K2.exe` — ۲٬۲۷۱٬۳۳۴ بایت. این مقدار و checksumهای زیر فقط وقتی به build جاری قابل انتساب‌اند که Windows packaging مجدداً اجرا و metadata به‌روزرسانی شود.
+Metadata مرجع executable برای اسکریپت ساخت: `packaging/output/K2/K2.exe` — ۲٬۲۷۶٬۶۷۵ بایت. این مقدار و checksumهای زیر فقط وقتی به build جاری قابل انتساب‌اند که Windows packaging مجدداً اجرا و metadata به‌روزرسانی شود.
 
 ```
 packaging/output/K2/
-├── K2.exe              ۲٬۲۷۱٬۳۳۴ بایت   (بوت‌لودر PyInstaller + آرشیو)
+├── K2.exe              ۲٬۲۷۶٬۶۷۵ بایت   (بوت‌لودر PyInstaller + آرشیو)
 └── _internal/          ~۱۱۰ مگابایت       (Qt6، shiboken6، پایتون، فونت‌ها)
     ├── PySide6/
     ├── k2/ui/assets/fonts/Vazirmatn-{Regular,Bold}.ttf
@@ -38,11 +38,11 @@ packaging/output/K2/
 SHA-256:
 
 ```
-1ac5e7d954e52933ff9006e3b0ddcf6ba960d42b5eb52e4bebe507407ff569a2  K2.exe
-cc1fff576c0b4c811cb24098c557677de03120cece25d709db4be8cd60d6e0dd  K2-windows-x64.zip
+cb0a5f352682ad2394a638e679d07974f252bb45588c35ea415d81e532d88b7e  K2.exe
+49d2544cfa42b23d68ba807e86882e921b0248f6a1eb6443007cae7b9280e017  K2-windows-x64.zip
 ```
 
-نسخهٔ ساخت محلی در `release/K2-windows-x64.zip` می‌ماند (خروجی در `.gitignore` است). برای درخواست دانلود مستقیم کاربر، همان بسته در `downloads/K2-windows-x64.zip` نیز در مخزن ثبت شده است (۵۰٬۲۵۱٬۸۲۵ بایت؛ حدود ۴۵ MiB). این آرشیو شامل `K2.exe` و `_internal/` است؛ فایل EXE به‌تنهایی اجراشدنی نیست.
+نسخهٔ ساخت محلی در `release/K2-windows-x64.zip` می‌ماند (خروجی در `.gitignore` است). برای درخواست دانلود مستقیم کاربر، همان بسته در `downloads/K2-windows-x64.zip` نیز در مخزن ثبت شده است (۵۰٬۲۵۶٬۰۷۵ بایت؛ حدود ۴۵ MiB). این آرشیو شامل `K2.exe` و `_internal/` است؛ فایل EXE به‌تنهایی اجراشدنی نیست.
 
 ---
 
