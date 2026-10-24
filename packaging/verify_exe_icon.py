@@ -460,6 +460,38 @@ def _annotate(level: str, message: str) -> None:
     print(f"::{level}::{one_line}")
 
 
+def _describe(exe: Path) -> list[str]:
+    """یک نگاه خلاصه به ساختار PE برای تشخیص عیب در CI."""
+    try:
+        pe = PeFile(exe.read_bytes())
+    except Exception as error:  # noqa: BLE001
+        return [f"خواندن PE نشد: {error!r}"]
+    lines = [f"size={len(pe.blob)} sections={len(pe.sections)}"]
+    for section in pe.sections:
+        lines.append(
+            f"section {section.name} va=0x{section.virtual_address:x} "
+            f"vs=0x{section.virtual_size:x} raw=0x{section.raw_size:x} "
+            f"ptr=0x{section.raw_pointer:x}"
+        )
+    lines.append(f"resource_rva=0x{pe.resource_base:x}")
+    try:
+        entries = pe.resources()
+    except Exception as error:  # noqa: BLE001
+        lines.append(f"resources() failed: {error!r}")
+        return lines
+    counts: dict[int, int] = {}
+    for entry in entries:
+        counts[entry.resource_type] = counts.get(entry.resource_type, 0) + 1
+    lines.append(f"entries={len(entries)} by_type={counts}")
+    for entry in entries:
+        lines.append(
+            f"res type={entry.resource_type} name={entry.name} "
+            f"lang={entry.language} size={entry.size} data={len(entry.data)} "
+            f"rva=0x{entry.rva:x}"
+        )
+    return lines
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("exe", type=Path, help="فایل EXE ساختهٔ PyInstaller")
@@ -481,6 +513,19 @@ def main(argv: list[str] | None = None) -> int:
         _annotate("error", str(error))
         print(f"خطا: {error}", file=sys.stderr)
         return 1
+    except Exception as error:  # noqa: BLE001 - هر خطای غیرمنتظره را گزارش کن
+        # بدون این، یک باگ در پارسر فقط «exit code 1» می‌داد و علتش را
+        # نمی‌شد فهمید. حالا علت در UI Actions دیده می‌شود.
+        import traceback
+
+        _annotate("error", f"بررسی آیکن با خطای غیرمنتظره متوقف شد: {error!r}")
+        print(traceback.format_exc(), file=sys.stderr)
+        return 1
+
+    if os.environ.get("GITHUB_ACTIONS"):
+        # تشخیص عیب‌یابی: بدون این، «CI قرمز است» تنها اطلاعات ممکن بود.
+        for line in _describe(args.exe):
+            _annotate("notice", line)
 
     print(f"EXE            : {report.exe}")
     print(f"ICO            : {report.ico}")
