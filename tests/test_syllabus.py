@@ -450,8 +450,36 @@ def test_syllabus_data_is_structured_and_honest():
     data = json.loads(m.group(1).replace("\\u003c", "<"))
     assert data["meta"]["status"] == "preliminary_unverified"
     assert data["courses"]["زیست‌شناسی"]["10"][0]["title"] == "دنیای زنده"
-    # شیمی: تعداد گفتار نامشخص است و عدد ساخته نشده
+    # شیمی دهم: تعداد گفتار نامشخص است و عدد ساخته نشود
     assert data["courses"]["شیمی"]["10"][0]["sections"] is None
+    # شیمی یازدهم/دوازدهم: گفتارهای نام‌دار تأییدشده با شناسهٔ پایدار
+    for grade, total in (("11", 19), ("12", 17)):
+        rows = data["courses"]["شیمی"][grade]
+        assert sum(len(r["topics"]) for r in rows) == total
+        for row in rows:
+            assert row["sections"] == len(row["topics"])
+            for i, t in enumerate(row["topics"], start=1):
+                assert t["id"] == f"شیمی|{grade}|{row['no']}|{i}"
+                assert t["verified"] is True
+    # درس‌های عمومی: یک فصل در هر پایه، بدون عدد جعلی گفتار
+    for name in ("فارسی", "عربی", "دینی",
+                 "زبان انگلیسی",
+                 "سلامت و بهداشت",
+                 "هویت اجتماعی"):
+        grades = data["courses"][name]
+        assert grades, name
+        for grade, rows in grades.items():
+            assert len(rows) == 1
+            assert rows[0]["sections"] is None
+            assert rows[0]["note"]
+    # هیچ نام گفتاری خالی یا الکی در داده نیست
+    for course, by_grade in data["courses"].items():
+        for grade, rows in by_grade.items():
+            for row in rows:
+                for t in row.get("topics") or ():
+                    assert t["title"] is None or t["title"].strip()
+                    if t["title"] is None:
+                        assert t["verified"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -1668,26 +1696,42 @@ def test_setup_interview_matches_prompt_and_is_compact(preview_js, tmp_path):
 
 
 _SECTIONCOUNTS_SCRIPT = r"""
-// ===== ورود تعداد گفتارهای درس نامشخص (مورد شیمی) =====
-function g12Count() { return preview.syllabusChapters('شیمی', 12).length }
-// چرا مهم است: شیمی ۱۰ فصل دارد و هیچ‌کدام عدد ندارند. اگر برنامه صفر
-// بگذارد، کاربر فکر می‌کند ۱۰ گفتار بیشتر ندارد؛ اگر عددی حدس بزند، داده
-// جعل شده است. راه حل: «نامشخص» صریح + ورود گروهی توسط کاربر.
+// ===== ورود تعداد گفتارهای درس نامشخص (مورد شیمی دهم) =====
+// چرا مهم است: شیمی دهم سه فصل دارد و هیچ‌کدام عدد تأییدشده ندارند (منابع
+// دربارهٔ تعداد گفتارهای آن با هم اختلاف دارند). اگر برنامه صفر بگذارد،
+// کاربر فکر می‌کند گفتاری وجود ندارد؛ اگر عددی حدس بزند، داده جعل شده است.
+// راه حل: «نامشخص» صریح + ورود گروهی توسط کاربر.
+// شیمی یازدهم و دوازدهم برخلاف دهم، گفتارهای نام‌دار تأییدشده دارند و
+// باید عدد واقعی نشان دهند.
+
+function chemChapters(grade) { return preview.syllabusChapters('شیمی', Number(grade)) }
 
 try {
-  // شیمی در سه پایه تقسیم است؛ پایهٔ دوازدهم ۴ فصل دارد و جمع کل ۱۰ فصل.
-  const g12 = preview.syllabusChapters('شیمی', 12);
-  ok(g12.length === 4, 'شیمی پایهٔ ۱۲ چهار فصل دارد، یافت: ' + g12.length);
-  const counts = g12.map(c => preview.chapterSectionCount(c));
-  ok(counts.every(c => c === null),
-     'همهٔ فصل‌های شیمی نامشخص باشند (هیچ عدد جعلی)، یافت: ' + JSON.stringify(counts));
+  // شیمی دهم: سه فصل، همه نامشخص
+  const g10 = chemChapters(10);
+  ok(g10.length === 3, 'شیمی دهم سه فصل دارد، یافت: ' + g10.length);
+  const c10 = g10.map(c => preview.chapterSectionCount(c));
+  ok(c10.every(c => c === null),
+     'همهٔ فصل‌های شیمی دهم نامشخص باشند (هیچ عدد جعلی)، یافت: ' + JSON.stringify(c10));
+  ok(g10.map(c => c.title).join('|').includes('کیهان، زادگاه الفبای هستی'),
+     'عنوان فصل‌های شیمی دهم حفظ شود');
+  // شیمی یازدهم/دوازدهم: گفتارهای تأییدشده، پس عدد واقعی دارند
+  const c11 = chemChapters(11).map(c => preview.chapterSectionCount(c));
+  ok(c11.length === 3 && c11.every(c => typeof c === 'number' && c > 0),
+     'شیمی یازدهم عدد گفتار تأییدشده دارد، یافت: ' + JSON.stringify(c11));
+  ok(c11.reduce((a, b) => a + b, 0) === 19, 'شیمی یازدهم ۱۹ گفتار دارد، یافت: ' + (c11.reduce((a, b) => a + b, 0)));
+  const c12 = chemChapters(12).map(c => preview.chapterSectionCount(c));
+  ok(c12.length === 4 && c12.every(c => typeof c === 'number' && c > 0),
+     'شیمی دوازدهم عدد گفتار تأییدشده دارد، یافت: ' + JSON.stringify(c12));
+  ok(c12.reduce((a, b) => a + b, 0) === 17, 'شیمی دوازدهم ۱۷ گفتار دارد، یافت: ' + (c12.reduce((a, b) => a + b, 0)));
+  // جمع فصل‌های شیمی در سه پایه ۱۰ است
   const total = ['10', '11', '12']
-    .reduce((n, g) => n + preview.syllabusChapters('شیمی', Number(g)).length, 0);
+    .reduce((n, g) => n + chemChapters(g).length, 0);
   ok(total === 10, 'جمع فصل‌های شیمی در سه پایه ۱۰ باشد، یافت: ' + total);
-  // درسی که عدد دارد با شیمی فرق دارد
+  // درسی که عدد دارد با شیمی دهم فرق دارد
   const bio = preview.syllabusChapters('زیست‌شناسی', 10);
   ok(bio.length > 0 && bio.every(c => preview.chapterSectionCount(c) !== null),
-     'زیست‌شناسی عدد دارد و با شیمی یکی نیست');
+     'زیست‌شناسی عدد دارد و با شیمی دهم یکی نیست');
 } catch (e) { failures++; console.log('FAIL chem unknown: ' + e.message) }
 
 // ۱) نمای کلی برای درس نامشخص هشدار و دکمهٔ ورود می‌دهد
@@ -1709,17 +1753,16 @@ try {
   ok(html.includes('شیمی'), 'درس شیمی در فهرست باشد');
 } catch (e) { failures++; console.log('FAIL overview prompt: ' + e.message) }
 
-// ۲) ورود گروهی: عددها ذخیره می‌شوند و خالی «نامشخص» می‌ماند
+// ۲) ورود گروهی برای شیمی دهم: عددها ذخیره می‌شوند و خالی «نامشخص» می‌ماند
 try {
   const st0 = preview.getState();
   st0.syllabusEdits = {};
   persistSilently(st0);
-  // فرم گروهی باز می‌شود
-  preview.sylCountsForm('شیمی', 12);
+  preview.sylCountsForm('شیمی', 10);
   const form = makeEl('form');
   form.id = 'modalForm';
-  // کاربر ۶ فصل را وارد می‌کند و ۴ فصل را خالی می‌گذارد
-  const N = g12Count();
+  const N = chemChapters(10).length;
+  // کاربر دو فصل را وارد می‌کند و فصل سوم را خالی می‌گذارد
   const fd = new Map();
   for (let i = 1; i <= N; i += 1) fd.set('sec_' + i, i <= 2 ? String(i * 3) : '');
   global.__fd = fd;
@@ -1727,31 +1770,31 @@ try {
   const st = preview.getState();
   const edits = st.syllabusEdits || {};
   const saved = [];
-  for (let i = 1; i <= N; i += 1) saved.push(edits[`شیمی|12|${i}`]?.sections ?? null);
+  for (let i = 1; i <= N; i += 1) saved.push(edits[`شیمی|10|${i}`]?.sections ?? null);
   ok(saved.slice(0, 2).every(v => v !== null), 'فصل‌های وارد‌شده عدد بگیرند، یافت: ' + JSON.stringify(saved));
   ok(saved[0] === 3 && saved[1] === 6, 'اعداد وارد‌شده درست ذخیره شوند، یافت: ' + JSON.stringify(saved));
   ok(saved.slice(2).every(v => v === null),
-     'فصل‌های خالی null بمانند نه صفر، یافت: ' + JSON.stringify(saved.slice(2)));
-  const after = preview.syllabusChapters('شیمی', 12).map(c => preview.chapterSectionCount(c));
+     'فصل خالی null بماند نه صفر، یافت: ' + JSON.stringify(saved.slice(2)));
+  const after = chemChapters(10).map(c => preview.chapterSectionCount(c));
   ok(after[0] === 3 && after[2] === null, 'خواندن پس از ذخیره درست باشد، یافت: ' + JSON.stringify(after));
   // ارزیابی گفتار برای فصل وارد‌شده ممکن است
   const secs = after.filter(c => c !== null).reduce((n, c) => n + c, 0);
-  ok(secs > 0, 'گفتارهای فصل‌های وارد‌شده ساخته شوند: ' + secs);
+  ok(secs === 9, 'گفتارهای فصل‌های وارد‌شده ساخته شوند: ' + secs);
 } catch (e) { failures++; console.log('FAIL counts save: ' + e.message) }
 
 // ۳) تغییر بعدی: مقدار قبلی عوض می‌شود و پاک‌کردن ممکن است
 try {
-  preview.sylCountsForm('شیمی', 12);
+  preview.sylCountsForm('شیمی', 10);
   const form = makeEl('form');
   form.id = 'modalForm';
-  const N2 = g12Count();
+  const N2 = chemChapters(10).length;
   const fd = new Map();
   for (let i = 1; i <= N2; i += 1) fd.set('sec_' + i, i === 1 ? '5' : (i <= 2 ? String(i * 3) : ''));
   global.__fd = fd;
   preview.submitSylCounts(form);
   const st = preview.getState();
-  ok((st.syllabusEdits['شیمی|12|1'] || {}).sections === 5,
-     'تعداد فصل ۱ از ۲ به ۵ عوض شود، یافت: ' + (st.syllabusEdits['شیمی|12|1'] || {}).sections);
+  ok((st.syllabusEdits['شیمی|10|1'] || {}).sections === 5,
+     'تعداد فصل ۱ از ۳ به ۵ عوض شود، یافت: ' + (st.syllabusEdits['شیمی|10|1'] || {}).sections);
   // اکنون همه را خالی می‌کنیم: بازگشت به نامشخص، نه صفر
   const fd2 = new Map();
   for (let i = 1; i <= N2; i += 1) fd2.set('sec_' + i, '');
@@ -1759,7 +1802,7 @@ try {
   preview.submitSylCounts(form);
   const st2 = preview.getState();
   const cleared = [];
-  for (let i = 1; i <= N2; i += 1) cleared.push((st2.syllabusEdits[`شیمی|12|${i}`] || {}).sections ?? 'absent');
+  for (let i = 1; i <= N2; i += 1) cleared.push((st2.syllabusEdits[`شیمی|10|${i}`] || {}).sections ?? 'absent');
   ok(cleared.every(v => v === null || v === 'absent'),
      'خالی کردن همه، نامشخص شود نه صفر، یافت: ' + JSON.stringify(cleared));
 } catch (e) { failures++; console.log('FAIL counts edit: ' + e.message) }
@@ -2136,6 +2179,12 @@ try {
   const date = new Date().toISOString().slice(0, 10);
   const st0 = preview.getState();
   st0.attempts = [];
+  // این بلوک دربارهٔ وضعیت پیش‌نویس است، نه تعارض. رویدادهای بلوک پیشین
+  // (از جمله کلاس تمام‌روز ۰۰:۰۰ تا ۲۳:۵۹ برای «آزمون بی‌ساعت») نباید
+  // سرریز کنند، وگرنه وقتی «امروز» شنبه باشد آزمون ۱۰:۰۰ با آن کلاس
+  // هم‌پوشانی پیدا می‌کند و تست فقط شش روز از هفت روز سبز می‌شود.
+  st0.events = [];
+  st0.activities = [];
   persistSilently(st0);
   // «کل» خالی: کاربر هنوز نمی‌داند چند سؤال بوده
   submitExam({ name: 'تست نیمه‌کاره', kind: 'teaching', date: date, time: '10:00',
@@ -2188,6 +2237,242 @@ try {
   ok(preview.examConflicts().length === 0, 'آزمون بی‌کلاس تعارض نسازد');
 } catch (e) { failures++; console.log('FAIL exam draft: ' + e.message) }
 """
+
+
+_TOPICS_SCRIPT = r"""
+// ===== گفتارهای نام‌دار: نمایش، ویرایش، حذف، پایداری =====
+// مرجع نیازمندی: «برای هر فصل گفتارها را زیرمجموعه بساز»، «شناسهٔ پایدار»،
+// «افزودن/ویرایش/حذف با تأیید کاربر»، «بارگذاری مجدد تکراری نسازد».
+// قاعدهٔ صداقت: نام رسمی ناشناخته ساخته نمی‌شود و «قابل ویرایش» می‌ماند.
+
+// نمایش فهرست سرفصل‌ها (اگر نمای جزئیات باز است، اول بسته می‌شود)
+function showSyllabusOverview(){
+  clickAction('syllabus-close');
+  clickNav('topics');
+}
+// باز کردن نمای درختی یک درس/پایه
+function openTree(subject, grade){
+  showSyllabusOverview();
+  clickAction('syllabus-open:' + subject + ':' + grade);
+}
+
+// ---- الف) فصل‌ها گفتارهای نام‌دار دارند و شناسهٔ پایدار می‌گیرند ----
+try {
+  const st0 = preview.getState();
+  st0.subjects = [{ id: 's1', name: 'زیست‌شناسی', examCoefficient: 12, selected: true }];
+  st0.books = [{ id: 'b1', subject: 'زیست‌شناسی', grade: 10, code: '110216', selected: true }];
+  st0.sections = {}; st0.syllabusEdits = {}; st0.topicTitles = {};
+  persistSilently(st0);
+  openTree('زیست‌شناسی', 10);
+  let html = pageHtml();
+  ok(html.includes('دنیای زنده'), 'فصل ۱ زیست دهم نمایش داده شود');
+  ok(html.includes('زیست‌شناسی چیست؟'), 'گفتار ۱ نام رسمی خودش را نشان دهد');
+  ok(html.includes('گسترهٔ حیات'), 'گفتار ۲ نام رسمی خودش را نشان دهد');
+  ok(html.includes('تنوع گردش مواد در جانداران'), 'گفتار ۴ فصل ۴ نام رسمی خودش را نشان دهد');
+  ok(!html.includes('گفتار ۱ · نام ثبت نشده'), 'برای گفتار نام‌دار برچسب «نام ثبت نشده» نباشد');
+  ok(html.includes('تغییر نام'), 'دکمهٔ تغییر نام گفتار باشد');
+  ok(html.includes('حذف'), 'دکمهٔ حذف گفتار باشد');
+  // شناسهٔ پایدار: دقیقاً همان کلید ذخیرهٔ وضعیت
+  const rowActions = (html.match(/syl-rename-section:زیست‌شناسی\|10\|1\|/g) || []);
+  ok(rowActions.length === 3, 'فصل ۱ سه گفتار با شناسهٔ پایدار داشته باشد، یافت: ' + rowActions.length);
+} catch (e) { failures++; console.log('FAIL topics named: ' + e.message) }
+
+// ---- ب) نام ناشناخته صادقانه «قابل ویرایش» می‌ماند، جعل نمی‌شود ----
+try {
+  const st0 = preview.getState();
+  st0.subjects = [{ id: 's1', name: 'زیست‌شناسی', examCoefficient: 12, selected: true }];
+  st0.books = [{ id: 'b1', subject: 'زیست‌شناسی', grade: 10, code: '110216', selected: true }];
+  st0.sections = {}; st0.syllabusEdits = {}; st0.topicTitles = {};
+  persistSilently(st0);
+  openTree('زیست‌شناسی', 11);
+  const html = pageHtml();
+  ok(html.includes('تنظیم‌کننده‌های رشد در گیاهان'), 'گفتار تأییدشدهٔ فصل ۹ نام خودش را داشته باشد');
+  ok(html.includes('نام ثبت نشده'), 'گفتار بی‌نام صریحاً «نام ثبت نشده» باشد');
+  ok(html.includes('قابل ویرایش'), 'گفتار بی‌نام برچسب «قابل ویرایش» بگیرد');
+} catch (e) { failures++; console.log('FAIL topics unnamed: ' + e.message) }
+
+// ---- ج) درس‌های عمومی هم در بانک دسان دیده می‌شوند (خالی نباشد) ----
+try {
+  const st0 = preview.getState();
+  st0.subjects = [{ id: 'g1', name: 'فارسی', examCoefficient: null, selected: true },
+                  { id: 'g2', name: 'هویت اجتماعی', examCoefficient: null, selected: true }];
+  st0.books = [];
+  st0.sections = {}; st0.syllabusEdits = {}; st0.topicTitles = {};
+  persistSilently(st0);
+  showSyllabusOverview();
+  const html = pageHtml();
+  ok(html.includes('فارسی'), 'درس عمومی فارسی در بانک دروس دیده شود');
+  ok(html.includes('هویت اجتماعی'), 'درس عمومی هویت اجتماعی در بانک دروس دیده شود');
+  ok(html.includes('تعداد گفتار نامشخص'), 'تعداد گفتار درس عمومی «نامشخص» باشد، نه عدد جعلی');
+  ok(html.includes('ورود تعداد گفتارها'), 'برای درس عمومی دکمهٔ ورود تعداد گفتار باشد');
+  // هیچ عدد گفتار جعلی در کارت درس عمومی نباشد
+  ok(!/گفتار ارزیابی‌شده/.test(html), 'برای درس عمومی شمارش گفتار ساخته نشود');
+} catch (e) { failures++; console.log('FAIL general subjects: ' + e.message) }
+
+// ---- د) شیمی دهم عدد ندارد و صفر فرض نمی‌شود ----
+try {
+  const st0 = preview.getState();
+  st0.subjects = [{ id: 'c1', name: 'شیمی', examCoefficient: 9, selected: true }];
+  st0.books = [{ id: 'cb', subject: 'شیمی', grade: 10, code: '110222', selected: true }];
+  st0.sections = {}; st0.syllabusEdits = {}; st0.topicTitles = {};
+  persistSilently(st0);
+  showSyllabusOverview();
+  let html = pageHtml();
+  ok(html.includes('شیمی'), 'شیمی در بانک دسان دیده شود');
+  ok(html.includes('تعداد گفتار نامشخص'), 'شیمی دهم در فهرست عدد گفتار نسازد');
+  openTree('شیمی', 10);
+  html = pageHtml();
+  ok(html.includes('کیهان، زادگاه الفبای هستی'), 'فصل ۱ شیمی دهم در نمای درختی دیده شود');
+  ok(html.includes('تعداد گفتار نامشخص'), 'شیمی دهم عدد گفتار نسازد');
+  ok(!/syl-rename-section:شیمی\|10\|1\|1</.test(html), 'برای شیمی دهم گفتار شماره‌دار ساخته نشود');
+} catch (e) { failures++; console.log('FAIL chem unknown: ' + e.message) }
+
+// ---- هـ) تغییر نام گفتار ذخیره می‌شود و در برنامه‌ریزی اثر می‌گذارد ----
+try {
+  const st0 = preview.getState();
+  st0.subjects = [{ id: 's1', name: 'زیست‌شناسی', examCoefficient: 12, selected: true }];
+  st0.books = [{ id: 'b1', subject: 'زیست‌شناسی', grade: 10, code: '110216', selected: true }];
+  st0.sections = {}; st0.syllabusEdits = {}; st0.topicTitles = {};
+  persistSilently(st0);
+  openTree('زیست‌شناسی', 10);
+  clickAction('syl-rename-section:زیست‌شناسی|10|1|1');
+  const body = byId['#modalBody'].innerHTML || '';
+  ok(body.includes('modalForm'), 'فرم تغییر نام گفتار باز شود');
+  ok(body.includes('save-syl-rename-section'), 'فرم تغییر نام دکمهٔ ذخیره داشته باشد');
+  ok(body.includes('نام دادهٔ اولیه'), 'نام دادهٔ اولیه در فرم دیده شود');
+  global.__fd = new Map([['name', 'یاخته و ساختارش']]);
+  clickAction('save-syl-rename-section');
+  const st = preview.getState();
+  ok(st.topicTitles['زیست‌شناسی|10|1|1'] === 'یاخته و ساختارش',
+     'نام ویرایش‌شده در state ذخیره شود، یافت: ' + JSON.stringify(st.topicTitles));
+  openTree('زیست‌شناسی', 10);
+  ok(pageHtml().includes('یاخته و ساختارش'), 'نام ویرایش‌شده در جدول دیده شود');
+  ok(!pageHtml().includes('زیست‌شناسی چیست؟'), 'نام دادهٔ اولیه با ویرایش کاربر بازنویسی شود');
+} catch (e) { failures++; console.log('FAIL topics rename: ' + e.message) }
+
+// ---- و) حذف گفتار با تأیید کاربر و پاک شدن ارزیابی چسبیده ----
+try {
+  const st0 = preview.getState();
+  st0.subjects = [{ id: 's1', name: 'زیست‌شناسی', examCoefficient: 12, selected: true }];
+  st0.books = [{ id: 'b1', subject: 'زیست‌شناسی', grade: 10, code: '110216', selected: true }];
+  st0.syllabusEdits = {}; st0.topicTitles = {};
+  st0.sections = { 'زیست‌شناسی|10|1|3': { subject: 'زیست‌شناسی', grade: 10,
+    chapter: 1, section: 3, teaching: 'taught', study: 'done', comprehension: 'ok',
+    consolidation: 'ok', testing: 'not_tested', analysis: 'not_analyzed',
+    essay: 'not_done', speed: 'ok', mastery: null, status: 'unknown',
+    deadline: '', notes: '', updatedAt: '2026-10-20T00:00:00.000Z' } };
+  persistSilently(st0);
+  openTree('زیست‌شناسی', 10);
+  ok(pageHtml().includes('یاخته و بافت در بدن انسان'), 'گفتار ۳ پیش از حذف دیده شود');
+  clickAction('syl-delete-section:زیست‌شناسی|10|1|3');
+  const body = byId['#modalBody'].innerHTML || '';
+  ok(body.includes('save-syl-delete-section'), 'فرم حذف با تأیید باز شود');
+  ok(body.includes('ارزیابی ثبت شده'), 'هشدار ارزیابی چسبیده در فرم حذف باشد');
+  clickAction('save-syl-delete-section');
+  const st = preview.getState();
+  ok((st.syllabusEdits['زیست‌شناسی|10|1'] || {}).sections === 2,
+     'شمار گفتار پس از حذف کم شود، یافت: ' + (st.syllabusEdits['زیست‌شناسی|10|1'] || {}).sections);
+  ok(!st.sections['زیست‌شناسی|10|1|3'], 'ارزیابی گفتار حذف‌شده پاک شود');
+  openTree('زیست‌شناسی', 10);
+  ok(!pageHtml().includes('یاخته و بافت در بدن انسان'), 'گفتار حذف‌شده در جدول نباشد');
+} catch (e) { failures++; console.log('FAIL topics delete: ' + e.message) }
+
+// ---- ز) بارگذاری مجدد تکراری نمی‌سازد و ویرایش کاربر را پاک نمی‌کند ----
+try {
+  const st0 = preview.getState();
+  st0.subjects = [{ id: 's1', name: 'زیست‌شناسی', examCoefficient: 12, selected: true }];
+  st0.books = [{ id: 'b1', subject: 'زیست‌شناسی', grade: 10, code: '110216', selected: true }];
+  st0.syllabusEdits = {};
+  st0.topicTitles = { 'زیست‌شناسی|10|1|1': 'نام ویرایش‌شدهٔ من' };
+  st0.sections = { 'زیست‌شناسی|10|1|1': { subject: 'زیست‌شناسی', grade: 10,
+    chapter: 1, section: 1, teaching: 'taught', study: 'done', comprehension: 'ok',
+    consolidation: 'ok', testing: 'not_tested', analysis: 'not_analyzed',
+    essay: 'not_done', speed: 'ok', mastery: 80, status: 'done',
+    deadline: '', notes: '', updatedAt: '2026-10-20T00:00:00.000Z' } };
+  persistSilently(st0);
+  // شبیه‌سازی بستن و باز کردن اپ: همان state دوباره بارگذاری می‌شود
+  const reloaded = JSON.parse(JSON.stringify(preview.getState()));
+  persistSilently(reloaded);
+  openTree('زیست‌شناسی', 10);
+  const html = pageHtml();
+  ok(html.includes('نام ویرایش‌شدهٔ من'), 'نام ویرایش‌شدهٔ کاربر پس از بارگذاری بماند');
+  ok(preview.getState().sections['زیست‌شناسی|10|1|1'], 'وضعیت مطالعهٔ کاربر پاک نشود');
+  // هیچ گفتاری دو بار ساخته نشود: شمار ردیفها باید با شمار گفتارهای پایه برابر باشد
+  const rows = (html.match(/syl-rename-section:زیست‌شناسی\|10\|/g) || []).length;
+  ok(rows === 22, 'گفتارهای پایهٔ دهم ۲۲ ردیف بمانند (تکراری نشوند)، یافت: ' + rows);
+} catch (e) { failures++; console.log('FAIL topics reload: ' + e.message) }
+
+// ---- ح) نام گفتار در فعالیت جبران و برنامه‌ریزی اثر واقعی دارد ----
+try {
+  const st0 = preview.getState();
+  st0.subjects = [{ id: 's1', name: 'زیست‌شناسی', examCoefficient: 12, selected: true }];
+  st0.books = [{ id: 'b1', subject: 'زیست‌شناسی', grade: 10, code: '110216', selected: true }];
+  st0.activities = []; st0.syllabusEdits = {}; st0.topicTitles = {}; st0.sections = {};
+  persistSilently(st0);
+  openTree('زیست‌شناسی', 10);
+  clickAction('assess:زیست‌شناسی:10:1:1');
+  const steps = ['teaching','study','comprehension','consolidation','testing','analysis','essay','speed'];
+  const picks = { teaching:'taught', study:'done', comprehension:'ok',
+    consolidation:'initial', testing:'not_tested', analysis:'not_analyzed',
+    essay:'not_done', speed:'slow' };
+  for (let i = 0; i < steps.length; i++) {
+    global.__fd = new Map();
+    clickAction('assess-pick:' + steps[i] + ':' + picks[steps[i]]);
+  }
+  global.__fd = new Map([['mastery',''],['masteryUnknown','on'],['notes','']]);
+  // assess-backlog خودش ارزیابی را ذخیره و سپس کارهای جبران می‌سازد
+  clickAction('assess-backlog');
+  const st = preview.getState();
+  ok(!!st.sections['زیست‌شناسی|10|1|1'], 'ارزیابی گفتار ذخیره شود');
+  ok(st.sections['زیست‌شناسی|10|1|1'] && st.sections['زیست‌شناسی|10|1|1'].teaching === 'taught',
+     'پاسخ تدریس ثبت شود');
+  const st2 = st;
+  const act = (st2.activities || []).find((x) => x.title.includes('زیست‌شناسی چیست؟'));
+  ok(!!act, 'فعالیت جبران با نام گفتار ساخته شود، یافت: ' +
+     JSON.stringify((st2.activities || []).map((x) => x.title)));
+  ok(act && act.subjectName === 'زیست‌شناسی', 'فعالیت جبران به درس متصل باشد');
+} catch (e) { failures++; console.log('FAIL topics planning: ' + e.message) }
+
+// ---- ط) هیچ نشانی اینترنتی یا دادهٔ نمونه‌ای در صفحه نیست ----
+try {
+  const html = pageHtml();
+  ok(!html.includes('https://') && !html.includes('http://'), 'صفحه سرفصل نشانی اینترنتی نداشته باشد');
+  ok(!html.includes('class="sample'), 'دادهٔ نمونه در صفحه سرفصل نباشد');
+} catch (e) { failures++; console.log('FAIL topics honesty: ' + e.message) }
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node برای اجرای پیش‌نمایش لازم است")
+def test_syllabus_topics_are_named_editable_and_stable(preview_js, tmp_path):
+    """گفتارها نام دارند، قابل ویرایش و حذف‌اند، شناسهٔ پایدار می‌گیرند و
+    بارگذاری مجدد تکراری نمی‌سازد."""
+    payload = tmp_path / "preview-bundle.js"
+    payload.write_text(preview_js, encoding="utf-8")
+    syllabus_json = tmp_path / "syllabus.json"
+    m = re.search(
+        r'id="syllabusData"[^>]*>(.*?)</script>',
+        PREVIEW.read_text(encoding="utf-8"),
+        re.S,
+    )
+    syllabus_json.write_text(m.group(1).replace("\\u003c", "<"), encoding="utf-8")
+    harness = _harness(payload, _seed_state(), syllabus_json)
+    body = Path(harness).read_text(encoding="utf-8")
+    marker = "console.log(JSON.stringify({failures}));\nprocess.exit(failures ? 1 : 0);"
+    assert marker in body, "topics harness marker"
+    body = body.replace(marker, _TOPICS_SCRIPT.strip() + "\n", 1)
+    Path(harness).write_text(body, encoding="utf-8")
+    result = subprocess.run(
+        [NODE, harness],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=180,
+        cwd=str(ROOT),
+    )
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    assert result.returncode == 0, stdout + stderr
+    assert "FAIL" not in stdout, stdout
 
 
 @pytest.mark.skipif(NODE is None, reason="node برای اجرای پیش‌نمایش لازم است")

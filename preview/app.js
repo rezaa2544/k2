@@ -96,6 +96,10 @@ if(action==='topic-fields'){priorityFactorForm((state.topics||[])[0]);return;}
       if(action.startsWith('syl-add-section:')){const [,subject,grade,chapter]=action.split(':');sylAddSectionForm(subject,Number(grade),Number(chapter));return;}
       if(action==='save-syl-chapter'){submitSylChapter($('#modalForm'));return;}
       if(action==='save-syl-section'){submitSylSection($('#modalForm'));return;}
+      if(action.startsWith('syl-rename-section:')){sylRenameSectionForm(action.slice('syl-rename-section:'.length));return;}
+      if(action==='save-syl-rename-section'){submitSylRenameSection($('#modalForm'));return;}
+      if(action.startsWith('syl-delete-section:')){sylDeleteSectionForm(action.slice('syl-delete-section:'.length));return;}
+      if(action==='save-syl-delete-section'){submitSylDeleteSection();return;}
       if(action.startsWith('syl-counts:')){const [,subject,grade]=action.split(':');sylCountsForm(subject,Number(grade));return;}
       if(action==='save-syl-counts'){submitSylCounts($('#modalForm'));return;}
       if(action==='go-syllabus'){currentPage='topics';render();return;}

@@ -149,6 +149,43 @@ function chapterSectionCount(ch) {
   return ch.sections === null || ch.sections === undefined ? null : Number(ch.sections);
 }
 
+/**
+ * فهرست گفتارهای نام‌دار یک فصل از دادهٔ اولیه؛ ``null`` یعنی این فصل
+ * گفتارنامهٔ رسمی ندارد و فقط شماره دارد.
+ */
+function chapterTopics(subject, grade, ch) {
+  const base = ((window.K2_SYLLABUS || {})[subject] || {})[String(grade)] || [];
+  const found = base.find((c) => c.no === ch.no);
+  if (!found || !Array.isArray(found.topics)) return null;
+  return found.topics.map((t) => ({
+    no: Number(String(t.id).split('|')[3]),
+    id: t.id,
+    title: t.title,
+    verified: t.verified === true,
+  }));
+}
+
+/** شناسهٔ پایدار گفتار — همان کلیدی که وضعیت مطالعه با آن ذخیره می‌شود. */
+function topicIdOf(subject, grade, chapter, section) {
+  return `${subject}|${grade}|${chapter}|${section}`;
+}
+
+/**
+ * عنوان قابل نمایش یک گفتار.
+ *
+ * ترتیب: ویرایش کاربر ← نام دادهٔ اولیه ← «گفتار N».
+ * اگر نام اولیه ثبت نشده باشد، صریحاً «نام ثبت نشده» می‌گوید؛ نامی ساخته
+ * نمی‌شود.
+ */
+function topicLabel(subject, grade, ch, sec) {
+  const topics = chapterTopics(subject, grade, ch);
+  const t = topics && topics.find((x) => x.no === Number(sec));
+  const edited = (state.topicTitles || {})[topicIdOf(subject, grade, ch.no, sec)];
+  if (edited) return edited;
+  if (t && t.title) return t.title;
+  return `گفتار ${sec} · نام ثبت نشده`;
+}
+
 /** رکورد ارزیابی یک گفتار (بدون ساخت خودکار). */
 function sectionRecord(subject, grade, chapter, section) {
   return (state.sections || {})[secKey(subject, grade, chapter, section)] || null;
@@ -314,7 +351,7 @@ function assessCreateBacklog() {
     state.activities = state.activities || [];
     state.activities.unshift({
       id: id(),
-      title: `${need.label} · گفتار ${d.section} فصل ${d.chapter} ${d.subject}`,
+      title: `${need.label} · ${topicLabel(d.subject, d.grade, { no: d.chapter, title: '' }, d.section)} · فصل ${d.chapter} ${d.subject}`,
       type: need.type,
       subjectId: subject?.id || '',
       subjectName: d.subject,
@@ -460,15 +497,20 @@ function syllabusSectionRow(subject, grade, ch, sec) {
   const res = resourcesFor(subject, ch.no, sec);
   const remaining = res.reduce((n, r) => n + (resourceRemaining(r) ?? 0), 0);
   const needs = sectionNeeds(rec);
+  const label = topicLabel(subject, grade, ch, sec);
+  const tid = topicIdOf(subject, grade, ch.no, sec);
+  // اگر نام دادهٔ اولیه یا ویرایش کاربر موجود باشد، برچسب «قابل ویرایش» لازم نیست.
+  const hasRealName = !/^گفتار \d+( · نام ثبت نشده)?$/.test(label);
   return `<tr>
 <td>${sec}</td>
+<td><strong>${esc(label)}</strong>${hasRealName ? '' : ' <span class="pill gray">قابل ویرایش</span>'}</td>
 <td>${esc(ch.title)}</td>
 <td>${rec?.updatedAt ? `${answered}/۸ سؤال` : '—'}</td>
 <td>${mastery === null ? 'نامشخص' : mastery + '٪'}</td>
 <td>${res.length ? `${res.length} منبع${remaining ? ` · ${remaining} باقی‌مانده` : ''}` : '—'}</td>
 <td>${needs.length ? esc(needs.map((n) => n.label).join(' · ')) : '—'}</td>
 <td><span class="pill ${badge.tone === 'ok' ? 'ok' : badge.tone === 'danger' ? 'danger' : 'warn'}">${esc(badge.text)}</span></td>
-<td>${actionBtn(rec?.updatedAt ? 'ویرایش ارزیابی' : 'ارزیابی گفتار', `assess:${subject}:${grade}:${ch.no}:${sec}`, rec?.updatedAt ? '' : 'primary')} ${actionBtn('منابع', `resources:${subject}:${ch.no}:${sec}`)}</td>
+<td>${actionBtn(rec?.updatedAt ? 'ویرایش ارزیابی' : 'ارزیابی گفتار', `assess:${subject}:${grade}:${ch.no}:${sec}`, rec?.updatedAt ? '' : 'primary')} ${actionBtn('منابع', `resources:${subject}:${ch.no}:${sec}`)} ${actionBtn('تغییر نام', `syl-rename-section:${tid}`)} ${actionBtn('حذف', `syl-delete-section:${tid}`, 'danger')}</td>
 </tr>`;
 }
 
@@ -520,7 +562,8 @@ function sylAddSectionForm(subject, grade, chapterNo) {
   const next = (chapterSectionCount(ch) ?? 0) + 1;
   dialog('افزودن گفتار', `<form id="modalForm" data-modal-type="syl-section">
 <label>شمارهٔ گفتار<input name="section" type="number" min="1" value="${next}"></label>
-<p class="card-body">با ذخیره، گفتار به فصل اضافه می‌شود و ارزیابی مستقل خودش را می‌گیرد. وضعیت آن به بقیهٔ گفتارهای فصل تعمیم داده نمی‌شود.</p>
+<label>نام گفتار (اختیاری)<input name="name" placeholder="از کتاب سال ۱۴۰۶؛ اگر نامش را نمی‌دانی خالی بگذار"></label>
+<p class="card-body">با ذخیره، گفتار به فصل اضافه می‌شود و ارزیابی مستقل خودش را می‌گیرد. وضعیت آن به بقیهٔ گفتارهای فصل تعمیم داده نمی‌شود. اگر نام رسمی را ندانی، خالی بگذار تا «نام ثبت نشده» بماند؛ نامی ساخته نمی‌شود.</p>
 <div class="modal-actions">${actionBtn('انصراف', 'close-dialog')}${actionBtn('افزودن', 'save-syl-section', 'primary')}</div></form>`);
 }
 
@@ -569,6 +612,7 @@ function submitSylSection(form) {
   const d = new FormData(form);
   const { subject, grade, chapter } = sylDraft;
   const section = Math.max(1, num(d.get('section')));
+  const name = String(d.get('name') || '').trim();
   const ch = (state.syllabusEdits[sylKey(subject, grade, chapter)] || {});
   const base = (window.K2_SYLLABUS?.[subject]?.[String(grade)] || []).find((c) => c.no === chapter) || {};
   const current = ch.sections ?? base.sections ?? 0;
@@ -576,8 +620,90 @@ function submitSylSection(form) {
   state.syllabusEdits[sylKey(subject, grade, chapter)] = {
     ...ch, sections: Math.max(num(current), section), confirmed: true,
   };
+  // نام وارد‌شدهٔ کاربر روی دادهٔ اولیه می‌نشیند و آن را بازنویسی نمی‌کند.
+  if (name) {
+    state.topicTitles = state.topicTitles || {};
+    state.topicTitles[topicIdOf(subject, grade, chapter, section)] = name;
+  }
   closeDialog();
-  persist(`گفتار ${section} به فصل ${chapter} اضافه شد`);
+  persist(`گفتار ${section} به فصل ${chapter} اضافه شد${name ? ' و نام‌گذاری شد' : ''}`);
+  render();
+}
+
+/* ---------- ۸ب. تغییر نام و حذف گفتار ---------- */
+
+/** شناسه را به اجزایش می‌شکافد؛ ``null`` اگر ساختار ناشناس بود. */
+function splitTopicId(tid) {
+  const parts = String(tid).split('|');
+  if (parts.length !== 4) return null;
+  const [subject, grade, chapter, section] = parts;
+  if (!subject || !Number.isFinite(Number(grade)) || !Number.isFinite(Number(chapter))
+      || !Number.isFinite(Number(section))) return null;
+  return { subject, grade: Number(grade), chapter: Number(chapter), section: Number(section) };
+}
+
+function sylRenameSectionForm(tid) {
+  const parts = splitTopicId(tid);
+  if (!parts) { notify('شناسهٔ گفتار نامعتبر است'); return; }
+  const { subject, grade, chapter, section } = parts;
+  const ch = (syllabusChapters(subject, grade) || []).find((c) => c.no === chapter) || { no: chapter, title: '' };
+  const current = (state.topicTitles || {})[tid] || '';
+  const base = ((window.K2_SYLLABUS || {})[subject] || {})[String(grade)] || [];
+  const baseTopic = (base.find((c) => c.no === chapter) || {}).topics;
+  const official = baseTopic && baseTopic.find((t) => Number(String(t.id).split('|')[3]) === section);
+  dialog('تغییر نام گفتار', `<form id="modalForm" data-modal-type="syl-rename-section">
+<label>نام گفتار<input name="name" value="${esc(current)}" placeholder="${official?.title ? esc(official.title) : 'مثلاً: ساختار و عملکرد لولهٔ گوارش'}"></label>
+<p class="card-body">درس ${esc(subject)} · فصل ${chapter} (${esc(ch.title)}) · گفتار ${section}${
+  official?.title ? `<br>نام دادهٔ اولیه: <strong>${esc(official.title)}</strong>` : '<br>نام رسمی این گفتار در اطلاعات اولیه ثبت نشده؛ خودت از کتاب سال ۱۴۰۶ وارد کن.'
+}</p>
+<div class="modal-actions">${actionBtn('انصراف', 'close-dialog')}${actionBtn('ذخیرهٔ نام', 'save-syl-rename-section', 'primary')}</div></form>`);
+  sylDraft = { subject, grade, chapter, section, tid };
+}
+
+function submitSylRenameSection(form) {
+  const d = new FormData(form);
+  const { tid } = sylDraft;
+  const name = String(d.get('name') || '').trim();
+  state.topicTitles = state.topicTitles || {};
+  if (name) state.topicTitles[tid] = name;
+  else delete state.topicTitles[tid];
+  closeDialog();
+  persist(name ? 'نام گفتار ذخیره شد' : 'نام به حالت دادهٔ اولیه برگشت');
+  render();
+}
+
+function sylDeleteSectionForm(tid) {
+  const parts = splitTopicId(tid);
+  if (!parts) { notify('شناسهٔ گفتار نامعتبر است'); return; }
+  const { subject, grade, chapter, section } = parts;
+  const ch = (syllabusChapters(subject, grade) || []).find((c) => c.no === chapter) || { no: chapter, title: '' };
+  const label = topicLabel(subject, grade, ch, section);
+  const hasRecord = !!sectionRecord(subject, grade, chapter, section);
+  dialog('حذف گفتار', `<form id="modalForm" data-modal-type="syl-delete-section">
+<p class="card-body">گفتار <strong>${esc(label)}</strong> از فصل ${chapter} (${esc(ch.title)}) حذف شود؟${
+  hasRecord ? '<br><strong>هشدار:</strong> برای این گفتار ارزیابی ثبت شده است؛ با حذف، آن ارزیابی هم از فهرست خارج می‌شود.' : ''
+}<br>حذف بعد از تأیید تو انجام می‌شود و قابل بازگشت نیست.</p>
+<div class="modal-actions">${actionBtn('انصراف', 'close-dialog')}${actionBtn('حذف گفتار', 'save-syl-delete-section', 'danger')}</div></form>`);
+  sylDraft = { subject, grade, chapter, section, tid };
+}
+
+function submitSylDeleteSection() {
+  const { subject, grade, chapter, section, tid } = sylDraft;
+  const key = sylKey(subject, grade, chapter);
+  const ch = state.syllabusEdits[key] || {};
+  const base = (window.K2_SYLLABUS?.[subject]?.[String(grade)] || []).find((c) => c.no === chapter) || {};
+  const current = ch.sections ?? base.sections ?? 0;
+  if (section > current) { notify('این گفتار در فهرست نیست'); return; }
+  state.syllabusEdits = state.syllabusEdits || {};
+  state.syllabusEdits[key] = { ...ch, sections: Math.max(0, num(current) - 1), confirmed: true };
+  // ارزیابی و منابع چسبیده به همین گفتار هم برداشته می‌شوند تا رکورد بی‌صاحب نماند.
+  state.sections = state.sections || {};
+  delete state.sections[secKey(subject, grade, chapter, section)];
+  state.resources = (state.resources || []).filter((r) => !(r.subject === subject
+    && num(r.grade) === grade && num(r.chapter) === chapter && num(r.section) === section));
+  if (state.topicTitles) delete state.topicTitles[tid];
+  closeDialog();
+  persist('گفتار حذف شد');
   render();
 }
 
@@ -648,7 +774,12 @@ function syllabusOverview() {
   if (!subjects.length) return statusNote + emptyState('اول درس‌ها را انتخاب کن', 'در «بانک دروس» درس‌های خودت را انتخاب کن تا سرفصل‌ها نمایش داده شود.', actionBtn('رفتن به بانک دروس', 'go-courses'));
   let out = statusNote;
   for (const s of subjects) {
-    const grade = gradeOfSubject(s.name);
+    // همهٔ پایه‌هایی که برای این درس فهرست فصل دارند نشان داده می‌شوند؛ درس‌های
+    // عمومی ممکن است فقط در یک پایه سرفصل داشته باشند.
+    const byGrade = ((window.K2_SYLLABUS || {})[s.name] || {});
+    const gradeKeys = Object.keys(byGrade).map(Number).filter((g) => Number.isFinite(g));
+    const gradeList = gradeKeys.length ? gradeKeys.sort((a, b) => a - b) : [gradeOfSubject(s.name)];
+    for (const grade of gradeList) {
     const chapters = syllabusChapters(s.name, grade);
     if (!chapters.length) continue;
     const known = chapters.filter((c) => chapterSectionCount(c) !== null);
@@ -659,6 +790,7 @@ function syllabusOverview() {
     out += `<div class="button-row">${actionBtn('نمایش گفتارها', `syllabus-open:${esc(s.name)}:${grade}`, 'primary')} ${actionBtn('منابع این درس', `resource-subject:${esc(s.name)}`)}${allUnknown ? ` ${actionBtn('ورود تعداد گفتارها', `syl-counts:${esc(s.name)}:${grade}`, 'primary')}` : ''}</div>`;
     if (allUnknown) out += `<div class="advice warning"><span class="advice-mark">!</span><span>تعداد گفتارهای این درس در اطلاعات اولیه ثبت نشده (${chapters.length} فصل، همه نامشخص). برنامه هیچ عددی حدس نمی‌زند و صفر فرض نمی‌کند؛ تا وقتی خودت از کتاب سال ۱۴۰۶ بخوانی و وارد کنی، ارزیابی گفتاربه‌گفتار برای این درس ممکن نیست.</span></div>`;
     out += `</article>`;
+    }
   }
   return out;
 }
