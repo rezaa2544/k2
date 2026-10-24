@@ -119,8 +119,12 @@ class OnboardingWizard(QDialog):
         self.btn_finish.clicked.connect(self._finish)
         self.btn_save = QPushButton("ذخیره و ادامه بعدی")
         self.btn_save.clicked.connect(self._save_and_close)
+        # گام‌های اختیاری باید صریحاً قابل رد شدن باشند (تکمیل تدریجی).
+        self.btn_skip = QPushButton("رد کردن این گام")
+        self.btn_skip.clicked.connect(self._skip_step)
         buttons.addWidget(self.btn_prev)
         buttons.addWidget(self.btn_save)
+        buttons.addWidget(self.btn_skip)
         buttons.addStretch(1)
         buttons.addWidget(self.btn_next)
         buttons.addWidget(self.btn_finish)
@@ -988,11 +992,30 @@ class OnboardingWizard(QDialog):
         self._save_state()
         self._goto(self.state.current_index - 1)
 
+    def _skip_step(self) -> None:
+        """گام اختیاری بدون پاسخ رد می‌شود؛ راه‌اندازی متوقف نمی‌شود."""
+        step = ONBOARDING_STEPS[self.state.current_index]
+        if step.required:
+            QMessageBox.information(
+                self, "گام الزامی", f"«{step.title}» الزامی است و نمی‌تواند رد شود."
+            )
+            return
+        self.state.values.pop(step.key, None)
+        self.state.completed_steps.discard(step.key)
+        self.state.complete_step(step.key)
+        self._save_state()
+        if self.state.current_index < len(ONBOARDING_STEPS) - 1:
+            self._goto(self.state.current_index)
+        else:
+            self._finish()
+
     def _refresh_nav(self) -> None:
         last = len(ONBOARDING_STEPS) - 1
         self.btn_prev.setEnabled(self.state.current_index > 0)
         self.btn_next.setEnabled(self.state.current_index < last)
         self.btn_finish.setEnabled(self.state.current_index == last)
+        step = ONBOARDING_STEPS[self.state.current_index]
+        self.btn_skip.setVisible(not step.required)
 
         unresolved = self.state.unresolved_blocking_questions()
         if unresolved:
@@ -1140,6 +1163,34 @@ class OnboardingWizard(QDialog):
         profile.exam_year = int(digits) if digits.isdigit() else None
         profile.regulation_version = f"کنکور {profile.exam_year}" if profile.exam_year else ""
         self.service.update_exam_profile(profile)
+        # حداقل خواب مورد نظر: خواب قربانی جبران عقب‌افتادگی نمی‌شود.
+        min_sleep_text = values.get("min_sleep", "")
+        digits_min_sleep = __import__("k2.jdate", fromlist=["normalize_digits"]).normalize_digits(
+            min_sleep_text
+        )
+        if digits_min_sleep.isdigit():
+            self.service.repo.set_setting("daily.sleep_target_minutes", digits_min_sleep)
+
+        # برآورد زمان هر نوع کار؛ فرضیهٔ محافظه‌کارانه و قابل کالیبراسیون.
+        raw_durations = values.get("typical_durations", "")
+        if raw_durations:
+            parts = [x for x in raw_durations.replace("،", ",").split(",") if x.strip()]
+            if len(parts) >= 4:
+                normalized = [
+                    __import__("k2.jdate", fromlist=["normalize_digits"]).normalize_digits(x).strip()
+                    for x in parts[:4]
+                ]
+                if all(x.isdigit() for x in normalized):
+                    self.service.repo.set_setting(
+                        "estimate.defaults",
+                        json.dumps({
+                            "testing": int(normalized[0]),
+                            "analysis": int(normalized[1]),
+                            "consolidation": int(normalized[2]),
+                            "homework": int(normalized[3]),
+                        }),
+                    )
+
         self.service.repo.set_setting(
             "priority.use_exam_coefficients",
             "1" if values.get("priority_mode") == "خودکار با توجه به ضریب آزمون" else "0",

@@ -113,7 +113,7 @@ _font_css = _font_face()
 css = (ROOT / "base.css").read_text(encoding="utf-8")
 app_js = "\n".join(
     (ROOT / name).read_text(encoding="utf-8")
-    for name in ("core.js", "syllabus.js", "forms.js", "app.js")
+    for name in ("core.js", "syllabus.js", "backlog.js", "examseries.js", "priority.js", "forms.js", "app.js")
 )
 extra_css = r'''
 /* Functional browser-preview controls */

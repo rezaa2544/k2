@@ -31,7 +31,7 @@ NODE = shutil.which("node") or shutil.which("nodejs")
 def preview_js() -> str:
     return "\n".join(
         (PREVIEW_DIR / name).read_text(encoding="utf-8")
-        for name in ("core.js", "syllabus.js", "forms.js", "app.js")
+        for name in ("core.js", "syllabus.js", "backlog.js", "examseries.js", "priority.js", "forms.js", "app.js")
     )
 
 
@@ -172,7 +172,7 @@ def test_preview_has_no_network_calls_in_js():
     """کد پیش‌نمایش هیچ درخواست شبکه‌ای نمی‌زند."""
     js = "\n".join(
         (PREVIEW_DIR / name).read_text(encoding="utf-8")
-        for name in ("core.js", "syllabus.js", "forms.js", "app.js")
+        for name in ("core.js", "syllabus.js", "backlog.js", "examseries.js", "priority.js", "forms.js", "app.js")
     )
     for pattern in (
         r"\bfetch\s*\(", r"XMLHttpRequest", r"\.open\s*\(\s*['\"](GET|POST)",

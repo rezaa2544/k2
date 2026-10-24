@@ -96,6 +96,17 @@ const ASSESS_QUESTIONS = [
       ['unknown', 'نمی‌دانم / نیاز به ارزیابی'],
     ],
   },
+  {
+    key: 'speed', title: 'سؤال ۸ از ۸ · سرعت پاسخ‌دهی زمان‌دار',
+    hint: 'مهارت در شرایط زمان‌دار؛ جدا از درست یا غلط بودن',
+    options: [
+      ['slow', 'درست حل می‌کنم ولی زمان زیادی می‌برد'],
+      ['partial_time', 'بعضی سؤال‌ها را در زمان لازم حل می‌کنم'],
+      ['timed_ok', 'در زمان لازم پاسخ می‌دهم'],
+      ['panic', 'زمان‌دار بودن استرس می‌سازد و کار را خراب می‌کند'],
+      ['unknown', 'نمی‌دانم / نیاز به ارزیابی'],
+    ],
+  },
 ];
 
 /* ---------- ۲. نگاشت پاسخ به نوع عقب‌افتادگی ---------- */
@@ -108,6 +119,9 @@ const ASSESS_TO_BACKLOG = [
   ['testing', ['not_tested', 'few', 'enough_errors', 'retake'], 'testing', 'تست‌نزدن'],
   ['analysis', ['not_analyzed', 'partial', 'known_not_fixed'], 'analysis', 'تحلیل‌نکردن آزمون'],
   ['essay', ['not_done', 'flawed'], 'essay', 'تمرین تشریحی انجام‌نشده'],
+  // «درست ولی کند» و «استرس زمان‌دار» نیاز واقعی‌اند و به تست زمان‌دار می‌روند؛
+  // «زمان کافی دارم» عمداً فهرست نشده چون چیزی برای جبران ندارد.
+  ['speed', ['slow', 'partial_time', 'panic'], 'testing', 'تمرین زمان‌دار ناکافی'],
 ];
 
 /* ---------- ۳. ابزارهای کلید و وضعیت ---------- */
@@ -182,15 +196,10 @@ function assessStart(subject, grade, chapter, section) {
   const existing = sectionRecord(subject, grade, chapter, section) || {};
   assessDraft = {
     subject, grade, chapter, section, step: 0,
-    answers: {
-      teaching: existing.teaching ?? null,
-      study: existing.study ?? null,
-      comprehension: existing.comprehension ?? null,
-      consolidation: existing.consolidation ?? null,
-      testing: existing.testing ?? null,
-      analysis: existing.analysis ?? null,
-      essay: existing.essay ?? null,
-    },
+    // پاسخ‌های قبلی از خودِ فهرست سؤال‌ها خوانده می‌شوند تا «ویرایش پاسخ»
+    // برای هر سؤالی کار کند — با فهرست دستی، سؤال تازه بی‌جواب باز می‌شد.
+    answers: Object.fromEntries(
+      ASSESS_QUESTIONS.map(q => [q.key, existing[q.key] ?? null])),
     mastery: existing.mastery ?? null,
     masteryUnknown: existing.mastery === null || existing.mastery === undefined || existing.mastery === '',
     pagesTotal: existing.pagesTotal ?? null,
@@ -212,7 +221,9 @@ function assessRender() {
   if (d.step < ASSESS_QUESTIONS.length) {
     const q = ASSESS_QUESTIONS[d.step];
     const picked = d.answers[q.key];
-    let body = `<p class="card-body">${esc(q.hint)}</p><div class="button-row" style="flex-direction:column;align-items:stretch">`;
+    // عنوان خود سؤال («سؤال ۳ از ۸ · فهم مطلب») هم نمایش داده می‌شود؛
+    // پیش‌تر فقط راهنما دیده می‌شد و کاربر نمی‌دانست کدام سؤال چندم است.
+    let body = `<h3 class="card-title">${esc(q.title)}</h3><p class="card-body">${esc(q.hint)}</p><div class="button-row" style="flex-direction:column;align-items:stretch">`;
     for (const [val, label] of q.options) {
       body += `<button type="button" class="btn ${picked === val ? 'primary' : ''}" data-action="assess-pick:${q.key}:${val}">${esc(label)}</button>`;
     }
@@ -229,7 +240,7 @@ function assessRender() {
     return;
   }
   // گام آخر: میزان تسلط
-  let body = `<p class="card-body">میزان تسلط خودت را از ۰ تا ۱۰۰ مشخص کن. اگر مطمئن نیستی، گزینهٔ «مطمئن نیستم» را انتخاب کن؛ عدد ساختگی ثبت نمی‌شود.</p>`;
+  let body = `<h3 class="card-title">گام پایانی · میزان تسلط</h3><p class="card-body">میزان تسلط خودت را از ۰ تا ۱۰۰ مشخص کن. اگر مطمئن نیستی، گزینهٔ «مطمئن نیستم» را انتخاب کن؛ عدد ساختگی ثبت نمی‌شود.</p>`;
   body += `<div class="form-grid"><label>میزان تسلط (۰ تا ۱۰۰)<input name="mastery" type="number" min="0" max="100" inputmode="numeric" value="${d.masteryUnknown ? '' : (d.mastery ?? '')}" ${d.masteryUnknown ? 'disabled' : ''}></label></div>`;
   body += `<label class="check-label"><input type="checkbox" name="masteryUnknown" ${d.masteryUnknown ? 'checked' : ''} data-action="assess-mastery-unknown"> مطمئن نیستم / نیاز به ارزیابی</label>`;
   body += `<label>یادداشت (اختیاری)<textarea name="notes">${esc(d.notes || '')}</textarea></label>`;
@@ -263,15 +274,14 @@ function assessSave(closeAfter = true) {
   const key = secKey(d.subject, d.grade, d.chapter, d.section);
   state.sections = state.sections || {};
   const prev = state.sections[key] || {};
+  // پاسخ‌ها از خودِ فهرست سؤال‌ها ساخته می‌شوند، نه از فهرست دستی کلیدها.
+  // چرا: پیش‌تر هر سؤال تازه در سه جا باید ثبت می‌شد و اگر جا می‌ماند،
+  // بی‌صدا ذخیره نمی‌شد — کاربر پاسخ می‌داد و هیچ اتفاقی نمی‌افتاد.
+  const answers = Object.fromEntries(
+    ASSESS_QUESTIONS.map(q => [q.key, d.answers[q.key] ?? null]));
   state.sections[key] = {
     ...prev,
-    teaching: d.answers.teaching ?? null,
-    study: d.answers.study ?? null,
-    comprehension: d.answers.comprehension ?? null,
-    consolidation: d.answers.consolidation ?? null,
-    testing: d.answers.testing ?? null,
-    analysis: d.answers.analysis ?? null,
-    essay: d.answers.essay ?? null,
+    ...answers,
     mastery: d.masteryUnknown ? null : d.mastery,
     pagesTotal: d.pagesTotal === null || d.pagesTotal === undefined ? null : num(d.pagesTotal),
     pagesDone: d.pagesDone === null || d.pagesDone === undefined ? null : num(d.pagesDone),
@@ -571,6 +581,64 @@ function submitSylSection(form) {
   render();
 }
 
+/* ---------- ۶ب. ورود گروهی تعداد گفتارها ---------- */
+
+let sylCountsDraft = null;
+
+/**
+ * فرم گروهی تعداد گفتارها.
+ *
+ * چرا لازم است: دروسی مثل شیمی ۱۰ فصل دارند و هیچ‌کدام تعداد گفتار
+ * ثبت‌نشده‌اند. اگر کاربر مجبور باشد فصل‌به‌فصل وارد کند، عملاً هیچ‌وقت
+ * وارد نمی‌کند و برنامه روی دادهٔ خالی کار می‌کند. اینجا همهٔ فصل‌ها یک‌جا
+ * دیده می‌شوند و خالی گذاشتن یعنی «نامشخص»، نه صفر.
+ */
+function sylCountsForm(subject, grade) {
+  const chapters = syllabusChapters(subject, grade);
+  if (!chapters.length) { notify('برای این پایه فصلی ثبت نشده است'); return; }
+  sylCountsDraft = { subject, grade };
+  const rows = chapters.map((ch) => {
+    const count = chapterSectionCount(ch);
+    return `<tr><td>${ch.no}</td><td>${esc(ch.title)}</td>`
+      + `<td><input type="number" name="sec_${ch.no}" min="0" inputmode="numeric" value="${count === null ? '' : count}" placeholder="نامشخص = خالی"></td>`
+      + `<td>${count === null ? '<span class="pill warn">نامشخص</span>' : count}</td></tr>`;
+  }).join('');
+  const unknown = chapters.filter((c) => chapterSectionCount(c) === null).length;
+  dialog(`تعداد گفتارهای ${esc(subject)} · پایهٔ ${grade}`, `<form id="modalForm" data-modal-type="syl-counts">
+<p class="card-body">${unknown ? `${unknown} فصل از ${chapters.length} فصل عدد ثبت‌نشده دارند. این‌ها «نامشخص» می‌مانند و برنامه هیچ عددی حدس نمی‌زند.` : 'همهٔ فصل‌ها عدد دارند؛ اگر کتاب ۱۴۰۶ را تطبیق داده‌ای همین‌جا اصلاح کن.'}</p>
+<div class="table-wrap"><table><thead><tr><th>#</th><th>عنوان فصل</th><th>تعداد گفتار (خالی = نامشخص)</th><th>فعلی</th></tr></thead><tbody>${rows}</tbody></table></div>
+<p class="card-body">تعداد را از روی کتاب سال ۱۴۰۶ خودت بخوان. اگر مطمئن نیستی، خالی بگذار؛ «نامشخص» صادقانه‌تر از یک عدد غلط است.</p>
+<div class="modal-actions">${actionBtn('انصراف', 'close-dialog')}${actionBtn('ذخیرهٔ تعدادها', 'save-syl-counts', 'primary')}</div></form>`);
+}
+
+function submitSylCounts(form) {
+  const d = new FormData(form);
+  const { subject, grade } = sylCountsDraft;
+  const chapters = syllabusChapters(subject, grade);
+  state.syllabusEdits = state.syllabusEdits || {};
+  let entered = 0, stillUnknown = 0;
+  for (const ch of chapters) {
+    const raw = d.get(`sec_${ch.no}`);
+    const key = sylKey(subject, grade, ch.no);
+    const prev = state.syllabusEdits[key] || {};
+    if (raw === null || raw === undefined || String(raw).trim() === '') {
+      // خالی = نامشخص. اگر قبلاً تعدادی ثبت شده بود، همان می‌ماند.
+      stillUnknown += 1;
+      if (prev.sections !== undefined) {
+        state.syllabusEdits[key] = { ...prev, sections: null, confirmed: true };
+      }
+      continue;
+    }
+    state.syllabusEdits[key] = { ...prev, sections: Math.max(0, num(raw)), confirmed: true };
+    entered += 1;
+  }
+  closeDialog();
+  persist(entered
+    ? `${entered} فصل با تعداد گفتار ثبت شد${stillUnknown ? ` · ${stillUnknown} فصل نامشخص ماند` : ''}`
+    : 'هیچ تعدادی وارد نشد؛ همه «نامشخص» ماندند');
+  render();
+}
+
 /* ---------- ۱۰. نمای یکپارچهٔ سرفصل در صفحهٔ مباحث ---------- */
 
 function syllabusOverview() {
@@ -586,8 +654,11 @@ function syllabusOverview() {
     const known = chapters.filter((c) => chapterSectionCount(c) !== null);
     const totalSec = known.reduce((n, c) => n + chapterSectionCount(c), 0);
     const assessed = (state.sections ? Object.keys(state.sections) : []).filter((k) => k.startsWith(`${s.name}|${grade}|`)).length;
+    const allUnknown = chapters.length > 0 && known.length === 0;
     out += `<article class="card tone-exam"><div class="section-row"><h3 class="card-title">${esc(s.name)} · پایهٔ ${grade}</h3><span class="pill ${totalSec ? (assessed < totalSec ? 'warn' : 'ok') : 'gray'}">${totalSec ? `${assessed} از ${totalSec} گفتار ارزیابی‌شده` : 'تعداد گفتار نامشخص'}</span></div>`;
-    out += `<div class="button-row">${actionBtn('نمایش گفتارها', `syllabus-open:${esc(s.name)}:${grade}`, 'primary')} ${actionBtn('منابع این درس', `resource-subject:${esc(s.name)}`)}</div></article>`;
+    out += `<div class="button-row">${actionBtn('نمایش گفتارها', `syllabus-open:${esc(s.name)}:${grade}`, 'primary')} ${actionBtn('منابع این درس', `resource-subject:${esc(s.name)}`)}${allUnknown ? ` ${actionBtn('ورود تعداد گفتارها', `syl-counts:${esc(s.name)}:${grade}`, 'primary')}` : ''}</div>`;
+    if (allUnknown) out += `<div class="advice warning"><span class="advice-mark">!</span><span>تعداد گفتارهای این درس در اطلاعات اولیه ثبت نشده (${chapters.length} فصل، همه نامشخص). برنامه هیچ عددی حدس نمی‌زند و صفر فرض نمی‌کند؛ تا وقتی خودت از کتاب سال ۱۴۰۶ بخوانی و وارد کنی، ارزیابی گفتاربه‌گفتار برای این درس ممکن نیست.</span></div>`;
+    out += `</article>`;
   }
   return out;
 }
