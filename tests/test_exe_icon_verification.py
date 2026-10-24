@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import struct
 import sys
 from pathlib import Path
@@ -22,6 +23,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 EXE_ICON = ROOT / "src" / "k2" / "ui" / "assets" / "k2.ico"
 SPEC = ROOT / "k2.spec"
+SCRIPT = ROOT / "packaging" / "verify_exe_icon.py"
 
 _spec = importlib.util.spec_from_file_location(
     "k2_verify_exe_icon", ROOT / "packaging" / "verify_exe_icon.py"
@@ -399,3 +401,38 @@ def test_a_two_hundred_fifty_six_frame_declares_zero_geometry():
     declared = verifier._parse_group_icon(group)
 
     assert (256, 256, 32, len(biggest)) in declared, sorted(declared)
+
+
+def test_the_cli_survives_a_legacy_console_encoding(tmp_path: Path):
+    """خروجی فارسی نباید روی لولهٔ ویندوزی (cp1252) اسکریپت را بشکند.
+
+    روی ویندوز، وقتی stdout یک لوله یا فایل است — و نه کنسول — پایتون از
+    encoding محلی (روی runner گیت‌هاب cp1252) استفاده می‌کند و متن فارسی
+    ``UnicodeEncodeError`` می‌دهد. این دقیقاً همان چیزی بود که گام آیکن در
+    CI را قرمز می‌کرد، در حالی که خودِ بررسی موفق بود.
+    """
+    import subprocess
+
+    ico_frames = verifier.read_ico(EXE_ICON)
+    frames = [f.data for f in ico_frames]
+    sizes = [(f.width, f.height, f.bit_count, f.size) for f in ico_frames]
+    exe = tmp_path / "K2.exe"
+    exe.write_bytes(build_pe_with_icon(frames, frame_sizes=sizes))
+
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "cp1252"  # همان encoding لولهٔ ویندوزی
+    env.pop("PYTHONUTF8", None)
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), str(exe), str(EXE_ICON)],
+        capture_output=True,
+        env=env,
+        cwd=str(ROOT),
+        timeout=120,
+    )
+
+    assert result.returncode == 0, (
+        f"exit={result.returncode}\n"
+        f"stdout={result.stdout.decode('utf-8', 'replace')}\n"
+        f"stderr={result.stderr.decode('utf-8', 'replace')}"
+    )
+    assert "نشسته است" in result.stdout.decode("utf-8", "replace")
