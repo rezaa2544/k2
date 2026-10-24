@@ -20,6 +20,13 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 45
 
+    # روی ویندوز، وقتی stdout یک لوله یا فایل است (و نه کنسول)، پایتون از
+    # encoding محلی استفاده می‌کند که روی runner cp1252 است و متن فارسی
+    # UnicodeEncodeError می‌دهد. PEP 528 فقط کنسول را پوشش می‌دهد.
+    env:
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: utf-8
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4

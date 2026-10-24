@@ -447,6 +447,21 @@ def verify(exe: Path, ico: Path) -> IconReport:
     )
 
 
+def _force_utf8_output() -> None:
+    """خروجی را UTF-8 کن.
+
+    روی ویندوز، وقتی stdout یک **لوله** است (و نه کنسول)، پایتون از encoding
+    محلی استفاده می‌کند که روی runner گیت‌هاب cp1252 است. متن فارسی آن‌وقت
+    ``UnicodeEncodeError`` می‌دهد و اسکریپت با «exit code 1» می‌شکند، در حالی
+    که هیچ ایراد منطقی وجود ندارد. PEP 528 فقط کنسول را پوشش می‌دهد.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):  # pragma: no cover - پایتون قدیمی
+            pass
+
+
 def _annotate(level: str, message: str) -> None:
     """یک پیام را در UI Actions نشان می‌دهد (اگر در GitHub Actions باشیم).
 
@@ -513,6 +528,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("exe", type=Path, help="فایل EXE ساختهٔ PyInstaller")
     parser.add_argument("ico", type=Path, help="فایل آیکن برنامه")
     args = parser.parse_args(argv)
+    _force_utf8_output()
 
     if not args.exe.is_file():
         print(f"EXE پیدا نشد: {args.exe}", file=sys.stderr)
