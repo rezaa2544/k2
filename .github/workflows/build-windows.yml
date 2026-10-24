@@ -26,6 +26,10 @@ jobs:
     env:
       PYTHONUTF8: '1'
       PYTHONIOENCODING: utf-8
+      # همان GUIDی که packaging/k2_installer.iss در AppId دارد. گام‌های نصب و
+      # حذف نصب با این شناسه ورودی رجیستری را پیدا می‌کنند؛ اگر خالی باشد،
+      # مسیر رجیستری به «...\Uninstall\_is1» تبدیل می‌شود و پیدا نمی‌شود.
+      K2_APP_ID: '{7C4E9A21-3B5D-4E8F-9A6C-1D2B3F4E5A60}'
 
     steps:
       - name: Checkout
@@ -308,18 +312,32 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          function Note($m) { Write-Host "::notice::$m" }
+
           $setup = Get-ChildItem -Path "packaging\output" -Filter "K2-Setup-*.exe" |
             Sort-Object LastWriteTime | Select-Object -Last 1
           if (-not $setup) { throw "نصب‌کننده پیدا نشد." }
+          Note "install test: installer=$($setup.Name) size=$($setup.Length)"
 
           $installDir = Join-Path $env:RUNNER_TEMP "K2-Install"
           $dataDir = Join-Path $env:RUNNER_TEMP "K2-UserData"
-          Remove-Item $installDir, $dataDir -Recurse -Force -ErrorAction SilentlyContinue
+          $setupLog = Join-Path $env:RUNNER_TEMP "K2-Setup.log"
+          Remove-Item $installDir, $dataDir, $setupLog -Recurse -Force -ErrorAction SilentlyContinue
 
-          Write-Host "--- نصب خاموش روی $installDir ---"
-          $p = Start-Process -FilePath $setup.FullName -Wait -PassThru `
-            -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/DIR=`"$installDir`""
-          if ($p.ExitCode -ne 0) { throw "نصب با exit=$($p.ExitCode) شکست خورد." }
+          function Install-Setup {
+            # Inno Setup لاگ می‌نویسد تا در صورت شکست علت خوانا باشد.
+            $p = Start-Process -FilePath $setup.FullName -Wait -PassThru `
+              -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
+                            "/DIR=`"$installDir`"", "/LOG=`"$setupLog`""
+            return $p.ExitCode
+          }
+
+          Note "install test: running the installer silently into $installDir"
+          $code = Install-Setup
+          if ($code -ne 0) {
+            if (Test-Path $setupLog) { Get-Content $setupLog | ForEach-Object { Write-Host "::error::$_" } }
+            throw "نصب با exit=$code شکست خورد."
+          }
 
           # ۱) فایل‌های برنامه باید کامل رفته باشند
           $exe = Join-Path $installDir "K2.exe"
@@ -328,26 +346,33 @@ jobs:
           if (-not (Test-Path $internal)) { throw "پوشهٔ _internal بعد از نصب وجود ندارد." }
           $dllCount = (Get-ChildItem $internal -Recurse -Filter "*.dll" | Measure-Object).Count
           if ($dllCount -lt 50) { throw "فقط $dllCount DLL نصب شد؛ پوشهٔ _internal کامل نیست." }
-          Write-Host "OK فایل‌های برنامه نصب شدند ($dllCount DLL)."
+          Note "install test: $dllCount DLL installed alongside K2.exe"
 
           # ۲) ثبت در «برنامه‌ها و قابلیت‌ها» با نام، آیکن و مسیر حذف
+          Note "install test: looking for the uninstall registry entry (AppId=$env:K2_APP_ID)"
           $uninstallKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$env:K2_APP_ID`_is1"
           if (-not (Test-Path $uninstallKey)) {
+            Note "install test: not under HKLM, trying HKCU"
             $uninstallKey = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$env:K2_APP_ID`_is1"
           }
-          if (-not (Test-Path $uninstallKey)) { throw "نصب در رجیستری ثبت نشد." }
+          if (-not (Test-Path $uninstallKey)) {
+            $found = Get-ChildItem "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall" -ErrorAction SilentlyContinue |
+              Where-Object { $_.PSChildName -like "*K2*" } | Select-Object -ExpandProperty PSChildName
+            Note "install test: candidate keys = $($found -join ', ')"
+            throw "نصب در رجیستری ثبت نشد."
+          }
           $props = Get-ItemProperty $uninstallKey
           if (-not $props.DisplayName) { throw "ورودی رجیستری DisplayName ندارد." }
           if (-not $props.UninstallString) { throw "ورودی رجیستری UninstallString ندارد." }
           if (-not $props.DisplayIcon) { throw "ورودی رجیستری DisplayIcon ندارد." }
-          Write-Host "OK ثبت در رجیستری: $($props.DisplayName)"
+          Note "install test: registry entry DisplayName=$($props.DisplayName) DisplayIcon=$($props.DisplayIcon)"
 
           # ۳) میان‌برها: فهرست Start-Menu و میزکار
           $startMenu = Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs"
           $shortcut = Get-ChildItem $startMenu -Recurse -Filter "*.lnk" -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -like "*K2*" } | Select-Object -First 1
           if (-not $shortcut) { throw "میان‌بر فهرست شروع ساخته نشد." }
-          Write-Host "OK میان‌بر فهرست شروع: $($shortcut.FullName)"
+          Note "install test: start-menu shortcut $($shortcut.FullName)"
 
           $desktopDirs = @([Environment]::GetFolderPath("CommonDesktopDirectory"),
                            [Environment]::GetFolderPath("Desktop")) | Where-Object { $_ }
@@ -356,32 +381,34 @@ jobs:
               Where-Object { $_.Name -like "*K2*" } | Select-Object -First 1
           }
           if (-not $desktopIcon) { throw "میان‌بر میزکار ساخته نشد." }
-          Write-Host "OK میان‌بر میزکار: $($desktopIcon.FullName)"
+          Note "install test: desktop shortcut $($desktopIcon.FullName)"
 
           # ۴) برنامهٔ نصب‌شده واقعاً اجرا می‌شود و پایگاه داده می‌سازد
           $db = Join-Path $dataDir "k2.db"
           $stdout = Join-Path $env:RUNNER_TEMP "installed.stdout.txt"
           $stderr = Join-Path $env:RUNNER_TEMP "installed.stderr.txt"
           $env:K2_DATA_DIR = $dataDir
-          $proc = Start-Process -FilePath $exe -ArgumentList "--db","`"$db`"","--headless" `
+          $proc = Start-Process -FilePath $exe -ArgumentList "--db", "`"$db`"", "--headless" `
             -PassThru -Wait -RedirectStandardOutput $stdout -RedirectStandardError $stderr
           if ($proc.ExitCode -ne 0) {
             foreach ($log in @($stdout, $stderr)) {
-              if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host $_ } }
+              if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host "::error::$_" } }
             }
             throw "برنامهٔ نصب‌شده با exit=$($proc.ExitCode) اجرا نشد."
           }
           if (-not (Test-Path $db)) { throw "برنامهٔ نصب‌شده پایگاه داده نساخت." }
-          Write-Host "OK برنامهٔ نصب‌شده اجرا شد و پایگاه داده ساخت."
+          Note "install test: installed EXE ran headless and created the database"
 
           # ۵) نصب دوم باید ارتقا باشد، نه نصب تکراری
-          $p2 = Start-Process -FilePath $setup.FullName -Wait -PassThru `
-            -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/DIR=`"$installDir`""
-          if ($p2.ExitCode -ne 0) { throw "نصب دوم با exit=$($p2.ExitCode) شکست خورد." }
+          $code2 = Install-Setup
+          if ($code2 -ne 0) {
+            if (Test-Path $setupLog) { Get-Content $setupLog | ForEach-Object { Write-Host "::error::$_" } }
+            throw "نصب دوم با exit=$code2 شکست خورد."
+          }
           $keys = Get-ChildItem "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall" -ErrorAction SilentlyContinue |
             Where-Object { $_.PSChildName -like "$env:K2_APP_ID*" }
           if (($keys | Measure-Object).Count -ne 1) { throw "نصب دوم، ورودی رجیستری تکراری ساخت." }
-          Write-Host "OK نصب دوم ارتقا بود، نه نصب تکراری."
+          Note "install test: second install upgraded instead of duplicating"
 
           "installDir=$installDir" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "dataDir=$dataDir" | Out-File -FilePath $env:GITHUB_OUTPUT -Append

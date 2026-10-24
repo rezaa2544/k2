@@ -265,3 +265,34 @@ def test_build_script_builds_and_verifies_the_installer_too():
     ps1 = (ROOT / "packaging" / "build_windows.ps1").read_text(encoding="utf-8")
     assert "iscc" in ps1, "ساخت محلی نصب‌کننده نمی‌سازد"
     assert "verify_exe_icon.py" in ps1, "ساخت محلی آیکن داخل EXE را بررسی نمی‌کند"
+
+
+def test_the_app_id_used_by_ci_matches_the_installer_script():
+    """گام نصب/حذف با ``$env:K2_APP_ID`` ورودی رجیستری را پیدا می‌کند.
+
+    اگر این متغیر خالی باشد، مسیر رجیستری به ``...\\Uninstall\\_is1`` تبدیل
+    می‌شود و گام با «نصب در رجیستری ثبت نشد» شکست می‌خورد — بی‌آنکه ایرادی
+    به خودِ نصب‌کننده باشد.
+    """
+    import yaml
+
+    data = yaml.safe_load(_workflow())
+    env = data["jobs"]["test-and-build"]["env"]
+    app_id = env.get("K2_APP_ID", "")
+    assert app_id, "K2_APP_ID در محیط job تنظیم نشده است"
+    assert app_id.startswith("{") and app_id.endswith("}"), app_id
+
+    script = (ROOT / "packaging" / "k2_installer.iss").read_text(encoding="utf-8")
+    assert app_id in script, (
+        "K2_APP_ID گردش‌کار با AppId داخل k2_installer.iss یکی نیست"
+    )
+
+
+def test_the_install_step_captures_the_installer_log():
+    """اگر نصب شکست خورد، علت باید خوانا باشد."""
+    step = _workflow()
+    step = step[step.index("Install the built installer on Windows") :]
+    step = step[: step.index("\n      - name:")]
+    assert "/LOG=" in step, "نصب‌کننده بدون لاگ اجرا می‌شود؛ شکست قابل تشخیص نیست"
+    assert "::error::" in step, "لاگ نصب‌کننده در صورت شکست گزارش نمی‌شود"
+    assert "::notice::" in step, "گام نصب نشانهٔ پیشرفت ندارد"
