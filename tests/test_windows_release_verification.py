@@ -79,9 +79,18 @@ def test_ci_verifies_the_install_registered_in_add_remove_programs():
 
 
 def test_ci_verifies_the_shortcuts_are_created():
+    """میان‌برها باید هم در Start-Menu و هم روی میزکار سنجیده شوند.
+
+    نصب ممکن است ارتقا‌یافته یا غیرارتقا‌یافته اجرا شود، پس هر دو مسیر
+    مشترک و هر دو مسیر خاص کاربر باید جست‌وجو شود — نه فقط
+    ``ProgramData``.
+    """
     text = _workflow()
-    assert "Start Menu" in text, "بررسی میان‌بر فهرست شروع نیست"
-    assert "Desktop" in text, "بررسی میان‌بر میزکار نیست"
+    assert "CommonStartMenu" in text, "Start-Menu مشترک بررسی نمی‌شود"
+    assert '"StartMenu"' in text, "Start-Menu کاربر بررسی نمی‌شود"
+    assert "CommonDesktopDirectory" in text, "میزکار مشترک بررسی نمی‌شود"
+    assert '"Desktop"' in text, "میزکار کاربر بررسی نمی‌شود"
+    assert "Find-ShortcutTo" in text, "جست‌وجوی میان‌بر یک تابع مشترک نیست"
 
 
 def test_ci_runs_the_installed_executable_and_checks_the_database():
