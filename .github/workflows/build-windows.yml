@@ -367,21 +367,42 @@ jobs:
           if (-not $props.DisplayIcon) { throw "ورودی رجیستری DisplayIcon ندارد." }
           Note "install test: registry entry DisplayName=$($props.DisplayName) DisplayIcon=$($props.DisplayIcon)"
 
-          # ۳) میان‌برها: فهرست Start-Menu و میزکار
-          $startMenu = Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs"
-          $shortcut = Get-ChildItem $startMenu -Recurse -Filter "*.lnk" -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -like "*K2*" } | Select-Object -First 1
-          if (-not $shortcut) { throw "میان‌بر فهرست شروع ساخته نشد." }
-          Note "install test: start-menu shortcut $($shortcut.FullName)"
+          # نام میان‌برها فارسی است («مشاور هوشمند کنکور»)، پس جست‌وجو با «*K2*»
+          # هیچ‌وقت چیزی پیدا نمی‌کند. به‌جای نام، هدف میان‌بر را می‌خوانیم: باید به
+          # K2.exe داخل پوشهٔ نصب اشاره کند. این هم درست بوددن میان‌بر را می‌سنجد،
+          # نه فقط وجود فایلش را.
+          $shell = New-Object -ComObject WScript.Shell
+          function Find-ShortcutTo {
+            param([string[]]$Directories)
+            foreach ($directory in $Directories) {
+              if (-not (Test-Path $directory)) { continue }
+              foreach ($file in (Get-ChildItem $directory -Recurse -Filter "*.lnk" -ErrorAction SilentlyContinue)) {
+                try {
+                  $link = $shell.CreateShortcut($file.FullName)
+                  if ($link.TargetPath -and ($link.TargetPath -like "$installDir*")) { return $file }
+                }
+                catch {
+                  # میان‌بر خراب یا غیرقابل‌خواندن؛ رد می‌شویم.
+                }
+              }
+            }
+            return $null
+          }
+
+          $startMenuRoot = Join-Path $env:ProgramData "Microsoft\\Windows\\Start Menu\\Programs"
+          $shortcut = Find-ShortcutTo -Directories @($startMenuRoot)
+          if (-not $shortcut) {
+            $all = Get-ChildItem $startMenuRoot -Recurse -Filter "*.lnk" -ErrorAction SilentlyContinue
+            Note "install test: start-menu shortcuts = $(($all | ForEach-Object { $_.Name }) -join ' | ')"
+            throw "میان‌بر فهرست شروع ساخته نشد."
+          }
+          Note "install test: start-menu shortcut '$($shortcut.Name)' -> $($shell.CreateShortcut($shortcut.FullName).TargetPath)"
 
           $desktopDirs = @([Environment]::GetFolderPath("CommonDesktopDirectory"),
                            [Environment]::GetFolderPath("Desktop")) | Where-Object { $_ }
-          $desktopIcon = foreach ($d in $desktopDirs) {
-            Get-ChildItem $d -Filter "*.lnk" -ErrorAction SilentlyContinue |
-              Where-Object { $_.Name -like "*K2*" } | Select-Object -First 1
-          }
+          $desktopIcon = Find-ShortcutTo -Directories $desktopDirs
           if (-not $desktopIcon) { throw "میان‌بر میزکار ساخته نشد." }
-          Note "install test: desktop shortcut $($desktopIcon.FullName)"
+          Note "install test: desktop shortcut '$($desktopIcon.Name)'"
 
           # ۴) برنامهٔ نصب‌شده واقعاً اجرا می‌شود و پایگاه داده می‌سازد
           $db = Join-Path $dataDir "k2.db"

@@ -296,3 +296,31 @@ def test_the_install_step_captures_the_installer_log():
     assert "/LOG=" in step, "نصب‌کننده بدون لاگ اجرا می‌شود؛ شکست قابل تشخیص نیست"
     assert "::error::" in step, "لاگ نصب‌کننده در صورت شکست گزارش نمی‌شود"
     assert "::notice::" in step, "گام نصب نشانهٔ پیشرفت ندارد"
+
+
+def test_shortcuts_are_found_by_target_not_by_name():
+    """نام میان‌برها فارسی است، پس جست‌وجو با ``*K2*`` هیچ چیزی پیدا نمی‌کند.
+
+    ``packaging/k2_installer.iss`` میان‌برها را ``{#MyAppName}`` می‌نامد که
+    «مشاور هوشمند کنکور» است. پس گام نصب باید هدف (``TargetPath``) میان‌بر
+    را بخواند و ببیند به ``K2.exe`` داخل پوشهٔ نصب اشاره می‌کند — نه اینکه
+    نام فایل را با الگوی انگلیسی تطبیق دهد.
+    """
+    step = _workflow()
+    step = step[step.index("Install the built installer on Windows") :]
+    step = step[: step.index("\n      - name:")]
+
+    assert "WScript.Shell" in step, "هدف میان‌بر خوانده نمی‌شود"
+    assert "TargetPath" in step, "میان‌بر با هدفش سنجیده نمی‌شود"
+    # هیچ خطی که میان‌بر ‎.lnk‎ را می‌شمارد نباید با نام انگلیسی تطبیق دهد.
+    shortcut_lines = [ln for ln in step.splitlines() if ".lnk" in ln]
+    assert shortcut_lines, "بخش میان‌بر پیدا نشد"
+    for line in shortcut_lines:
+        assert "-like" not in line or "*K2*" not in line, (
+            f"جست‌وجوی میان‌بر با نام انگلیسی است و نام فارسی را پیدا نمی‌کند: {line}"
+        )
+
+    script = (ROOT / "packaging" / "k2_installer.iss").read_text(encoding="utf-8")
+    assert "K2" not in script.split("[Icons]")[1].split("[Run]")[0], (
+        "بخش [Icons] نباید به نام انگلیسی متکی باشد؛ نام میان‌برها فارسی است"
+    )
