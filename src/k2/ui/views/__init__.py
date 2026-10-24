@@ -16,6 +16,7 @@ from .problems import LearningProblemsPage, ProblemDialog, ResolveDialog
 from .reports import ReportsPage
 from .review import ReviewPage
 from .settings import SettingsPage
+from .syllabus import SyllabusPage
 from .study_timer_page import (
     CorrectSessionDialog,
     ManualSessionDialog,
@@ -52,6 +53,7 @@ __all__ = [
     "ReviewPage",
     "RoutineDialog",
     "SettingsPage",
+    "SyllabusPage",
     "StudyTimerPage",
     "TestsPage",
     "TodayPlanPage",

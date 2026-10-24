@@ -148,6 +148,15 @@ if(action.startsWith('problem-act:')){const pr=(state.problems||[]).find(x=>x.id
   chapterSectionCount:(ch)=>chapterSectionCount(ch),
   sylCountsForm:(subject,grade)=>sylCountsForm(subject,grade),
   submitSylCounts:(form)=>submitSylCounts(form),
+  // گفتارهای نام‌دار یک فصل و شناسه/برچسب پایدار آن‌ها (برای راستی‌آزمایی)
+  chapterTopics:(subject,grade,ch)=>chapterTopics(subject,grade,ch),
+  topicIdOf:(subject,grade,chapter,section)=>topicIdOf(subject,grade,chapter,section),
+  topicLabel:(subject,grade,ch,sec)=>topicLabel(subject,grade,ch,sec),
+  splitTopicId:(tid)=>splitTopicId(tid),
+  sylRenameSectionForm:(tid)=>sylRenameSectionForm(tid),
+  submitSylRenameSection:(form)=>submitSylRenameSection(form),
+  sylDeleteSectionForm:(tid)=>sylDeleteSectionForm(tid),
+  submitSylDeleteSection:()=>submitSylDeleteSection(),
   // آزمون/تست: تعارض زمان‌بندی و ثبت با دادهٔ ناقص (پیش‌نویس)
   examConflicts:()=>examConflicts(),
   submitModal:(form)=>submitModal(form)};

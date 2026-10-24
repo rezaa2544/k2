@@ -7,7 +7,7 @@ migration انجام نمی‌شود.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 #: اسکریپت نسخهٔ ۱ — اسکیمای اولیه.
 MIGRATION_1 = """
@@ -390,6 +390,47 @@ ALTER TABLE learning_problem ADD COLUMN attachment_sha256 TEXT;
 ALTER TABLE learning_problem ADD COLUMN attachment_bytes INTEGER NOT NULL DEFAULT 0;
 """
 
+MIGRATION_8 = """
+-- سرفصل رسمی: فصل و گفتار هر درس/پایه با وضعیت مطالعهٔ کاربر.
+-- چرا جدول جدا از topic: فصل/گفتار دادهٔ کتاب درسی است و ثابت می‌ماند،
+-- ولی وضعیت هر گفتار (آموزش، مطالعه، درک، تثبیت، تست، تحلیل خطا، تمرین
+-- تشریحی، سرعت) پیشرفت واقعی کاربر است و نباید با پاک‌شدن مباحث از بین برود.
+CREATE TABLE IF NOT EXISTS syllabus_chapter (
+    subject    TEXT NOT NULL,
+    grade      INTEGER NOT NULL,
+    chapter    INTEGER NOT NULL,
+    title      TEXT NOT NULL DEFAULT '',
+    sections   INTEGER,
+    confirmed  INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (subject, grade, chapter)
+);
+
+-- یک ردیف برای هر گفتار. title خالی یعنی نام رسمی کتاب استفاده شود.
+-- اگر ردیفی نباشد، گفتار هنوز ارزیابی نشده است (نه صفر).
+CREATE TABLE IF NOT EXISTS syllabus_section (
+    subject      TEXT NOT NULL,
+    grade        INTEGER NOT NULL,
+    chapter      INTEGER NOT NULL,
+    section      INTEGER NOT NULL,
+    title        TEXT NOT NULL DEFAULT '',
+    teaching     TEXT,
+    study        TEXT,
+    comprehension TEXT,
+    consolidation TEXT,
+    testing      TEXT,
+    analysis     TEXT,
+    essay        TEXT,
+    speed        TEXT,
+    mastery      REAL,
+    notes        TEXT NOT NULL DEFAULT '',
+    updated_at   TEXT NOT NULL,
+    PRIMARY KEY (subject, grade, chapter, section)
+);
+CREATE INDEX IF NOT EXISTS idx_syllabus_section_subject
+    ON syllabus_section(subject, grade);
+"""
+
 MIGRATIONS: list[tuple[int, str]] = [
     (1, MIGRATION_1),
     (2, MIGRATION_2),
@@ -398,4 +439,5 @@ MIGRATIONS: list[tuple[int, str]] = [
     (5, MIGRATION_5),
     (6, MIGRATION_6),
     (7, MIGRATION_7),
+    (8, MIGRATION_8),
 ]

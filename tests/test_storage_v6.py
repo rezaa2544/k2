@@ -43,7 +43,9 @@ def _topic(repo: Repository, subject: Subject) -> Topic:
 
 
 def test_schema_version_is_current():
-    assert SCHEMA_VERSION == 7  # نسخهٔ جاری شامل پیوست نتیجهٔ آزمون
+    # نسخهٔ جاری باید همیشه دست‌کم نسخهٔ «پیوست نتیجهٔ آزمون» (۷) باشد؛
+    # مهاجرت‌های بعدی (مثل جدول‌های سرفصل رسمی) این عدد را بالا می‌برند.
+    assert SCHEMA_VERSION >= 7
 
 
 def test_fresh_database_reaches_current_version(tmp_path):
@@ -361,7 +363,8 @@ def test_migration_from_six_preserves_attachment_free_rows(tmp_path):
     conn.commit()
 
     apply_migrations(conn)
-    assert current_version(conn) == schema.SCHEMA_VERSION == 7
+    assert current_version(conn) == schema.SCHEMA_VERSION
+    assert schema.SCHEMA_VERSION >= 7
     row = conn.execute(
         "SELECT attachment_name, attachment_bytes FROM exam_attempt WHERE id = 1"
     ).fetchone()

@@ -52,6 +52,8 @@ from ..domain.models import (
     StudySession,
     StudySessionRevision,
     Subject,
+    SyllabusChapterEdit,
+    SyllabusSection,
     Topic,
     TopicDeadline,
     Textbook,
@@ -1231,6 +1233,150 @@ class Repository:
             ),
         )
         deadline.updated_at = now
+
+    # ------------------------------------------------------------------
+    # سرفصل رسمی: فصل و گفتار
+    # ------------------------------------------------------------------
+
+    _SECTION_FIELDS = (
+        "title", "teaching", "study", "comprehension", "consolidation",
+        "testing", "analysis", "essay", "speed", "mastery", "notes", "updated_at",
+    )
+
+    def upsert_syllabus_section(self, record: SyllabusSection) -> None:
+        """ثبت یا به‌روزرسانی وضعیت یک گفتار (idempotent روی کلید طبیعی)."""
+        values = [getattr(record, name) for name in self._SECTION_FIELDS]
+        self.conn.execute(
+            "INSERT INTO syllabus_section (subject, grade, chapter, section, "
+            + ", ".join(self._SECTION_FIELDS)
+            + ") VALUES (?, ?, ?, ?, "
+            + ", ".join("?" * len(self._SECTION_FIELDS))
+            + ") ON CONFLICT(subject, grade, chapter, section) DO UPDATE SET "
+            + ", ".join(f"{name} = excluded.{name}" for name in self._SECTION_FIELDS),
+            (record.subject, int(record.grade), int(record.chapter),
+             int(record.section), *values),
+        )
+
+    def list_syllabus_sections(
+        self, subject: Optional[str] = None, grade: Optional[int] = None
+    ) -> list[SyllabusSection]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if subject is not None:
+            clauses.append("subject = ?")
+            params.append(subject)
+        if grade is not None:
+            clauses.append("grade = ?")
+            params.append(int(grade))
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        rows = self.conn.execute(
+            "SELECT * FROM syllabus_section" + where
+            + " ORDER BY subject, grade, chapter, section",
+            params,
+        ).fetchall()
+        return [self._section_from_row(row) for row in rows]
+
+    def get_syllabus_section(
+        self, subject: str, grade: int, chapter: int, section: int
+    ) -> Optional[SyllabusSection]:
+        row = self.conn.execute(
+            "SELECT * FROM syllabus_section WHERE subject = ? AND grade = ? "
+            "AND chapter = ? AND section = ?",
+            (subject, int(grade), int(chapter), int(section)),
+        ).fetchone()
+        return self._section_from_row(row) if row else None
+
+    def delete_syllabus_section(
+        self, subject: str, grade: int, chapter: int, section: int
+    ) -> bool:
+        cursor = self.conn.execute(
+            "DELETE FROM syllabus_section WHERE subject = ? AND grade = ? "
+            "AND chapter = ? AND section = ?",
+            (subject, int(grade), int(chapter), int(section)),
+        )
+        return cursor.rowcount > 0
+
+    @staticmethod
+    def _section_from_row(row: sqlite3.Row) -> SyllabusSection:
+        return SyllabusSection(
+            subject=row["subject"],
+            grade=int(row["grade"]),
+            chapter=int(row["chapter"]),
+            section=int(row["section"]),
+            title=row["title"] or "",
+            teaching=row["teaching"],
+            study=row["study"],
+            comprehension=row["comprehension"],
+            consolidation=row["consolidation"],
+            testing=row["testing"],
+            analysis=row["analysis"],
+            essay=row["essay"],
+            speed=row["speed"],
+            mastery=row["mastery"],
+            notes=row["notes"] or "",
+            updated_at=row["updated_at"] or "",
+        )
+
+    def upsert_syllabus_chapter(self, edit: SyllabusChapterEdit) -> None:
+        self.conn.execute(
+            "INSERT INTO syllabus_chapter (subject, grade, chapter, title, "
+            "sections, confirmed, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(subject, grade, chapter) DO UPDATE SET "
+            "title = excluded.title, sections = excluded.sections, "
+            "confirmed = excluded.confirmed, updated_at = excluded.updated_at",
+            (edit.subject, int(edit.grade), int(edit.chapter), edit.title,
+             edit.sections, 1 if edit.confirmed else 0, edit.updated_at),
+        )
+
+    def list_syllabus_chapter_edits(
+        self, subject: Optional[str] = None, grade: Optional[int] = None
+    ) -> list[SyllabusChapterEdit]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if subject is not None:
+            clauses.append("subject = ?")
+            params.append(subject)
+        if grade is not None:
+            clauses.append("grade = ?")
+            params.append(int(grade))
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        rows = self.conn.execute(
+            "SELECT * FROM syllabus_chapter" + where
+            + " ORDER BY subject, grade, chapter",
+            params,
+        ).fetchall()
+        return [
+            SyllabusChapterEdit(
+                subject=row["subject"],
+                grade=int(row["grade"]),
+                chapter=int(row["chapter"]),
+                title=row["title"] or "",
+                sections=row["sections"],
+                confirmed=bool(row["confirmed"]),
+                updated_at=row["updated_at"] or "",
+            )
+            for row in rows
+        ]
+
+    def get_syllabus_chapter(
+        self, subject: str, grade: int, chapter: int
+    ) -> Optional[SyllabusChapterEdit]:
+        row = self.conn.execute(
+            "SELECT * FROM syllabus_chapter WHERE subject = ? AND grade = ? "
+            "AND chapter = ?",
+            (subject, int(grade), int(chapter)),
+        ).fetchone()
+        if not row:
+            return None
+        return SyllabusChapterEdit(
+            subject=row["subject"],
+            grade=int(row["grade"]),
+            chapter=int(row["chapter"]),
+            title=row["title"] or "",
+            sections=row["sections"],
+            confirmed=bool(row["confirmed"]),
+            updated_at=row["updated_at"] or "",
+        )
 
     def delete_topic_deadline(self, deadline_id: int) -> None:
         self.conn.execute("DELETE FROM topic_deadline WHERE id = ?", (deadline_id,))

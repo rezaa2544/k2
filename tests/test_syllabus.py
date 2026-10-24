@@ -450,8 +450,20 @@ def test_syllabus_data_is_structured_and_honest():
     data = json.loads(m.group(1).replace("\\u003c", "<"))
     assert data["meta"]["status"] == "preliminary_unverified"
     assert data["courses"]["زیست‌شناسی"]["10"][0]["title"] == "دنیای زنده"
-    # شیمی دهم: تعداد گفتار نامشخص است و عدد ساخته نشود
-    assert data["courses"]["شیمی"]["10"][0]["sections"] is None
+    # شیمی دهم: فهرست رسمی چاپ ۱۴۰۵-۱۴۰۶ تأیید شده (۷/۷/۷ گفتار) — عدد جعلی نیست
+    assert [c["sections"] for c in data["courses"]["شیمی"]["10"]] == [7, 7, 7]
+    assert sum(len(r["topics"]) for r in data["courses"]["شیمی"]["10"]) == 21
+    # ریاضی دهم/یازدهم و فیزیک دهم/یازدهم هم گفتارهای نام‌دار تأییدشده دارند
+    for name, grade, total in (
+        ("ریاضی", "10", 23), ("ریاضی", "11", 20),
+        ("فیزیک", "10", 23), ("فیزیک", "11", 28),
+    ):
+        rows = data["courses"][name][grade]
+        assert sum(len(r["topics"]) for r in rows) == total, (name, grade)
+        for row in rows:
+            assert row["sections"] == len(row["topics"])
+            for i, t in enumerate(row["topics"], start=1):
+                assert t["id"] == f"{name}|{grade}|{row['no']}|{i}"
     # شیمی یازدهم/دوازدهم: گفتارهای نام‌دار تأییدشده با شناسهٔ پایدار
     for grade, total in (("11", 19), ("12", 17)):
         rows = data["courses"]["شیمی"][grade]
@@ -1696,48 +1708,53 @@ def test_setup_interview_matches_prompt_and_is_compact(preview_js, tmp_path):
 
 
 _SECTIONCOUNTS_SCRIPT = r"""
-// ===== ورود تعداد گفتارهای درس نامشخص (مورد شیمی دهم) =====
-// چرا مهم است: شیمی دهم سه فصل دارد و هیچ‌کدام عدد تأییدشده ندارند (منابع
-// دربارهٔ تعداد گفتارهای آن با هم اختلاف دارند). اگر برنامه صفر بگذارد،
-// کاربر فکر می‌کند گفتاری وجود ندارد؛ اگر عددی حدس بزند، داده جعل شده است.
-// راه حل: «نامشخص» صریح + ورود گروهی توسط کاربر.
-// شیمی یازدهم و دوازدهم برخلاف دهم، گفتارهای نام‌دار تأییدشده دارند و
-// باید عدد واقعی نشان دهند.
+// ===== ورود تعداد گفتارهای درس نامشخص (مورد درس‌های عمومی) =====
+// چرا مهم است: درس عمومی (فارسی) یک فصل در هر پایه دارد و هیچ‌کدام عدد
+// تأییدشده ندارند. اگر برنامه صفر بگذارد، کاربر فکر می‌کند گفتاری وجود
+// ندارد؛ اگر عددی حدس بزند، داده جعل شده است. راه حل: «نامشخص» صریح +
+// ورود گروهی توسط کاربر.
+// در مقابل، شیمی/ریاضی/فیزیک دهم و یازدهم از این پس فهرست رسمی کتاب
+// چاپ ۱۴۰۵ دارند و باید عدد واقعی (نه صفر، نه حدس) نشان دهند.
 
-function chemChapters(grade) { return preview.syllabusChapters('شیمی', Number(grade)) }
+function genChapters(grade) { return preview.syllabusChapters('فارسی', Number(grade)) }
 
 try {
-  // شیمی دهم: سه فصل، همه نامشخص
-  const g10 = chemChapters(10);
-  ok(g10.length === 3, 'شیمی دهم سه فصل دارد، یافت: ' + g10.length);
+  // درس عمومی: یک فصل در هر پایه، نامشخص
+  const g10 = genChapters(10);
+  ok(g10.length === 1, 'فارسی دهم یک فصل دارد، یافت: ' + g10.length);
   const c10 = g10.map(c => preview.chapterSectionCount(c));
   ok(c10.every(c => c === null),
-     'همهٔ فصل‌های شیمی دهم نامشخص باشند (هیچ عدد جعلی)، یافت: ' + JSON.stringify(c10));
-  ok(g10.map(c => c.title).join('|').includes('کیهان، زادگاه الفبای هستی'),
-     'عنوان فصل‌های شیمی دهم حفظ شود');
-  // شیمی یازدهم/دوازدهم: گفتارهای تأییدشده، پس عدد واقعی دارند
-  const c11 = chemChapters(11).map(c => preview.chapterSectionCount(c));
-  ok(c11.length === 3 && c11.every(c => typeof c === 'number' && c > 0),
-     'شیمی یازدهم عدد گفتار تأییدشده دارد، یافت: ' + JSON.stringify(c11));
-  ok(c11.reduce((a, b) => a + b, 0) === 19, 'شیمی یازدهم ۱۹ گفتار دارد، یافت: ' + (c11.reduce((a, b) => a + b, 0)));
-  const c12 = chemChapters(12).map(c => preview.chapterSectionCount(c));
-  ok(c12.length === 4 && c12.every(c => typeof c === 'number' && c > 0),
-     'شیمی دوازدهم عدد گفتار تأییدشده دارد، یافت: ' + JSON.stringify(c12));
-  ok(c12.reduce((a, b) => a + b, 0) === 17, 'شیمی دوازدهم ۱۷ گفتار دارد، یافت: ' + (c12.reduce((a, b) => a + b, 0)));
-  // جمع فصل‌های شیمی در سه پایه ۱۰ است
-  const total = ['10', '11', '12']
-    .reduce((n, g) => n + chemChapters(g).length, 0);
-  ok(total === 10, 'جمع فصل‌های شیمی در سه پایه ۱۰ باشد، یافت: ' + total);
-  // درسی که عدد دارد با شیمی دهم فرق دارد
-  const bio = preview.syllabusChapters('زیست‌شناسی', 10);
-  ok(bio.length > 0 && bio.every(c => preview.chapterSectionCount(c) !== null),
-     'زیست‌شناسی عدد دارد و با شیمی دهم یکی نیست');
+     'فصل درس عمومی نامشخص باشد (هیچ عدد جعلی)، یافت: ' + JSON.stringify(c10));
+  ok(genChapters(11).length === 1 && genChapters(12).length === 1,
+     'فارسی در سه پایه یک فصل دارد');
+  // شیمی دهم: فهرست رسمی چاپ ۱۴۰۵ → ۷/۷/۷ گفتار، نه صفر و نه حدس
+  const chem10 = preview.syllabusChapters('شیمی', 10).map(c => preview.chapterSectionCount(c));
+  ok(chem10.length === 3 && chem10.every(c => c === 7),
+     'شیمی دهم ۷/۷/۷ گفتار رسمی دارد، یافت: ' + JSON.stringify(chem10));
+  ok(chem10.reduce((a, b) => a + b, 0) === 21, 'شیمی دهم ۲۱ گفتار دارد');
+  // گفتارهای شیمی دهم نام‌دار و با شناسهٔ پایدار هستند
+  const tp = preview.chapterTopics('شیمی', 10, preview.syllabusChapters('شیمی', 10)[0]);
+  ok(tp && tp.length === 7 && tp[0].id === 'شیمی|10|1|1',
+     'گفتارهای شیمی دهم نام‌دار با شناسهٔ پایدار، یافت: ' + (tp ? tp.length : 'null'));
+  // ریاضی/فیزیک دهم و یازدهم هم عدد واقعی دارند
+  for (const [name, grade, total] of [['ریاضی', 10, 23], ['ریاضی', 11, 20],
+    ['فیزیک', 10, 23], ['فیزیک', 11, 28]]) {
+    const cs = preview.syllabusChapters(name, grade).map(c => preview.chapterSectionCount(c));
+    ok(cs.reduce((a, b) => a + b, 0) === total,
+       name + ' پایه ' + grade + ' ' + total + ' گفتار، یافت: ' + JSON.stringify(cs));
+  }
 } catch (e) { failures++; console.log('FAIL chem unknown: ' + e.message) }
 
 // ۱) نمای کلی برای درس نامشخص هشدار و دکمهٔ ورود می‌دهد
 try {
   const st0 = preview.getState();
-  st0.subjects = st0.subjects.map(s => ({ ...s, selected: true }));
+  // درس عمومی فارسی هنوز فهرست فصل ندارد و «نامشخص» می‌ماند
+  st0.subjects = [
+    { id: 'g1', name: 'فارسی', examCoefficient: 3, selected: true },
+    { id: 's1', name: 'زیست‌شناسی', examCoefficient: 12, selected: true },
+    { id: 's2', name: 'شیمی', examCoefficient: 9, selected: true },
+  ];
+  st0.books = [];
   st0.syllabusEdits = {};
   persistSilently(st0);
   clickNav('topics');
@@ -1751,67 +1768,66 @@ try {
   ok(html.includes('ورود تعداد گفتارها'), 'دکمهٔ ورود تعداد گفتارها موجود باشد');
   ok(html.includes('هیچ عددی حدس نمی‌زند'), 'متن صداقت دربارهٔ حدس زدن عدد بیاید');
   ok(html.includes('شیمی'), 'درس شیمی در فهرست باشد');
+  // شیمی دهم دیگر نامشخص نیست؛ عدد رسمی ۷/۷/۷ را نشان می‌دهد
+  ok(!/شیمی[\s\S]{0,80}نامشخص/.test(html), 'شیمی دهم برچسب نامشخص نگیرد');
 } catch (e) { failures++; console.log('FAIL overview prompt: ' + e.message) }
 
-// ۲) ورود گروهی برای شیمی دهم: عددها ذخیره می‌شوند و خالی «نامشخص» می‌ماند
+// ۲) ورود گروهی برای درس عمومی: عددها ذخیره می‌شوند و خالی «نامشخص» می‌ماند
 try {
   const st0 = preview.getState();
   st0.syllabusEdits = {};
   persistSilently(st0);
-  preview.sylCountsForm('شیمی', 10);
+  preview.sylCountsForm('فارسی', 10);
   const form = makeEl('form');
   form.id = 'modalForm';
-  const N = chemChapters(10).length;
-  // کاربر دو فصل را وارد می‌کند و فصل سوم را خالی می‌گذارد
+  const N = genChapters(10).length;
   const fd = new Map();
-  for (let i = 1; i <= N; i += 1) fd.set('sec_' + i, i <= 2 ? String(i * 3) : '');
+  // کاربر فقط پایهٔ دهم را وارد می‌کند؛ ۱۱ و ۱۲ خالی می‌مانند
+  fd.set('sec_10', '17');
   global.__fd = fd;
   preview.submitSylCounts(form);
   const st = preview.getState();
   const edits = st.syllabusEdits || {};
-  const saved = [];
-  for (let i = 1; i <= N; i += 1) saved.push(edits[`شیمی|10|${i}`]?.sections ?? null);
-  ok(saved.slice(0, 2).every(v => v !== null), 'فصل‌های وارد‌شده عدد بگیرند، یافت: ' + JSON.stringify(saved));
-  ok(saved[0] === 3 && saved[1] === 6, 'اعداد وارد‌شده درست ذخیره شوند، یافت: ' + JSON.stringify(saved));
-  ok(saved.slice(2).every(v => v === null),
-     'فصل خالی null بماند نه صفر، یافت: ' + JSON.stringify(saved.slice(2)));
-  const after = chemChapters(10).map(c => preview.chapterSectionCount(c));
-  ok(after[0] === 3 && after[2] === null, 'خواندن پس از ذخیره درست باشد، یافت: ' + JSON.stringify(after));
-  // ارزیابی گفتار برای فصل وارد‌شده ممکن است
-  const secs = after.filter(c => c !== null).reduce((n, c) => n + c, 0);
-  ok(secs === 9, 'گفتارهای فصل‌های وارد‌شده ساخته شوند: ' + secs);
+  ok((edits['فارسی|10|10'] || {}).sections === 17,
+     'عدد وارد‌شده ذخیره شود، یافت: ' + JSON.stringify(edits['فارسی|10|10']));
+  ok((edits['فارسی|11|11'] || {}).sections === undefined,
+     'پایهٔ خالی هیچ ردیفی نگیرد (نه null، نه صفر)');
+  ok(preview.chapterSectionCount(genChapters(10)[0]) === 17,
+     'خواندن پس از ذخیره درست باشد');
+  // گفتارهای فصل وارد‌شده ساخته می‌شوند
+  const secs = preview.chapterTopics('فارسی', 10, genChapters(10)[0]);
+  ok(secs === null || secs.length === 17,
+     'گفتارهای ساخته‌شده با عدد وارد‌شده بخوانند: ' + (secs ? secs.length : 'null'));
 } catch (e) { failures++; console.log('FAIL counts save: ' + e.message) }
 
 // ۳) تغییر بعدی: مقدار قبلی عوض می‌شود و پاک‌کردن ممکن است
 try {
-  preview.sylCountsForm('شیمی', 10);
+  preview.sylCountsForm('فارسی', 10);
   const form = makeEl('form');
   form.id = 'modalForm';
-  const N2 = chemChapters(10).length;
   const fd = new Map();
-  for (let i = 1; i <= N2; i += 1) fd.set('sec_' + i, i === 1 ? '5' : (i <= 2 ? String(i * 3) : ''));
+  fd.set('sec_10', '5');
   global.__fd = fd;
   preview.submitSylCounts(form);
   const st = preview.getState();
-  ok((st.syllabusEdits['شیمی|10|1'] || {}).sections === 5,
-     'تعداد فصل ۱ از ۳ به ۵ عوض شود، یافت: ' + (st.syllabusEdits['شیمی|10|1'] || {}).sections);
-  // اکنون همه را خالی می‌کنیم: بازگشت به نامشخص، نه صفر
+  ok((st.syllabusEdits['فارسی|10|10'] || {}).sections === 5,
+     'تعداد فصل از ۱۷ به ۵ عوض شود، یافت: ' + (st.syllabusEdits['فارسی|10|10'] || {}).sections);
+  // اکنون خالی می‌کنیم: بازگشت به نامشخص، نه صفر
   const fd2 = new Map();
-  for (let i = 1; i <= N2; i += 1) fd2.set('sec_' + i, '');
   global.__fd = fd2;
   preview.submitSylCounts(form);
   const st2 = preview.getState();
-  const cleared = [];
-  for (let i = 1; i <= N2; i += 1) cleared.push((st2.syllabusEdits[`شیمی|10|${i}`] || {}).sections ?? 'absent');
-  ok(cleared.every(v => v === null || v === 'absent'),
-     'خالی کردن همه، نامشخص شود نه صفر، یافت: ' + JSON.stringify(cleared));
+  ok((st2.syllabusEdits['فارسی|10|10'] || {}).sections === null,
+     'خالی کردن، نامشخص شود نه صفر، یافت: ' + (st2.syllabusEdits['فارسی|10|10'] || {}).sections);
+  ok(preview.chapterSectionCount(genChapters(10)[0]) === null,
+     'پس از خالی کردن، نامشخص بماند');
 } catch (e) { failures++; console.log('FAIL counts edit: ' + e.message) }
 """
 
 
 @pytest.mark.skipif(NODE is None, reason="node برای اجرای پیش‌نمایش لازم است")
 def test_unknown_section_counts_are_entered_not_invented(preview_js, tmp_path):
-    """درس با تعداد گفتار نامشخص (شیمی) عدد جعلی نمی‌سازد و کاربر وارد می‌کند."""
+    """درس با تعداد گفتار نامشخص درس عمومی عدد جعلی نمی‌سازد و کاربر وارد می‌کند."""
     payload = tmp_path / "preview-bundle.js"
     payload.write_text(preview_js, encoding="utf-8")
     syllabus_json = tmp_path / "syllabus.json"
@@ -2309,7 +2325,10 @@ try {
   ok(!/گفتار ارزیابی‌شده/.test(html), 'برای درس عمومی شمارش گفتار ساخته نشود');
 } catch (e) { failures++; console.log('FAIL general subjects: ' + e.message) }
 
-// ---- د) شیمی دهم عدد ندارد و صفر فرض نمی‌شود ----
+// ---- د) شیمی دهم گفتارهای نام‌دار رسمی دارد و صفر فرض نمی‌شود ----
+// چرا مهم است: شیمی دهم تا پیش از این «نامشخص» بود و کاربر باید خودش عدد
+// می‌داد. فهرست رسمی کتاب چاپ ۱۴۰۵-۱۴۰۶ (۷/۷/۷ گفتار) تأیید شد، پس برنامه
+// باید همان عدد واقعی و نام رسمی را نشان دهد — نه صفر، نه حدس، نه نامشخص.
 try {
   const st0 = preview.getState();
   st0.subjects = [{ id: 'c1', name: 'شیمی', examCoefficient: 9, selected: true }];
@@ -2318,13 +2337,22 @@ try {
   persistSilently(st0);
   showSyllabusOverview();
   let html = pageHtml();
-  ok(html.includes('شیمی'), 'شیمی در بانک دسان دیده شود');
-  ok(html.includes('تعداد گفتار نامشخص'), 'شیمی دهم در فهرست عدد گفتار نسازد');
+  ok(html.includes('شیمی'), 'شیمی در بانک دروس دیده شود');
+  ok(!/شیمی[\s\S]{0,120}تعداد گفتار نامشخص/.test(html),
+     'شیمی دهم دیگر برچسب «نامشخص» نگیرد');
   openTree('شیمی', 10);
   html = pageHtml();
   ok(html.includes('کیهان، زادگاه الفبای هستی'), 'فصل ۱ شیمی دهم در نمای درختی دیده شود');
-  ok(html.includes('تعداد گفتار نامشخص'), 'شیمی دهم عدد گفتار نسازد');
-  ok(!/syl-rename-section:شیمی\|10\|1\|1</.test(html), 'برای شیمی دهم گفتار شماره‌دار ساخته نشود');
+  ok(html.includes('رد پای گازها در زندگی'), 'فصل ۲ شیمی دهم در نمای درختی دیده شود');
+  ok(html.includes('عنصرها چگونه پدید آمدند؟'), 'گفتار ۱ فصل ۱ با نام رسمی دیده شود');
+  ok(html.includes('استوکیومتری واکنش‌ها'), 'گفتار ۷ فصل ۲ با نام رسمی دیده شود');
+  ok(!html.includes('تعداد گفتار نامشخص'), 'شیمی دهم عدد گفتار نسازد');
+  ok(/syl-rename-section:شیمی\|10\|1\|1"/.test(html),
+     'برای شیمی دهم گفتار شماره‌دار ساخته شود (تغییر نام و حذف با تأیید)');
+  ok(/syl-rename-section:شیمی\|10\|3\|7"/.test(html),
+     'گفتار ۷ فصل ۳ هم شناسهٔ پایدار بگیرد');
+  ok(/syl-delete-section:شیمی\|10\|1\|1"/.test(html),
+     'حذف گفتار با تأیید در دسترس باشد');
 } catch (e) { failures++; console.log('FAIL chem unknown: ' + e.message) }
 
 // ---- هـ) تغییر نام گفتار ذخیره می‌شود و در برنامه‌ریزی اثر می‌گذارد ----

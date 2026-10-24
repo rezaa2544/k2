@@ -183,11 +183,20 @@ def test_preview_has_no_network_calls_in_js():
 
 
 def test_preview_pages_match_desktop_navigation():
-    """فهرست صفحات پیش‌نمایش با نسخهٔ دسکتاپ یکی است (بند ۱۷)."""
+    """فهرست صفحات پیش‌نمایش با نسخهٔ دسکتاپ یکی است (بند ۱۷).
+
+    پیش‌نمایش سیزده آیتم ناوبری دارد و درخت سرفصل داخل همان صفحهٔ
+    «مباحث» باز می‌شود؛ دسکتاپ برای همان کار صفحهٔ مستقل «سرفصل درس‌ها»
+    را دارد. پس عنوان «سرفصل درس‌ها» عمداً از مقایسهٔ عنوان‌ها کنار
+    گذاشته می‌شود، نه اینکه صفحه‌ای گم شده باشد.
+    """
     from k2.ui.app import NAV_ITEMS
 
     html = PREVIEW.read_text(encoding="utf-8")
     nav_titles = re.findall(r'<span class="nav-icon">[^<]*</span><span>([^<]+)</span>', html)
     assert len(nav_titles) == 13
-    desktop_titles = [title for _, title, _ in NAV_ITEMS]
+    desktop_titles = [
+        title for _, title, _ in NAV_ITEMS if title != "سرفصل درس‌ها"
+    ]
     assert nav_titles == desktop_titles
+    assert "سرفصل درس‌ها" in [t for _, t, _ in NAV_ITEMS]

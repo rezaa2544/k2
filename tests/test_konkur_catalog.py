@@ -150,7 +150,12 @@ def test_general_subjects_never_claim_chapter_lists():
 def test_syllabus_helpers_report_unknown_as_none():
     from k2.konkur_catalog import section_count, syllabus_for
 
-    assert section_count("شیمی", 10) is None
+    # درس‌های عمومی هنوز فهرست فصل ندارند (نبود داده، نه فرض).
+    assert section_count("فارسی", 10) is None
+    assert section_count("ورزشه", 10) is None
+    assert syllabus_for("فارسی", 10) == ()
+    # شیمی دهم از این پس نام‌دار است (۷/۷/۷ گفتار، فهرست رسمی چاپ ۱۴۰۵).
+    assert section_count("شیمی", 10) == 21
     assert section_count("زیست‌شناسی", 10) == 22
     assert len(syllabus_for("زمین‌شناسی")) == 7
     assert syllabus_for("زیست‌شناسی", 99) == ()

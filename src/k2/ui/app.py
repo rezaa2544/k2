@@ -38,6 +38,7 @@ from .views import (
     ReviewPage,
     SettingsPage,
     StudyTimerPage,
+    SyllabusPage,
     TestsPage,
     TodayPlanPage,
     WeeklyPlanPage,
@@ -49,6 +50,7 @@ NAV_ITEMS = [
     ("⌂   داشبورد امروز", "داشبورد امروز", "نمای کلی روز، ظرفیت و قدم بعدی"),
     ("▤   برنامه هفتگی", "برنامه هفتگی", "بازهٔ هفت روز، بازبینی شبانه و بازسازی"),
     ("▦   بانک دروس", "بانک دروس", "درس‌ها، مباحث و مسیر دوگانهٔ هر مبحث"),
+    ("❡   سرفصل درس‌ها", "سرفصل درس‌ها", "فصل و گفتار رسمی کتاب درسی و وضعیت هر گفتار"),
     ("◱   عقب‌افتادگی‌ها", "عقب‌افتادگی‌ها", "بدهی مطالعه، تریاژ و روز حداقلی"),
     ("◷   کلاس‌های من", "کلاس‌های من", "کلاس‌ها و روال‌های ثابت؛ ظرفیت واقعی"),
     ("✶   مشکلات یادگیری", "مشکلات یادگیری", "ثبت، پیگیری و رفع مشکل"),
@@ -191,6 +193,7 @@ class MainWindow(QMainWindow):
         self.today = TodayPlanPage(self.service)
         self.weekly = WeeklyPlanPage(self.service)
         self.courses = CourseBankPage(self.service)
+        self.syllabus = SyllabusPage(self.service)
         self.backlogs = BacklogsPage(self.service)
         self.classes = ClassesPage(self.service)
         self.problems = LearningProblemsPage(self.service)
@@ -202,9 +205,10 @@ class MainWindow(QMainWindow):
         self.reports = ReportsPage(self.service)
         self.settings = SettingsPage(self.service)
         for page in (
-            self.dashboard, self.weekly, self.courses, self.backlogs, self.classes,
-            self.problems, self.tests, self.review, self.comprehensive,
-            self.deadlines, self.timer, self.reports, self.settings,
+            self.dashboard, self.weekly, self.courses, self.syllabus,
+            self.backlogs, self.classes, self.problems, self.tests, self.review,
+            self.comprehensive, self.deadlines, self.timer, self.reports,
+            self.settings,
         ):
             self.stack.addWidget(page)
         # صفحهٔ «برنامهٔ امروز» زیرمجموعهٔ داشبورد است و از همان‌جا باز می‌شود.
