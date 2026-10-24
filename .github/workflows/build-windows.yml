@@ -365,7 +365,7 @@ jobs:
           if (-not $props.DisplayName) { throw "ورودی رجیستری DisplayName ندارد." }
           if (-not $props.UninstallString) { throw "ورودی رجیستری UninstallString ندارد." }
           if (-not $props.DisplayIcon) { throw "ورودی رجیستری DisplayIcon ندارد." }
-          Note "install test: registry entry DisplayName=$($props.DisplayName) DisplayIcon=$($props.DisplayIcon)"
+          Note "install test: registry hive=$($uninstallKey.Split(':')[0]) entry DisplayName=$($props.DisplayName) DisplayIcon=$($props.DisplayIcon)"
 
           # نام میان‌برها فارسی است («مشاور هوشمند کنکور»)، پس جست‌وجو با «*K2*»
           # هیچ‌وقت چیزی پیدا نمی‌کند. به‌جای نام، هدف میان‌بر را می‌خوانیم: باید به
@@ -389,11 +389,19 @@ jobs:
             return $null
           }
 
-          $startMenuRoot = Join-Path $env:ProgramData "Microsoft\\Windows\\Start Menu\\Programs"
-          $shortcut = Find-ShortcutTo -Directories @($startMenuRoot)
+          # نصب ممکن است ارتقا‌یافته یا غیرارتقا‌یافته باشد؛ در هر حالت میان‌بر در
+          # یکی از این مسیرها می‌نشیند. پس همه را می‌گردیم.
+          $startMenuDirs = @(
+            (Join-Path ([Environment]::GetFolderPath("CommonStartMenu")) "Programs"),
+            (Join-Path ([Environment]::GetFolderPath("StartMenu")) "Programs")
+          ) | Where-Object { $_ }
+          $shortcut = Find-ShortcutTo -Directories $startMenuDirs
           if (-not $shortcut) {
-            $all = Get-ChildItem $startMenuRoot -Recurse -Filter "*.lnk" -ErrorAction SilentlyContinue
-            Note "install test: start-menu shortcuts = $(($all | ForEach-Object { $_.Name }) -join ' | ')"
+            foreach ($d in $startMenuDirs) {
+              $count = (Get-ChildItem $d -Recurse -Filter "*.lnk" -ErrorAction SilentlyContinue |
+                Measure-Object).Count
+              Note "install test: $d has $count shortcuts"
+            }
             throw "میان‌بر فهرست شروع ساخته نشد."
           }
           Note "install test: start-menu shortcut '$($shortcut.Name)' -> $($shell.CreateShortcut($shortcut.FullName).TargetPath)"
@@ -402,7 +410,7 @@ jobs:
                            [Environment]::GetFolderPath("Desktop")) | Where-Object { $_ }
           $desktopIcon = Find-ShortcutTo -Directories $desktopDirs
           if (-not $desktopIcon) { throw "میان‌بر میزکار ساخته نشد." }
-          Note "install test: desktop shortcut '$($desktopIcon.Name)'"
+          Note "install test: desktop shortcut '$($desktopIcon.Name)' -> $($shell.CreateShortcut($desktopIcon.FullName).TargetPath)"
 
           # ۴) برنامهٔ نصب‌شده واقعاً اجرا می‌شود و پایگاه داده می‌سازد
           $db = Join-Path $dataDir "k2.db"
