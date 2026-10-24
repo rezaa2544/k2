@@ -329,6 +329,7 @@ jobs:
             $p = Start-Process -FilePath $setup.FullName -Wait -PassThru `
               -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
                             "/DIR=`"$installDir`"", "/LOG=`"$setupLog`""
+                                "/MERGETASKS=desktopicon"
             return $p.ExitCode
           }
 
@@ -348,12 +349,22 @@ jobs:
           if ($dllCount -lt 50) { throw "فقط $dllCount DLL نصب شد؛ پوشهٔ _internal کامل نیست." }
           Note "install test: $dllCount DLL installed alongside K2.exe"
 
-          # لاگ نصب‌کننده می‌گوید دقیقاً چه میان‌برهایی ساخته شده‌اند؛ این
-          # مستقیم‌ترین منبع حقیقت است و به حدس زدن نیاز ندارد.
+          # لاگ نصب‌کننده و خود فایل‌سیستم می‌گویند دقیقاً چه میان‌برهایی ساخته شده‌اند؛
+          # این مستقیم‌ترین منبع حقیقت است و به حدس زدن نیاز ندارد.
           if (Test-Path $setupLog) {
-            $pattern = "shortcut", "Shortcut", "Creating directory", "icon"
-            $hits = Select-String -Path $setupLog -Pattern $pattern -ErrorAction SilentlyContinue
+            $hits = Select-String -Path $setupLog `
+              -Pattern "shortcut", "Start Menu", "ProgramData", "desktop", "Desktop", "Tasks" `
+              -ErrorAction SilentlyContinue
             foreach ($line in $hits) { Note "setup log: $($line.Line.Trim())" }
+          }
+          foreach ($d in @($startMenuDirs + $desktopDirs)) {
+            $count = (Get-ChildItem $d -Recurse -Filter "*.lnk" -ErrorAction SilentlyContinue |
+              Measure-Object).Count
+            $recent = Get-ChildItem $d -Recurse -Filter "*.lnk" -ErrorAction SilentlyContinue |
+              Where-Object { $_.LastWriteTime -gt (Get-Date).AddMinutes(-15) } |
+              ForEach-Object { $_.Name }
+            Note "install test: $d -> $count shortcuts, recent: $($recent -join ', ')"
+          }
           }
 
           # ۲) ثبت در «برنامه‌ها و قابلیت‌ها» با نام، آیکن و مسیر حذف

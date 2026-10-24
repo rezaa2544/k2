@@ -42,7 +42,9 @@ VersionInfoProductName={#MyAppName}
 DefaultDirName={autopf}\{#MyAppNameEn}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
-AllowNoIcons=yes
+; نصب خاموش (CI) و نصب عادی هر دو باید میان‌بر بسازند. با AllowNoIcons=yes
+; گزینهٔ «پوشهٔ Start Menu نساز» وجود دارد و در نصب خاموش رفتارش معلوم نیست.
+AllowNoIcons=no
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -72,7 +74,7 @@ farsi.FinishedLabel=نصب کامل شد. برنامه را از میان‌بر
 farsi.ClickInstall=نصب
 
 [Tasks]
-Name: "desktopicon"; Description: "ساخت میان‌بر روی دسکتاپ"; GroupDescription: "میان‌برها:"
+Name: "desktopicon"; Description: "ساخت میان‌بر روی دسکتاپ"; GroupDescription: "میان‌برها:"; Flags: checked
 Name: "desktopicon\common"; Description: "برای همهٔ کاربران این رایانه"; GroupDescription: "میان‌برها:"; Flags: exclusive
 Name: "desktopicon\user"; Description: "فقط برای من"; GroupDescription: "میان‌برها:"; Flags: unchecked exclusive
 
@@ -83,7 +85,10 @@ Source: "output\K2\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs cre
 ; هم می‌آورد؛ پس هیچ فایلی دستی اضافه نمی‌شود.
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+; میان‌برهای Start Menu هیچ Tasks ندارند، پس همیشه ساخته می‌شوند — حتی در
+; نصب خاموش. میان‌بر میزکار به تسک desktopicon وابسته است و CI آن را با
+; /MERGETASKS=desktopicon صریحاً انتخاب می‌کند.
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
 Name: "{group}\حذف نصب {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
