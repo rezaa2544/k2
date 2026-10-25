@@ -134,7 +134,7 @@ jobs:
           $process = Start-Process -FilePath "pwsh" `
             -ArgumentList @("-NoProfile", "-NoLogo", "-File", "packaging\signing_selftest.ps1", "-ExePath", $exe) `
             -PassThru -WindowStyle Hidden -RedirectStandardOutput $log
-          $deadline = (Get-Date).AddSeconds(240)
+          $deadline = (Get-Date).AddSeconds(180)
           while (-not $process.HasExited -and (Get-Date) -lt $deadline) {
             Start-Sleep -Milliseconds 500
           }
@@ -144,7 +144,7 @@ jobs:
           if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host "$_" } }
           if (-not $process.HasExited) {
             $process.Kill()
-            Write-Host "::warning::خودآزمایی امضا به مهلت ۴ دقیقه‌ای خورد و رد شد. لاگ بالا می‌گوید کدام مرحله گیر کرده. امضای واقعی به گواهی کاربر نیاز دارد."
+            Write-Host "::warning::خودآزمایی امضا به مهلت ۳ دقیقه‌ای خورد و رد شد. لاگ بالا می‌گوید کدام مرحله گیر کرده. امضای واقعی به گواهی کاربر نیاز دارد."
             exit 0
           }
           if ($process.ExitCode -ne 0) {

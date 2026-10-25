@@ -92,29 +92,38 @@ try {
     Note "signing self-test: certificate created thumbprint=$($cert.Thumbprint)"
 
     # گواهی را موقتاً به ریشهٔ همین کاربر اضافه می‌کنیم تا زنجیرهٔ
-    # راستی‌آزمایی پیدا شود.
-    $rootStore = New-Object System.Security.Cryptography.X509Certificates.X509Store(
-        "Root", "CurrentUser")
-    $rootStore.Open("ReadWrite")
-    $rootStore.Add($cert)
-    $rootStore.Close()
-    Note "signing self-test: certificate trusted for this user only"
-
+    # راستی‌آزمایی پیدا شود. باز کردن انبار ریشه برای نوشتن روی ویندوز
+    # می‌تواند کند یا گیرکننده باشد، پس هر زیرمرحله جداگانه گزارش می‌شود تا
+    # از لاگ معلوم شود کدام قسمت مهلت را می‌خورد.
     $sample = Join-Path $work "selftest.exe"
+    Note "signing self-test: copying the EXE"
     Copy-Item $ExePath $sample -Force
+
     $pfx = Join-Path $work "selftest.pfx"
     Note "signing self-test: exporting a throwaway PFX"
     Export-PfxCertificate -Cert $cert -FilePath $pfx `
         -Password (ConvertTo-SecureString -String "selftest" -Force -AsPlainText) |
         Out-Null
+    Note "signing self-test: PFX exported"
+
+    Note "signing self-test: opening the CurrentUser Root store for write"
+    $rootStore = New-Object System.Security.Cryptography.X509Certificates.X509Store(
+        "Root", "CurrentUser")
+    $rootStore.Open("ReadWrite")
+    Note "signing self-test: Root store opened; adding the certificate"
+    $rootStore.Add($cert)
+    $rootStore.Close()
+    Note "signing self-test: certificate trusted for this user only"
 
     Note "signing self-test: signtool sign"
     & $signtool sign /f $pfx /p "selftest" /fd SHA256 $sample
     if ($LASTEXITCODE -ne 0) { Fail "signtool sign با exit=$LASTEXITCODE شکست خورد." }
+    Note "signing self-test: signed"
 
     Note "signing self-test: signtool verify /pa"
     & $signtool verify /pa $sample
     if ($LASTEXITCODE -ne 0) { Fail "signtool verify با exit=$LASTEXITCODE شکست خورد." }
+    Note "signing self-test: verified"
 
     $signature = Get-AuthenticodeSignature $sample
     if ($signature.Status -ne "Valid") {
