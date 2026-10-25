@@ -10,6 +10,58 @@ from typing import Optional, Sequence
 
 from .config import database_path
 
+# نام mutex مشترک. باید با ``AppMutex`` در packaging/k2_installer.iss یکی
+# باشد؛ وگرنه نصب‌کننده برنامهٔ در حال اجرا را نمی‌بیند.
+SINGLE_INSTANCE_MUTEX = "K2KonkurAdvisorMutex"
+
+# handle باید تا پایان عمر فرایند زنده بماند، وگرنه ویندوز mutex را آزاد
+# می‌کند و نسخهٔ دوم هم اجازهٔ اجرا می‌گیرد.
+_MUTEX_HANDLE = None
+
+# ERROR_ALREADY_EXISTS از winerror.h
+_ERROR_ALREADY_EXISTS = 183
+
+
+def _acquire_single_instance_mutex() -> bool:
+    """اگر نسخهٔ دیگری از برنامه باز نباشد ``True`` برمی‌گرداند.
+
+    روی ویندوز یک mutex سراسری می‌سازد. همین mutex را نصب‌کنندهٔ استاندارد
+    (Inno ``AppMutex``) می‌خواند تا بداند برنامه باز است و نصب روی فایل
+    قفل‌شده خراب نشود.
+
+    روی سیستم‌عاملهای دیگر هیچ قفلی ساخته نمی‌شود و همیشه ``True`` است.
+
+    هیچ خطایی نباید جلوی اجرای برنامه را بگیرد: اگر ساخت mutex نشد،
+    برنامه باز هم اجرا می‌شود — بهتر از این است که کاربر برنامهٔ خراب ببیند.
+    """
+    global _MUTEX_HANDLE
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        # اعلان نوع‌ها لازم است تا handle روی ویندوز ۶۴ بیت بریده نشود.
+        # ماژول wintypes فقط روی ویندوز هست، پس اگر نبود بی‌آن ادامه می‌دهیم.
+        try:
+            from ctypes import wintypes
+
+            kernel32.CreateMutexW.argtypes = [
+                wintypes.LPVOID,
+                wintypes.BOOL,
+                wintypes.LPCWSTR,
+            ]
+            kernel32.CreateMutexW.restype = wintypes.HANDLE
+        except ImportError:  # pragma: no cover - فقط روی غیر ویندوز
+            pass
+        handle = kernel32.CreateMutexW(None, False, SINGLE_INSTANCE_MUTEX)
+        if not handle:
+            return True
+        _MUTEX_HANDLE = handle
+        return ctypes.get_last_error() != _ERROR_ALREADY_EXISTS
+    except Exception:  # pragma: no cover - فقط روی ویندوز رخ می‌دهد
+        return True
+
 
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -88,6 +140,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     app = QApplication(sys.argv[:1])
     app.setApplicationName("K2 Konkur Advisor")
     app.setOrganizationName("K2")
+
+    # فقط مسیر گرافیکی قفل می‌کند؛ ``--headless`` یک بررسی سلامت است و اگر
+    # قفل بگیرد، نصب‌کننده و بررسی سلامت هم متوقف می‌شوند.
+    if not _acquire_single_instance_mutex():
+        from PySide6.QtWidgets import QMessageBox
+
+        QMessageBox.information(
+            None,
+            "K2 Konkur Advisor",
+            "برنامه از قبل باز است. لطفاً پنجرهٔ موجود را استفاده کنید.",
+        )
+        return 0
+
     apply_theme(app)
 
     service = AdvisorService(db_path)
