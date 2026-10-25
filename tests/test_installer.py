@@ -245,10 +245,28 @@ def test_innosetup_script_preserves_user_data_on_uninstall():
         )
 
 
-def test_innosetup_script_blocks_install_while_the_app_is_running():
+def test_innosetup_script_handles_a_running_app_during_install():
+    """اگر برنامه باز باشد، نصب نباید بی‌صدا خراب شود.
+
+    Inno این کار را به‌صورت بومی انجام می‌دهد: ``AppMutex`` نام mutex مشترک
+    را اعلام می‌کند و ``CloseApplications=yes`` فرایند قفل‌کنندهٔ فایل را
+    می‌بندد. پیش‌تر یک ``CheckForMutexes`` روی GUID نوشته شده بود که هیچ
+    فرایندی آن mutex را نمی‌ساخت، پس همیشه False بود و بی‌اثر — این تست
+    همان چیزی را می‌سنجد که واقعاً کار می‌کند.
+    """
     text = ISS.read_text(encoding="utf-8")
-    assert "InitializeSetup" in text, "بدون بررسی InitializeSetup، نصب روی برنامهٔ باز می‌تواند خراب شود"
-    assert "K2.exe" in text, "بررسی اجرای هم‌زمان باید نام فایل اجرایی را بسنجد"
+    assert "AppMutex=" in text, "AppMutex نیست؛ نصب‌کننده برنامهٔ در حال اجرا را نمی‌بیند"
+    assert "CloseApplications=yes" in text, (
+        "CloseApplications نیست؛ اگر برنامه باز باشد نصب روی فایل قفل‌شده می‌شکند"
+    )
+    # نام mutex اعلام‌شده باید همان چیزی باشد که برنامه واقعاً می‌سازد، وگرنه
+    # دوباره کد مرده ساخته‌ایم. اپلیکیشن نام را در src/k2/app.py می‌سازد.
+    app_py = (ROOT / "src" / "k2" / "app.py").read_text(encoding="utf-8")
+    mutex_name = re.search(r"AppMutex=([^\r\n]+)", text).group(1).split(",")[0].strip()
+    assert mutex_name in app_py, (
+        f"AppMutex به '{mutex_name}' اشاره می‌کند ولی app.py آن را نمی‌سازد؛ "
+        "پس دوباره بی‌اثر است"
+    )
 
 
 def test_innosetup_script_uses_the_persian_language_file():
@@ -586,3 +604,67 @@ def test_the_ci_selects_the_desktop_task_when_installing_silently():
     assert "/MERGETASKS=desktopicon" in install["run"], (
         "نصب خاموش باید تسک desktopicon را با /MERGETASKS انتخاب کند"
     )
+
+
+# ---------------------------------------------------------------------------
+# پایش «کد مرده» در اسکریپت نصب‌کننده
+#
+# اسکریپت نصب‌کننده روی این ماشین (لینوکس) کامپایل نمی‌شود؛ فقط در CI و با
+# iscc واقعی ساخته می‌شود. پس هر چیزی که در آن نوشته شود و کار نکند، تا
+# اجرای CI پیدایش نمی‌شود. یک بلوک [Code] قبلاً CheckForMutexes روی GUID
+# بود، در حالی که هیچ‌کس آن mutex را نمی‌ساخت — همیشه False و بی‌اثر.
+# ---------------------------------------------------------------------------
+
+
+def test_installer_code_has_no_mutex_check_on_a_name_nobody_creates():
+    """هیچ ``CheckForMutexes`` نباید نامی را بسوزاند که کسی نسازد.
+
+    «برنامهٔ در حال اجرا» را Inno به‌صورت بومی با ``AppMutex`` و
+    ``CloseApplications=yes`` می‌گیرد (فایل قفل‌شدهٔ K2.exe). یک بررسی دستی
+    روی نامی که هیچ فرایندی نمی‌سازد، شرطی است که همیشه False است و فقط
+    ادعای کاری می‌کند که انجام نمی‌شود.
+    """
+    script = (ROOT / "packaging" / "k2_installer.iss").read_text(encoding="utf-8")
+    # فقط دستورهای واقعی را بسنج، نه کامنت‌ها؛ کامنت می‌تواند نام را برای
+    # توضیح بیاورد.
+    directives = "\n".join(
+        line for line in script.splitlines() if not line.strip().startswith(";")
+    )
+
+    assert "CheckForMutexes" not in directives, (
+        "اسکریپت نصب‌کننده mutex دستی می‌سنجد؛ Inno این کار را خودش با "
+        "AppMutex و CloseApplications می‌کند"
+    )
+    # ولی رفتار درست نباید حذف شده باشد.
+    assert "AppMutex=" in script, "AppMutex حذف شده؛ برنامهٔ در حال اجرا تشخیص داده نمی‌شود"
+    assert "CloseApplications=yes" in script, "CloseApplications حذف شده"
+
+
+def test_installer_has_no_empty_section():
+    """هیچ بخشی در اسکریپت نباید خالی یا فقط کامنت باشد.
+
+    یک بخش خالی در Inno خطا نمی‌دهد ولی نشانهٔ کار نیمه‌تمام است.
+    """
+    sections = _iss_sections(ISS.read_text(encoding="utf-8"))
+    empty = []
+    for name, entries in sections.items():
+        if name in {"Setup", "Languages", "Messages", "Code"}:
+            continue
+        if not entries:
+            empty.append(name)
+    assert not empty, f"این بخش‌ها خالی هستند: {empty}"
+
+
+def test_uninstall_delete_only_removes_the_install_folder():
+    """``[UninstallDelete]`` نباید پوشهٔ دادهٔ کاربر را هدف بگیرد.
+
+    کاربر دادهٔ واقعی‌اش (پایهگاه داده) را در پوشهٔ دادهٔ سیستم دارد، نه در
+    پوشهٔ برنامه. حذف نصب باید فقط فایل‌های نصب‌شده را پاک کند.
+    """
+    script = (ROOT / "packaging" / "k2_installer.iss").read_text(encoding="utf-8")
+    section = script.split("[UninstallDelete]")[1]
+    assert "{app}" in section, "حذف نصب پوشهٔ برنامه را هدف نگرفته"
+    for forbidden in ("{localappdata}", "{userappdata}", "K2_DATA_DIR", "k2.db"):
+        assert forbidden not in section, (
+            f"حذف نصب دادهٔ کاربر را هدف گرفته: {forbidden}"
+        )

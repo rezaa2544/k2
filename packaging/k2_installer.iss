@@ -102,15 +102,9 @@ Filename: "{app}\{#MyAppExeName}"; Description: "اجرای {#MyAppName}"; Flags
 ; پوشهٔ دادهٔ کاربر حذف نمی‌شود؛ فقط فایل‌های نصب‌شدهٔ برنامه پاک می‌شوند.
 Type: filesandordirs; Name: "{app}"
 
-[Code]
-// اگر نسخهٔ قبلی در حال اجرا باشد، نصب‌کننده نمی‌تواند فایل‌ها را بنویسد.
-function InitializeSetup(): Boolean;
-begin
-  Result := True;
-  if CheckForMutexes('{#MyAppId}') then
-  begin
-    if MsgBox('برنامهٔ «{#MyAppName}» در حال اجراست.' + #13#10 +
-              'لطفاً آن را ببندید و دوباره «تأیید» را بزنید.', mbConfirmation, MB_OKCANCEL) = IDCANCEL then
-      Result := False;
-  end;
-end;
+; نکته: بخش [Code] عمداً حذف شده است. در آن یک CheckForMutexes روی GUID بود
+; که هیچ فرایندی آن mutex را نمی‌ساخت، پس همیشه False برمی‌گرداند و بی‌اثر
+; بود — اسکریپت چیزی را ادعا می‌کرد که انجام نمی‌داد. «برنامهٔ در حال اجرا»
+; را خودِ Inno به‌صورت بومی می‌گیرد: AppMutex نام mutex مشترکی را اعلام
+; می‌کند که src/k2/app.py واقعاً می‌سازد، و CloseApplications=yes فایل
+; قفل‌شدهٔ K2.exe را می‌بندد.

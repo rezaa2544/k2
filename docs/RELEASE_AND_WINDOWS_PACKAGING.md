@@ -222,9 +222,29 @@ OutputBaseFilename=K2-Setup-1.0.0
 | میان‌بر میزکار | `[Tasks]` اختیاری (per-user و common) |
 | ثبت در Add/Remove Programs | خودکار توسط Inno Setup با `AppId` ثابت |
 | حذف استاندارد | `{uninstallexe}` + `UninstallDisplayIcon` |
-| جلوگیری از نصب هم‌زمان | `AppMutex` + بررسی `InitializeSetup` |
+| جلوگیری از نصب هم‌زمان | `AppMutex` (mutex واقعی در `src/k2/app.py`) + `CloseApplications=yes` |
 | فارسی و راست‌چین | `packaging/innosetup/Languages/Farsi.isl` با `RightToLeft=yes` |
 | حفظ دادهٔ کاربر | `[UninstallDelete]` فقط `{app}` را پاک می‌کند |
+
+#### ۸.۲.۱ قفل نسخهٔ یگانه (single instance)
+
+نصب‌کننده با `AppMutex=K2KonkurAdvisorMutex` می‌پرسد «برنامه باز است؟». این
+اعلام فقط وقتی معنا دارد که خود برنامه همان mutex را بسازد؛ پس
+`src/k2/app.py` در مسیر گرافیکی (نه `--headless`) با
+`ctypes.WinDLL("kernel32").CreateMutexW` یک mutex سراسری می‌سازد و handle را
+تا پایان عمر فرایند نگه می‌دارد. اگر نسخهٔ دیگری باز باشد، پنجرهٔ دومی باز
+نمی‌شود و پیام فارسی نشان داده می‌شود.
+
+نکته‌های طراحی:
+
+* روی غیر ویندوز هیچ قفلی ساخته نمی‌شود؛ تابع همیشه `True` برمی‌گرداند.
+* هر خطایی در ساخت mutex برنامه را متوقف نمی‌کند (بهتر از برنامهٔ خراب).
+* `--headless` قفل نمی‌گیرد، چون هم بررسی سلامت است و هم نصب‌کننده در CI پس
+  از اجرای health-check باید بتواند نصب دوم (ارتقا) را انجام دهد.
+
+قبلاً نصب‌کننده یک بخش `[Code]` داشت که با `CheckForMutexes` دنبال mutexی
+روی GUID می‌گشت، در حالی که هیچ فرایندی آن را نمی‌ساخت — پس همیشه `False`
+برمی‌گرداند و بی‌اثر بود. آن بخش حذف شد و مکانیزم واقعی جایگزین شد.
 
 ### ۸.۳ ساخت در CI
 

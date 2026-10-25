@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
@@ -332,4 +333,191 @@ def test_shortcuts_are_found_by_target_not_by_name():
     script = (ROOT / "packaging" / "k2_installer.iss").read_text(encoding="utf-8")
     assert "K2" not in script.split("[Icons]")[1].split("[Run]")[0], (
         "بخش [Icons] نباید به نام انگلیسی متکی باشد؛ نام میان‌برها فارسی است"
+    )
+
+
+# ---------------------------------------------------------------------------
+# پایش ساختاری اسکریپت‌های PowerShell
+#
+# این گام روی ویندوز اجرا می‌شود و PowerShell روی این ماشین نیست، پس اشتبال
+# نگارشیِ اسکریپت فقط در CI و فقط با «Process completed with exit code 1.»
+# پیدا می‌شود — بدون هیچ خروجی. دو اشتبال واقعیِ همین جنس قبلاً یک اجرای کامل
+# را آتش زد: یک آکولاد بستهٔ اضافه (کل اسکریپت در زمان parse می‌شکست و هیچ
+# چیز اجرا نمی‌شد) و یک بک‌تیک گم‌شده در ``-ArgumentList`` که سوییچ
+# ``/MERGETASKS`` را به یک رشتهٔ بی‌اثر تبدیل می‌کرد.
+# ---------------------------------------------------------------------------
+
+
+def _pwsh_run_blocks() -> list[tuple[str, str, int]]:
+    """همهٔ بلوک‌های ``run: |`` را با نام گامشان از گردش‌کار بیرون می‌کشد."""
+    text = (ROOT / ".github" / "workflows" / "build-windows.yml").read_text(encoding="utf-8")
+    lines = text.splitlines()
+    blocks: list[tuple[str, str, int]] = []
+    index = 0
+    run_start = re.compile(r"^(\s*)run: \|\s*$")
+    while index < len(lines):
+        match = run_start.match(lines[index])
+        if not match:
+            index += 1
+            continue
+        indent = len(match.group(1))
+        cursor = index + 1
+        body: list[str] = []
+        while cursor < len(lines):
+            line = lines[cursor]
+            if line.strip() == "":
+                body.append(line)
+                cursor += 1
+                continue
+            if len(line) - len(line.lstrip()) <= indent:
+                break
+            body.append(line)
+            cursor += 1
+        name = ""
+        for back in range(index, max(0, index - 12), -1):
+            name_match = re.match(r"^\s*- name: (.*)$", lines[back])
+            if name_match:
+                name = name_match.group(1)
+                break
+        blocks.append((name, "\n".join(body), index + 1))
+        index = cursor
+    return blocks
+
+
+def test_every_powershell_run_block_has_balanced_braces():
+    """آکولاد باز و بستهٔ هر اسکریپت PowerShell باید برابر باشند.
+
+    یک آکولاد اضافه باعث می‌شود کل بلوک در زمان parse شکست بخورد؛ چون اجرا
+    هرگز شروع نمی‌شود، هیچ ``::notice::``‌ای هم چاپ نمی‌شود و تنها نشانهٔ
+    خرابی یک «exit code 1» بی‌توضیح است.
+    """
+    blocks = _pwsh_run_blocks()
+    assert len(blocks) >= 10, f"فقط {len(blocks)} بلوک run پیدا شد"
+    unbalanced = []
+    for name, body, line_number in blocks:
+        # `` ` `` یک گریز است؛ `` `{ `` و `` `} `` آکولاد واقعی نیستند.
+        cleaned = re.sub(r"`.", "", body)
+        opened, closed = cleaned.count("{"), cleaned.count("}")
+        if opened != closed:
+            unbalanced.append(f"line {line_number} [{name}]: open={opened} close={closed}")
+    assert not unbalanced, "آکولاد نامتوازن در اسکریپت PowerShell:\n" + "\n".join(unbalanced)
+
+
+def test_no_argument_list_element_is_left_orphaned():
+    """هیچ سوییچی از لیست آرگومان‌ها جا نماند.
+
+    در ``-ArgumentList`` هر خط جز آخر باید با `` , `` یا `` ` `` ادامه پیدا
+    کند. اگر بک‌تیک آخرین آرگومان گم شود، سوییچ بعدی یک دستور جدا می‌شود و
+    هرگز به فرایند نمی‌رسد — بدون هیچ خطایی.
+    """
+    orphaned = []
+    for name, body, line_number in _pwsh_run_blocks():
+        lines = body.splitlines()
+        for position, line in enumerate(lines):
+            stripped = line.strip()
+            # آرگومانی که با «/» شروع می‌شود (سوییچ نصب‌کننده/برنامه).
+            if not re.match(r'^"/[A-Za-z\-]', stripped):
+                continue
+            previous = position - 1
+            while previous >= 0 and not lines[previous].strip():
+                previous -= 1
+            if previous < 0:
+                continue
+            tail = lines[previous].rstrip()
+            if tail.endswith("`") or tail.endswith(",") or tail.endswith("(") or tail.endswith("|"):
+                continue
+            orphaned.append(f"line {line_number + position} [{name}]: {stripped[:50]}")
+    assert not orphaned, (
+        "این سوییچ‌ها از لیست آرگومان جدا شده‌اند و به فرایند نمی‌رسند:\n"
+        + "\n".join(orphaned)
+    )
+
+
+def test_install_step_actually_merges_the_desktop_icon_task():
+    """``/MERGETASKS=desktopicon`` باید داخل همان ``-ArgumentList`` باشد.
+
+    میان‌بر میزکار در ``k2_installer.iss`` به تسک ``desktopicon`` بسته شده.
+    نصب خاموش بدون انتخاب صریح آن تسک، میان‌بر را نمی‌سازد و گام «میان‌بر
+    میزکار ساخته نشد» قرمز می‌شود — علتش هم دقیقاً همین است.
+    """
+    blocks = {name: body for name, body, _ in _pwsh_run_blocks()}
+    install = next(
+        body
+        for name, body in blocks.items()
+        if name.startswith("Install the built installer")
+    )
+    start = install.index("function Install-Setup")
+    end = install.index("return $p.ExitCode", start)
+    function_body = install[start:end]
+
+    assert "/MERGETASKS=desktopicon" in function_body, (
+        "تابع Install-Setup تسک desktopicon را انتخاب نمی‌کند"
+    )
+    # باید روی خطی باشد که ادامهٔ لیست آرگومان است، نه دستور جدا.
+    argument_lines = [
+        line.strip()
+        for line in function_body.splitlines()
+        if line.strip().startswith('"/') or line.strip().startswith('-ArgumentList')
+    ]
+    assert any(line.startswith("-ArgumentList") for line in argument_lines), (
+        "لیست آرگومان پیدا نشد"
+    )
+    merged = [line for line in argument_lines if "MERGETASKS" in line]
+    assert merged, "/MERGETASKS در لیست آرگومان نیست"
+    # خطی که MERGETASKS رویش است باید پیش از آن، خطی با `` ` `` یا ``,`` داشته باشد.
+    flat = function_body.splitlines()
+    for position, line in enumerate(flat):
+        if "MERGETASKS" not in line:
+            continue
+        tail = flat[position - 1].rstrip()
+        assert tail.endswith("`") or tail.endswith(","), (
+            f"MERGETASKS به لیست آرگومان وصل نیست: {line.strip()}"
+        )
+
+
+def test_install_step_defines_each_variable_before_reading_it():
+    """هر متغیر باید پیش از خواندنش تعریف شده باشد.
+
+    یک بلوک تشخیصی، ``$startMenuDirs`` را پیش از تعریفش می‌خوانید. چون
+    PowerShell بدنهٔ ``foreach`` را دیر ارزیابی می‌کند، آن بلوک همیشه خالی
+    بود و فقط «۰ میان‌بر» گزارش می‌داد — گمراه‌کننده، نه مفید. تعریف‌شدنِ
+    زودهنگام را به‌عنوان یک قاعده نگه می‌داریم.
+    """
+    blocks = {name: body for name, body, _ in _pwsh_run_blocks()}
+    install = next(
+        body
+        for name, body in blocks.items()
+        if name.startswith("Install the built installer")
+    )
+    lines = install.splitlines()
+    for variable in ("$startMenuDirs", "$desktopDirs"):
+        references = [
+            position
+            for position, line in enumerate(lines)
+            if variable in line and not line.lstrip().startswith("#")
+        ]
+        assert references, f"{variable} در گام نصب استفاده نمی‌شود"
+        first = lines[references[0]]
+        assert re.match(rf"^\s*{re.escape(variable)}\s*=\s*@\(", first), (
+            f"{variable} پیش از تعریفش خوانده می‌شود: {first.strip()}"
+        )
+
+
+def test_install_step_reports_the_setup_log_when_install_fails():
+    """اگر نصب شکست خورد، لاگ نصب‌کننده باید بیرون بیاید.
+
+    ``/LOG=`` به نصب‌کننده داده می‌شود تا علت شکست خوانا باشد؛ بدون بازخوانی
+    آن لاگ، شکست فقط یک کد خروج بی‌معنی می‌ماند.
+    """
+    blocks = {name: body for name, body, _ in _pwsh_run_blocks()}
+    install = next(
+        body
+        for name, body in blocks.items()
+        if name.startswith("Install the built installer")
+    )
+    assert "/LOG=" in install, "لاگ نصب‌کننده گرفته نمی‌شود"
+    assert "::error::" in install, "لاگ در صورت شکست به خطا تبدیل نمی‌شود"
+    # هر دو فراخوانی Install-Setup باید لاگ را بخوانند.
+    assert install.count("Get-Content $setupLog") >= 2, (
+        "لاگ فقط در یکی از حالت‌های شکست خوانده می‌شود"
     )
