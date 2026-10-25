@@ -210,6 +210,54 @@ def test_signing_self_test_log_is_timestamped():
     assert "script:StartedAt" in script, "زمان شروع خودآزمایی ثبت نمی‌شود"
 
 
+def test_signing_self_test_proves_the_signature_without_trusting_it():
+    """نیمهٔ حساسِ خودآزمایی نباید به زنجیرهٔ اعتماد ویندوز وابسته باشد.
+
+    نوشتن در انبار ریشه روی runner غیرتعاملی گیر می‌کند و کل خودآزمایی را
+    می‌برد. پس امضا با ``Get-AuthenticodeSignature`` سنجیده می‌شود: امضا
+    باید وجود داشته باشد، فایل با امضا بخواند، و گواهی امضاکننده همان
+    گواهی موقت ما باشد. این درستیِ امضا است، نه اعتمادِ زنجیره — و گواهی
+    خودامضا ذاتاً غیرقابل‌اعتماد است.
+    """
+    script = _signing_selftest_script()
+    assert "Get-AuthenticodeSignature" in script, "امضا خوانده نمی‌شود"
+    assert "Thumbprint" in script, "امضا به گواهی درست مقایسه نمی‌شود"
+    assert "NotSigned" in script, "حالت «امضا نبود» بررسی نمی‌شود"
+    assert "HashMismatch" in script, "حالت «امضا با فایل نمی‌خواند» بررسی نمی‌شود"
+    # نیمهٔ دوم باید جدا و با مهلت باشد، نه داخل بدنهٔ اصلی.
+    assert 'ValidateSet("sign", "trustedverify")' in script, (
+        "خودآزمایی دو حالت جدا ندارد"
+    )
+
+
+def test_signing_self_test_runs_the_trust_check_as_a_bounded_child():
+    """نیمهٔ «زنجیرهٔ اعتماد» باید فرزند با مهلت باشد.
+
+    همان مرحله‌ای است که روی runner آویزان می‌ماند (نوشتن در انبار ریشه).
+    اگر داخل بدنهٔ اصلی باشد، خودآزمایی هم می‌آویزد.
+    """
+    script = _signing_selftest_script()
+    assert "$PSCommandPath" in script, "خودآزمایی خودش را به‌عنوان فرزند صدا نمی‌زند"
+    assert "[int]$TimeoutSeconds" in script, "پارامتر مهلت زمانی نیست"
+    assert "AddSeconds($TimeoutSeconds)" in script, "مهلت نیمهٔ دوم کنترل نمی‌شود"
+    assert "AddSeconds($TimeoutSeconds)" in script, "مهلت نیمهٔ دوم کنترل نمی‌شود"
+    assert "$child.Kill()" in script, "فرزند آویزان Kill نمی‌شود"
+    # و اگر آویزان شد، باید هشدار بدهد و رد شود — نه اینکه شکست بخورد.
+    assert "آویزان شد و رد شد" in script, (
+        "آویزندگی نیمهٔ دوم هشدار نمی‌دهد"
+    )
+
+
+def test_signing_self_test_cleans_up_the_root_store_too():
+    """اگر نیمهٔ دوم گواهی را به ریشه اضافه کرده باشد، باید پاک شود."""
+    script = _signing_selftest_script()
+    finally_block = script[script.index("finally {"):]
+    assert '"Root", "CurrentUser"' in finally_block, (
+        "پاک‌سازی گواهی موقت از انبار رشته انجام نمی‌شود"
+    )
+    assert "Remove($cert)" in finally_block, "گواهی موقت از ریشه برداشته نمی‌شود"
+
+
 def test_signing_self_test_never_publishes_the_self_signed_artifact():
     """گواهی خودامضا نباید به فایل منتشرشده برسد."""
     script = _signing_selftest_script()
