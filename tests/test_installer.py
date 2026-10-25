@@ -481,3 +481,108 @@ def test_build_script_treats_the_installer_as_required():
     # گام باید اجباری باشد (throw در صورت شکست)، نه اختیاری.
     build_step = text[text.index("ساخت نصب‌کنندهٔ استاندارد") :]
     assert "throw" in build_step, "شکست ساخت نصب‌کننده باید build را ناموفق کند"
+
+
+# --------------------------------------------------------------------------
+# اعتبارسنجی خودکار اسکریپت نصب‌کننده
+# --------------------------------------------------------------------------
+
+# فلگ‌های معتبر بخش [Tasks] در Inno Setup 6. «checked» در این لیست نیست:
+# تسک به‌صورت پیش‌فرض انتخاب شده است و فقط unchecked می‌تواند آن را خاموش کند.
+_TASK_FLAGS = {
+    "checkedonce",
+    "dontinheritcheck",
+    "exclusive",
+    "restart",
+    "unchecked",
+}
+
+
+def _iss_raw_lines(text: str) -> dict[str, list[str]]:
+    """خطوط هر بخش از فایل ‎.iss‎ را برمی‌گرداند (بدون تجزیهٔ کلید/مقدار)."""
+    sections: dict[str, list[str]] = {}
+    current = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            current = stripped[1:-1].lower()
+            sections.setdefault(current, [])
+        elif current and stripped and not stripped.startswith(";"):
+            sections[current].append(stripped)
+    return sections
+
+
+def test_every_task_flag_is_a_real_innosetup_flag():
+    """فلگ نامعتبر در [Tasks] کامپایل را می‌شکند.
+
+    ``Flags: checked`` معتبر نیست و خطای «Parameter "Flags" includes an
+    unknown flag» می‌دهد. چون CI تنها جایی است که ‎.iss‎ واقعاً کامپایل
+    می‌شود، این تست جلوی شکست دوبارهٔ CI را می‌گیرد.
+    """
+    sections = _iss_raw_lines(ISS.read_text(encoding="utf-8"))
+    tasks = sections.get("tasks", [])
+    assert tasks, "بخش [Tasks] در اسکریپت نصب‌کننده نیست"
+
+    for line in tasks:
+        if "Flags:" not in line:
+            continue
+        flags = line.split("Flags:")[1].split(";")[0].split()
+        unknown = [flag for flag in flags if flag.lower() not in _TASK_FLAGS]
+        assert not unknown, f"فلگ نامعتبر در [Tasks]: {unknown} — {line}"
+
+
+def test_the_app_shortcut_sets_a_working_directory():
+    """Inno به‌صورت پیش‌فرض «Start In» میان‌بر را نمی‌گذارد.
+
+    مستندات Inno Setup: بدون WorkingDir، ویندوز خودش پوشه‌ای را حدس می‌زند
+    که معمولاً پوشهٔ برنامه نیست.
+    """
+    sections = _iss_raw_lines(ISS.read_text(encoding="utf-8"))
+    icons = sections.get("icons", [])
+    assert icons, "بخش [Icons] در اسکریپت نصب‌کننده نیست"
+
+    # اسکریپت از {#MyAppExeName} استفاده می‌کند، نه رشتهٔ ثابت K2.exe.
+    app_shortcut = next(
+        (
+            line
+            for line in icons
+            if "{#MyAppExeName}" in line and "uninstallexe" not in line
+        ),
+        None,
+    )
+    assert app_shortcut is not None, "میان‌بر برنامه در [Icons] نیست"
+    assert "WorkingDir:" in app_shortcut, (
+        f"میان‌بر برنامه WorkingDir ندارد؛ ویندوز پوشهٔ کار را حدس می‌زند: {app_shortcut}"
+    )
+
+
+def test_start_menu_shortcuts_are_not_gated_by_a_task():
+    """میان‌برهای Start Menu نباید مشروط به تسک باشند.
+
+    اگر Tasks داشته باشند، در نصب خاموش ساخته نمی‌شوند مگر با /MERGETASKS.
+    """
+    sections = _iss_raw_lines(ISS.read_text(encoding="utf-8"))
+    icons = sections.get("icons", [])
+
+    start_menu = [line for line in icons if "{group}" in line]
+    assert start_menu, "هیچ میان‌بر Start Menu در [Icons] نیست"
+    for line in start_menu:
+        assert "Tasks:" not in line, (
+            f"میان‌بر Start Menu مشروط به تسک است و در نصب خاموش ساخته نمی‌شود: {line}"
+        )
+
+
+def test_the_ci_selects_the_desktop_task_when_installing_silently():
+    """نصب خاموش باید تسک میزکار را صریحاً انتخاب کند."""
+    import yaml
+
+    data = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    steps = data["jobs"]["test-and-build"]["steps"]
+    install = next(
+        (s for s in steps if s.get("name", "").startswith("Install the built installer")),
+        None,
+    )
+    assert install is not None, "گام نصب خاموش نصب‌کننده نیست"
+    assert "/MERGETASKS=desktopicon" in install["run"], (
+        "نصب خاموش باید تسک desktopicon را با /MERGETASKS انتخاب کند"
+    )

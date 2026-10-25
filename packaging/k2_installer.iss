@@ -74,7 +74,10 @@ farsi.FinishedLabel=نصب کامل شد. برنامه را از میان‌بر
 farsi.ClickInstall=نصب
 
 [Tasks]
-Name: "desktopicon"; Description: "ساخت میان‌بر روی دسکتاپ"; GroupDescription: "میان‌برها:"; Flags: checked
+; توجه: در [Tasks] فلگ checked وجود ندارد — تسک به‌صورت پیش‌فرض انتخاب
+; شده است و فقط unchecked می‌تواند آن را خاموش کند. گذاشتن checked
+; خطای کامپایل می‌دهد.
+Name: "desktopicon"; Description: "ساخت میان‌بر روی دسکتاپ"; GroupDescription: "میان‌برها:"
 Name: "desktopicon\common"; Description: "برای همهٔ کاربران این رایانه"; GroupDescription: "میان‌برها:"; Flags: exclusive
 Name: "desktopicon\user"; Description: "فقط برای من"; GroupDescription: "میان‌برها:"; Flags: unchecked exclusive
 
