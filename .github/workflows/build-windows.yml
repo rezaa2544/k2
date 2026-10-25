@@ -380,50 +380,104 @@ jobs:
           if (-not $props.DisplayIcon) { throw "ورودی رجیستری DisplayIcon ندارد." }
           Note "install test: registry hive=$($uninstallKey.Split(':')[0]) entry DisplayName=$($props.DisplayName) DisplayIcon=$($props.DisplayIcon)"
 
-          # نام میان‌برها فارسی است («مشاور هوشمند کنکور»)، پس جست‌وجو با «*K2*»
-          # هیچ‌وقت چیزی پیدا نمی‌کند. به‌جای نام، هدف میان‌بر را می‌خوانیم: باید به
-          # K2.exe داخل پوشهٔ نصب اشاره کند. این هم به‌درستی میان‌بر را می‌سنجد،
-          # نه فقط وجود فایلش را.
+          # ۳) میان‌برها: نام‌ها فارسی‌اند («مشاور هوشمند کنکور»)، پس جست‌وجو با
+          # «*K2*» هیچ‌وقت چیزی پیدا نمی‌کند. هدف میان‌بر خوانده می‌شود: باید به
+          # K2.exe داخل پوشهٔ نصب اشاره کند — این به‌درستی میان‌بر را می‌سنجد، نه
+          # فقط وجود فایلش را.
+          #
+          # دو راه مستقل استفاده می‌شود، چون هر کدام می‌تواند تنها گمراه‌کننده باشد:
+          #   ۱) خواندن بایت‌های .lnk و جست‌وجوی مسیر نصب (به COM وابسته نیست)
+          #   ۲) خواندن TargetPath با WScript.Shell، فقط برای گزارش
+          # اگر COM در نشست غیرتعاملی مقدار خالی بدهد، راه اول هنوز درست جواب می‌دهد.
+          #
+          # چرا راه اول مطمئن است: نصب‌کننده برای میان‌بر WorkingDir هم می‌گذارد
+          # (بدون آن ویندوز پوشهٔ کار را خودش حدس می‌زند) و StringData در فایل
+          # .lnk همیشه یونیکد است؛ پس مسیر نصب به‌صورت UTF-16 داخل فایل هست.
+          # برای احتیاط هر دو رمزگشایی (یونیکد و Latin1) امتحان می‌شود تا به
+          # شکل ذخیره‌سازیِ لینک وابسته نباشد.
+          $startMenuDirs = @(
+            (Join-Path ([Environment]::GetFolderPath("CommonStartMenu")) "Programs"),
+            (Join-Path ([Environment]::GetFolderPath("StartMenu")) "Programs")
+          ) | Where-Object { $_ }
+          $desktopDirs = @([Environment]::GetFolderPath("CommonDesktopDirectory"),
+                           [Environment]::GetFolderPath("Desktop")) | Where-Object { $_ }
           $shell = New-Object -ComObject WScript.Shell
-          function Find-ShortcutTo {
+
+          function Test-LinkPointsAtInstallDir {
+            param([string]$LinkPath)
+            $bytes = [System.IO.File]::ReadAllBytes($LinkPath)
+            foreach ($encoding in @([System.Text.Encoding]::Unicode,
+                                    [System.Text.Encoding]::Latin1)) {
+              $text = $encoding.GetString($bytes)
+              if ($text.IndexOf($installDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                return $true
+              }
+            }
+            return $false
+          }
+
+          function Find-LinkToInstallDir {
             param([string[]]$Directories)
             foreach ($directory in $Directories) {
               if (-not (Test-Path $directory)) { continue }
               foreach ($file in (Get-ChildItem $directory -Recurse -Filter "*.lnk" -ErrorAction SilentlyContinue)) {
-                try {
-                  $link = $shell.CreateShortcut($file.FullName)
-                  if ($link.TargetPath -and ($link.TargetPath -like "$installDir*")) { return $file }
-                }
-                catch {
-                  # میان‌بر خراب یا غیرقابل‌خواندن؛ رد می‌شویم.
-                }
+                if (Test-LinkPointsAtInstallDir -LinkPath $file.FullName) { return $file }
               }
             }
             return $null
           }
 
-          # نصب ممکن است ارتقا‌یافته یا غیرارتقا‌یافته باشد؛ در هر حالت میان‌بر در
-          # یکی از این مسیرها می‌نشیند. پس همه را می‌گردیم.
-          $startMenuDirs = @(
-            (Join-Path ([Environment]::GetFolderPath("CommonStartMenu")) "Programs"),
-            (Join-Path ([Environment]::GetFolderPath("StartMenu")) "Programs")
-          ) | Where-Object { $_ }
-          $shortcut = Find-ShortcutTo -Directories $startMenuDirs
-          if (-not $shortcut) {
-            foreach ($d in $startMenuDirs) {
-              $count = (Get-ChildItem $d -Recurse -Filter "*.lnk" -ErrorAction SilentlyContinue |
-                Measure-Object).Count
-              Note "install test: $d has $count shortcuts"
-            }
-            throw "میان‌بر فهرست شروع ساخته نشد."
+          # لاگ نصب‌کننده مستقیم‌ترین منبع حقیقت است: Inno خودش می‌نویسد چه
+          # پوشه و چه میان‌بری ساخته شده. بدون آن، شکست فقط حدس می‌شود.
+          if (Test-Path $setupLog) {
+            $hits = Select-String -Path $setupLog `
+              -Pattern "shortcut", "Start Menu", "ProgramData", "desktop", "Desktop", "Tasks", "Icons" `
+              -ErrorAction SilentlyContinue
+            foreach ($line in $hits) { Note "setup log: $($line.Line.Trim())" }
           }
-          Note "install test: start-menu shortcut '$($shortcut.Name)' -> $($shell.CreateShortcut($shortcut.FullName).TargetPath)"
+          foreach ($d in @($startMenuDirs + $desktopDirs)) {
+            $count = (Get-ChildItem $d -Recurse -Filter "*.lnk" -ErrorAction SilentlyContinue |
+              Measure-Object).Count
+            Note "install test: $d -> $count shortcuts"
+          }
 
-          $desktopDirs = @([Environment]::GetFolderPath("CommonDesktopDirectory"),
-                           [Environment]::GetFolderPath("Desktop")) | Where-Object { $_ }
-          $desktopIcon = Find-ShortcutTo -Directories $desktopDirs
-          if (-not $desktopIcon) { throw "میان‌بر میزکار ساخته نشد." }
-          Note "install test: desktop shortcut '$($desktopIcon.Name)' -> $($shell.CreateShortcut($desktopIcon.FullName).TargetPath)"
+          $problems = @()
+          $shortcut = Find-LinkToInstallDir -Directories $startMenuDirs
+          if ($shortcut) {
+            $target = ""
+            try { $target = $shell.CreateShortcut($shortcut.FullName).TargetPath } catch { }
+            Note "install test: start-menu shortcut '$($shortcut.Name)' target='$target'"
+          } else {
+            $problems += "میان‌بر فهرست شروع ساخته نشد."
+          }
+
+          $desktopIcon = Find-LinkToInstallDir -Directories $desktopDirs
+          if ($desktopIcon) {
+            $target = ""
+            try { $target = $shell.CreateShortcut($desktopIcon.FullName).TargetPath } catch { }
+            Note "install test: desktop shortcut '$($desktopIcon.Name)' target='$target'"
+          } else {
+            $problems += "میان‌بر میزکار ساخته نشد."
+          }
+
+          if ($problems.Count -gt 0) {
+            # تشخیص: هر میان‌بر تازه‌ساخته‌شده و هر نامی که شبیه برنامه است
+            foreach ($d in @($startMenuDirs + $desktopDirs)) {
+              $recent = Get-ChildItem $d -Recurse -Filter "*.lnk" -ErrorAction SilentlyContinue |
+                Where-Object { $_.LastWriteTime -gt (Get-Date).AddMinutes(-10) }
+              foreach ($r in $recent) { Note "install test: recent shortcut $($r.FullName)" }
+              foreach ($file in (Get-ChildItem $d -Recurse -Filter "*.lnk" -ErrorAction SilentlyContinue)) {
+                $name = $file.Name
+                if ($name -like "*کنکور*" -or $name -like "*K2*" -or $name -like "*مشاور*") {
+                  $t = ""
+                  try { $t = $shell.CreateShortcut($file.FullName).TargetPath } catch { }
+                  Note "install test: candidate '$name' -> target='$t'"
+                }
+              }
+            }
+            Note "install test: installDir=$installDir"
+            throw ($problems -join " ")
+          }
 
           # ۴) برنامهٔ نصب‌شده واقعاً اجرا می‌شود و پایگاه داده می‌سازد
           $db = Join-Path $dataDir "k2.db"

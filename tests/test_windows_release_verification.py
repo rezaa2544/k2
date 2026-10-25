@@ -91,7 +91,10 @@ def test_ci_verifies_the_shortcuts_are_created():
     assert '"StartMenu"' in text, "Start-Menu کاربر بررسی نمی‌شود"
     assert "CommonDesktopDirectory" in text, "میزکار مشترک بررسی نمی‌شود"
     assert '"Desktop"' in text, "میزکار کاربر بررسی نمی‌شود"
-    assert "Find-ShortcutTo" in text, "جست‌وجوی میان‌بر یک تابع مشترک نیست"
+    assert "Find-LinkToInstallDir" in text, "جست‌وجوی میان‌بر یک تابع مشترک نیست"
+    assert "Test-LinkPointsAtInstallDir" in text, (
+        "میان‌بر با محتوای فایل .lnk سنجیده نمی‌شود"
+    )
 
 
 def test_ci_runs_the_installed_executable_and_checks_the_database():
@@ -521,3 +524,56 @@ def test_install_step_reports_the_setup_log_when_install_fails():
     assert install.count("Get-Content $setupLog") >= 2, (
         "لاگ فقط در یکی از حالت‌های شکست خوانده می‌شود"
     )
+
+
+def test_shortcut_check_does_not_depend_on_a_single_link_encoding():
+    """جست‌وجوی میان‌بر نباید به یک رمزگشایی خاص تکیه کند.
+
+    فایل ``.lnk`` می‌تواند مسیر را یونیکد (StringData) یا ANSI (LinkInfo)
+    ذخیره کند. اگر تست فقط یکی را بخواند، نتیجه به شکل ذخیره‌سازیِ لینک
+    وابسته می‌شود و روی ماشین دیگری بی‌دلیل قرمز می‌شود.
+    """
+    text = _workflow()
+    install_step = text[text.index("Install the built installer on Windows") :]
+    install_step = install_step[: install_step.index("\n      - name:")]
+
+    assert "Test-LinkPointsAtInstallDir" in install_step, (
+        "بررسی میان‌بر با محتوای فایل .lnk انجام نمی‌شود"
+    )
+    assert "Encoding]::Unicode" in install_step, "رمزگشایی یونیکد وجود ندارد"
+    assert "Encoding]::Latin1" in install_step, "رمزگشایی Latin1 (ANSI) وجود ندارد"
+    # OrdinalIgnoreCase لازم است؛ ویندوز مسیرها را بدون حساسیت به حرف مقایسه می‌کند.
+    assert "OrdinalIgnoreCase" in install_step, "مقایسهٔ مسیر به حرف کوچک/بزرگ حساس است"
+
+
+def test_shortcut_check_reports_the_setup_log():
+    """لاگ نصب‌کننده باید خوانده و گزارش شود.
+
+    Inno خودش می‌نویسد چه پوشه و میان‌بری ساخته شده. اگر جست‌وجوی فایل‌سیستم
+    شکست بخورد، بدون این لاگ علت حدس می‌ماند.
+    """
+    text = _workflow()
+    install_step = text[text.index("Install the built installer on Windows") :]
+    install_step = install_step[: install_step.index("\n      - name:")]
+
+    assert "/LOG=" in install_step, "لاگ نصب‌کننده گرفته نمی‌شود"
+    assert "Select-String" in install_step, "لاگ نصب‌کننده خوانده نمی‌شود"
+    assert "setup log:" in install_step, "لاگ به‌صورت notice گزارش نمی‌شود"
+
+
+def test_shortcut_failure_reports_candidates_before_throwing():
+    """قبل از شکست، میان‌برهای مشکوک و تازه‌ساخته‌شده گزارش شوند.
+
+    یک throw بدون زمینه فقط می‌گوید «ساخته نشد». گزارش نام و هدفِ میان‌برهای
+    موجود می‌گوید مشکل از نصب‌کننده است یا از جست‌وجوی ما.
+    """
+    text = _workflow()
+    install_step = text[text.index("Install the built installer on Windows") :]
+    install_step = install_step[: install_step.index("\n      - name:")]
+
+    assert "recent shortcut" in install_step, "میان‌برهای تازه‌ساخته‌شده گزارش نمی‌شوند"
+    assert "candidate" in install_step, "میان‌برهای نامشخص گزارش نمی‌شوند"
+    # هر دو میان‌بر باید بررسی شوند و شکست فقط در پایان اعلام شود، نه با اولین
+    # چیزی که پیدا نشد — وگرنه باز هم نصفه مطلب می‌مانیم.
+    assert "problems" in install_step, "خطاها جمع نمی‌شوند"
+    assert "$problems -join" in install_step, "شکست پیش از بررسی هر دو میان‌بر پرتاب می‌شود"
