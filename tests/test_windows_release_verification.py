@@ -175,13 +175,39 @@ def test_signing_self_test_runs_as_a_bounded_child_process():
     step = _signing_selftest_step()
     assert "signing_selftest.ps1" in step, "خودآزمایی باید اسکریپت جدا باشد"
     assert "Start-Process" in step, "خودآزمایی باید در فرprocess جدا اجرا شود"
-    assert "AddSeconds(300)" in step, "برای خودآزمایی مهلت زمانی تعیین نشده"
+    assert "AddSeconds(" in step, "برای خودآزمایی مهلت زمانی تعیین نشده"
     assert "HasExited" in step, "مهلت زمانی کنترل نمی‌شود"
     assert "$process.Kill()" in step, "فرprocess آویزان Kill نمی‌شود"
     assert "::warning::" in step, (
         "اگر خودآزمایی آویزان شد، باید هشدار بدهد و رد شود — نه اینکه job را بگیرد"
     )
     assert "exit 0" in step, "رد شدن خودآزمایی نباید build را قرمز کند"
+
+
+def test_signing_self_test_prints_its_log_even_when_it_times_out():
+    """اگر فرprocess آویزان شد، لاگش باید بیرون بیاید.
+
+    قبلاً روی مهلت، فرprocess Kill می‌شد و بی‌هیچ خواندنِ لاگ ``exit 0``
+    می‌گرفت. نتیجه: می‌دانستیم «مهلت تمام شد» ولی نمی‌دانستیم کدام مرحله
+    گیر کرده — و هیچ راهی برای پیشرفت نبود.
+    """
+    step = _signing_selftest_step()
+    # Get-Content لاگ باید پیش از شاخهٔ مهلت باشد، نه بعدش.
+    log_read = step.index("Get-Content $log")
+    kill = step.index("$process.Kill()")
+    assert log_read < kill, (
+        "لاگ فقط در حالت موفق خوانده می‌شود؛ روی آویزندگی چیزی نمی‌بینیم"
+    )
+
+
+def test_signing_self_test_log_is_timestamped():
+    """هر مرحله باید ثانیهٔ سپری‌شده را چاپ کند.
+
+    بی این، معلوم نمی‌شود کندی از ساخت گواهی است یا از خودِ signtool.
+    """
+    script = _signing_selftest_script()
+    assert "TotalSeconds" in script, "مراحل خودآزمایی مهر زمانی ندارند"
+    assert "script:StartedAt" in script, "زمان شروع خودآزمایی ثبت نمی‌شود"
 
 
 def test_signing_self_test_never_publishes_the_self_signed_artifact():

@@ -36,8 +36,12 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+$script:StartedAt = Get-Date
+
 function Note([string]$Message) {
-    Write-Host "::notice::$Message"
+    # ثانیهٔ سپری‌شده هم چاپ می‌شود تا اگر فرprocess آویزان شد، از لاگ
+    # معلوم شود کدام مرحله کند است — نه فقط «مهلت تمام شد».
+    Write-Host "::notice::[+$([int]((Get-Date) - $script:StartedAt).TotalSeconds)s] $Message"
 }
 
 function Fail([string]$Message) {
@@ -76,7 +80,7 @@ $cert = $null
 $rootStore = $null
 
 try {
-    Note "signing self-test: creating an ephemeral self-signed certificate"
+    Note "signing self-test: creating an ephemeral self-signed certificate (New-SelfSignedCertificate)"
     $cert = New-SelfSignedCertificate `
         -Type CodeSigningCert `
         -Subject "CN=K2 CI Self-Test" `

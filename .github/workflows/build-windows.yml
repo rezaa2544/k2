@@ -134,16 +134,19 @@ jobs:
           $process = Start-Process -FilePath "pwsh" `
             -ArgumentList @("-NoProfile", "-NoLogo", "-File", "packaging\signing_selftest.ps1", "-ExePath", $exe) `
             -PassThru -WindowStyle Hidden -RedirectStandardOutput $log
-          $deadline = (Get-Date).AddSeconds(300)
+          $deadline = (Get-Date).AddSeconds(240)
           while (-not $process.HasExited -and (Get-Date) -lt $deadline) {
             Start-Sleep -Milliseconds 500
           }
+          # لاگ همیشه چاپ می‌شود — حتی وقتی فرprocess آویزان شده. بی این،
+          # تنها چیزی که می‌دانستیم «مهلت تمام شد» بود و نمی‌دانستیم کدام
+          # مرحله گیر کرده است.
+          if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host "$_" } }
           if (-not $process.HasExited) {
             $process.Kill()
-            Write-Host "::warning::خودآزمایی امضا به مهلت ۵ دقیقه‌ای خورد و رد شد. امضای واقعی به گواهی کاربر نیاز دارد."
+            Write-Host "::warning::خودآزمایی امضا به مهلت ۴ دقیقه‌ای خورد و رد شد. لاگ بالا می‌گوید کدام مرحله گیر کرده. امضای واقعی به گواهی کاربر نیاز دارد."
             exit 0
           }
-          if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host "$_" } }
           if ($process.ExitCode -ne 0) {
             throw "خودآزمایی امضا شکست خورد (exit=$($process.ExitCode))."
           }
