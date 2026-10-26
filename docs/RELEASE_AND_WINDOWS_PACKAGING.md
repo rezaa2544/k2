@@ -24,11 +24,11 @@
 
 ## ۲. مشخصات خروجی (ارقام زیر artifact نسخهٔ قبلی‌اند)
 
-Metadata مرجع executable برای اسکریپت ساخت: `packaging/output/K2/K2.exe` — ۳٬۰۹۶٬۲۸۴ بایت. این مقدار و checksumهای زیر فقط وقتی به build جاری قابل انتساب‌اند که Windows packaging مجدداً اجرا و metadata به‌روزرسانی شود.
+Metadata مرجع executable برای اسکریپت ساخت: `packaging/output/K2/K2.exe` — ۳٬۰۹۶٬۳۷۰ بایت. این مقدار و checksumهای زیر فقط وقتی به build جاری قابل انتساب‌اند که Windows packaging مجدداً اجرا و metadata به‌روزرسانی شود.
 
 ```
 packaging/output/K2/
-├── K2.exe              ۳٬۰۹۶٬۲۸۴ بایت   (بوت‌لودر PyInstaller + آرشیو)
+├── K2.exe              ۳٬۰۹۶٬۳۷۰ بایت   (بوت‌لودر PyInstaller + آرشیو)
 └── _internal/          ~۱۱۰ مگابایت       (Qt6، shiboken6، پایتون، فونت‌ها)
     ├── PySide6/
     ├── k2/ui/assets/fonts/Vazirmatn-{Regular,Bold}.ttf
@@ -38,12 +38,12 @@ packaging/output/K2/
 SHA-256:
 
 ```
-a5b4ac1484ab740e3f1a7ebed100e4ec99504ba8d649bf62cdb571f7081d9317  K2.exe
-e06ca8abf6b476ea6be94ac2ac45ebfee9b86608bef8d0acf544f56813886223  K2-windows-x64.zip
-75e525b99313d6f2bddc6edfe64c68630acdb0f8783c3811fcd3ac4fe8efb8a3  K2-Setup-1.0.0.exe
+4dffa63db90b42cf0d02deb23ccd727115f7dafbd0785376b648e732f7048192  K2.exe
+38686b6c0d28e656ed1a83deaea0439aecfe1c5bbf76864e22636085f6ef9f2a  K2-windows-x64.zip
+3574d73cad26b4f7b20cbb5899351d4d09b6491b4d95262e19a9b9eb288fec61  K2-Setup-1.0.0.exe
 ```
 
-نسخهٔ ساخت محلی در `release/K2-windows-x64.zip` می‌ماند (خروجی در `.gitignore` است). برای درخواست دانلود مستقیم کاربر، همان بسته در `downloads/K2-windows-x64.zip` نیز در مخزن ثبت شده است (۵۷٬۳۷۱٬۳۵۲ بایت؛ حدود ۴۵ MiB). این آرشیو شامل `K2.exe` و `_internal/` است؛ فایل EXE به‌تنهایی اجراشدنی نیست.
+نسخهٔ ساخت محلی در `release/K2-windows-x64.zip` می‌ماند (خروجی در `.gitignore` است). برای درخواست دانلود مستقیم کاربر، همان بسته در `downloads/K2-windows-x64.zip` نیز در مخزن ثبت شده است (۵۷٬۳۶۹٬۱۷۸ بایت؛ حدود ۴۵ MiB). این آرشیو شامل `K2.exe` و `_internal/` است؛ فایل EXE به‌تنهایی اجراشدنی نیست.
 
 ---
 
@@ -254,7 +254,7 @@ OutputBaseFilename=K2-Setup-1.0.0
 2. `Verify the installer is a standard Windows package` — امضای `MZ` و متادیتای `ProductName`
 3. `Upload the installer` — artifact + ضمیمهٔ release
 
-Inno Setup 6.7.1 روی `windows-latest` از پیش نصب است و نیازی به نصب دستی نیست. نصب‌کنندهٔ ساخته‌شده در `downloads/K2-Setup-1.0.0.exe` نیز در مخزن ثبت شده است (۳۹٬۳۰۷٬۶۴۱ بایت) تا دانلود مستقیم کار کند.
+Inno Setup 6.7.1 روی `windows-latest` از پیش نصب است و نیازی به نصب دستی نیست. نصب‌کنندهٔ ساخته‌شده در `downloads/K2-Setup-1.0.0.exe` نیز در مخزن ثبت شده است (۳۹٬۳۰۹٬۱۷۰ بایت) تا دانلود مستقیم کار کند.
 
 ### ۸.۴ ساخت محلی
 
