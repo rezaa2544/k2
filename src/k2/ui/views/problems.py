@@ -58,6 +58,8 @@ class ProblemDialog(QDialog):
         self.problem = problem
         self.setWindowTitle("ثبت مشکل یادگیری" if problem is None else "ویرایش مشکل")
         self.setLayoutDirection(Qt.RightToLeft)
+        # حداقل پهنا برای اینکه برچسب‌های فارسی و فهرست‌های کشویی بریده نشوند.
+        self.setMinimumWidth(540)
         self.attachment_path: str | None = None
         form = QFormLayout(self)
 
@@ -372,6 +374,8 @@ class ResolveDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("ثبت اقدام روی مشکل")
         self.setLayoutDirection(Qt.RightToLeft)
+        # حداقل پهنا برای اینکه برچسب‌های فارسی و فهرست‌های کشویی بریده نشوند.
+        self.setMinimumWidth(480)
         self.result_status = ProblemStatus.RESOLVED
         self.result_note = ""
         form = QFormLayout(self)

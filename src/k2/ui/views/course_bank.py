@@ -397,6 +397,8 @@ class EvidenceDialog(QDialog):
         self.topic_id = topic_id
         self.setWindowTitle("ثبت شاهد عملکرد")
         self.setLayoutDirection(Qt.RightToLeft)
+        # حداقل پهنا برای اینکه برچسب‌های فارسی و فهرست‌های کشویی بریده نشوند.
+        self.setMinimumWidth(520)
         self.result_track: TrackKind | None = None
         self.result_evidence: LearningEvidence | None = None
         form = QFormLayout(self)

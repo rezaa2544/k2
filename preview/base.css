@@ -357,7 +357,7 @@ tbody tr:hover td{background:var(--surface-soft)}
 }
 .modal-backdrop.show{display:flex}
 .modal{
-  width:min(640px,100%);max-height:calc(100vh - 40px);overflow:auto;padding:22px;
+  width:min(640px,100%);min-width:min(480px,100%);max-height:calc(100vh - 40px);overflow:auto;padding:22px;
   border:2px solid var(--border);border-radius:18px;background:white;
   box-shadow:0 24px 70px #052e2640;
 }
@@ -403,6 +403,7 @@ tbody tr:hover td{background:var(--surface-soft)}
   .menu-button{padding:5px 11px}.menu-meta{font-size:10px}
   .menu-panel{width:min(290px,calc(100vw - 24px))}
   .content-area{padding:9px}.top-title{font-size:16px}
+  .modal{padding:15px;border-width:1px}
   .btn{padding:7px 10px;font-size:12px}.metric{padding:12px}.metric-value{font-size:19px}
 }
 @media(prefers-reduced-motion:reduce){

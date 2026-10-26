@@ -48,6 +48,8 @@ class AddTopicDialog(QDialog):
         self.service = service
         self.setWindowTitle("افزودن مبحث یا مهارت")
         self.setLayoutDirection(Qt.RightToLeft)
+        # حداقل پهنا برای اینکه برچسب‌های فارسی و فهرست‌های کشویی بریده نشوند.
+        self.setMinimumWidth(540)
         self.topic: Topic | None = None
         form = QFormLayout(self)
         self.name_edit = QLineEdit()
@@ -106,6 +108,8 @@ class AddEvidenceDialog(QDialog):
         self.evidence: LearningEvidence | None = None
         self.setWindowTitle(f"ثبت سنجش — {topic.name}")
         self.setLayoutDirection(Qt.RightToLeft)
+        # حداقل پهنا برای اینکه برچسب‌های فارسی و فهرست‌های کشویی بریده نشوند.
+        self.setMinimumWidth(520)
         form = QFormLayout(self)
         self.source_combo = QComboBox()
         for value, label in EVIDENCE_TYPES:

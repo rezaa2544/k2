@@ -669,20 +669,37 @@ def test_page_scroll_range_follows_current_page(qapp, window: MainWindow):
 def test_form_dialogs_are_wide_enough_for_persian_labels(
     qapp, tmp_path: Path
 ):
-    """دیالوگ‌های فرم نباید باریک شوند.
+    """هیچ دیالوگ فرمی نباید باریک شود.
 
     برچسب‌های فارسی مثل «موعد نخستین بازیابی (شمسی):» و فهرست‌های کشویی
-    بلندند؛ با اندازهٔ پیش‌فرض چیدمان، چند دیالوگ حدود ۲۳۰ پیکسل عرض
-    می‌گرفتند و محتوایشان بریده می‌شد.
+    بلندند؛ با اندازهٔ پیش‌فرض چیدمان، سیزده دیالوگ بین ۲۳۱ و ۳۵۱ پیکسل عرض
+    می‌گرفتند و محتوایشان بریده می‌شد. این تست همهٔ دیالوگ‌های فرم را پوشش
+    می‌دهد تا دیالوگ تازه دوباره باریک نشود.
     """
+    from k2.domain.models import StudySession, Subject, Topic
+
     from k2.ui.views.classes import FixedEventDialog, RoutineDialog
-    from k2.ui.views.course_bank import AddTopicDialog
+    from k2.ui.views.course_bank import AddTopicDialog, EvidenceDialog
+    from k2.ui.views.deadlines import DeadlineDialog
     from k2.ui.views.exams import RecordAttemptDialog
+    from k2.ui.views.problems import ProblemDialog, ResolveDialog
     from k2.ui.views.review import AddReviewDialog
-    from k2.ui.views.study_timer_page import ManualSessionDialog
+    from k2.ui.views.settings import ScheduleEventDialog
+    from k2.ui.views.study_timer_page import (
+        CorrectSessionDialog,
+        ManualSessionDialog,
+    )
+    from k2.ui.views.tests_page import QuestionDialog
+    from k2.ui.views.topics import AddEvidenceDialog
 
     service = AdvisorService(tmp_path / "dlg.db")
     try:
+        subject = Subject(name="ریاضی", coefficient=2.0)
+        service.create_subject(subject)
+        topic = Topic(subject_id=subject.id, name="احتمال", estimated_minutes=300)
+        service.create_topic(topic)
+        session = StudySession(kind="study", minutes=45, note="")
+
         dialogs = [
             AddActivityDialog(service),
             AddTopicDialog(service),
@@ -691,7 +708,16 @@ def test_form_dialogs_are_wide_enough_for_persian_labels(
             FixedEventDialog(service),
             RoutineDialog(service),
             ManualSessionDialog(service),
+            EvidenceDialog(service, topic.id),
+            DeadlineDialog(service),
+            ProblemDialog(service),
+            ResolveDialog(),
+            ScheduleEventDialog(service),
+            CorrectSessionDialog(service, session),
+            QuestionDialog(service, 1),
+            AddEvidenceDialog(topic),
         ]
+        assert len(dialogs) == 15
         for dialog in dialogs:
             dialog.show()
             qapp.processEvents()
