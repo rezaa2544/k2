@@ -548,7 +548,11 @@ def test_every_onboarding_step_is_reachable_inside_a_scroll_area(
 
 
 def test_tall_onboarding_step_scrolls_instead_of_clipping(qapp, tmp_path: Path):
-    """گام کتاب‌ها بلندتر از پنجره است و باید با اسکرول کامل دیده شود."""
+    """گام کتاب‌ها در پنجرهٔ کوچک اسکرول می‌شود، نه اینکه بریده شود.
+
+    پیش از این اصلاح، گام کتاب‌ها از کادر پنجره بیرون می‌زد و دکمهٔ
+    «افزودن کتاب به فهرست» در پایین کارت اصلاً قابل کلیک نبود.
+    """
     from PySide6.QtWidgets import QPushButton, QScrollArea
 
     from k2.onboarding import ONBOARDING_STEPS
@@ -561,22 +565,29 @@ def test_tall_onboarding_step_scrolls_instead_of_clipping(qapp, tmp_path: Path):
         )
         page = wizard.stack.widget(books_step)
         assert isinstance(page, QScrollArea)
-        # برای اندازه‌گیری واقعی، پنجره باید چیده شده باشد.
+        # پنجره را عمداً خیلی کوتاه می‌کنیم (کران حداقل اندازه را برای آزمون
+        # برمی‌داریم) تا هیچ گام بلندی جا نشود و نوار اسکرول حتماً فعال شود.
+        wizard.setMinimumSize(0, 0)
+        wizard.resize(760, 240)
         wizard.show()
         qapp.processEvents()
+        bar = page.verticalScrollBar()
+        assert bar.maximum() > 0, "گام کتاب‌ها باید در پنجرهٔ کوتاه اسکرول شود"
+        # دکمهٔ پایین کارت باید با اسکرول به ناحیهٔ دیدنی برسد.
         card = page.widget()
         assert card is not None
-        card.adjustSize()
-        assert card.sizeHint().height() > page.viewport().height(), (
-            "گام کتاب‌ها باید بلندتر از ناحیهٔ دیدنی باشد تا اسکرول معنا داشتهد"
-        )
-        # دکمهٔ افزودن کتاب باید درخت ویجت گام کتاب‌ها باشد و قابل دیدن.
         add_buttons = [
             b for b in card.findChildren(QPushButton)
             if b.text() == "افزودن کتاب به فهرست"
         ]
         assert len(add_buttons) == 1
-        assert add_buttons[0].isVisible()
+        button = add_buttons[0]
+        bar.setValue(bar.maximum())
+        qapp.processEvents()
+        pos = button.mapTo(page.viewport(), button.rect().topLeft())
+        assert 0 <= pos.y() < page.viewport().height(), (
+            "دکمهٔ افزودن کتاب باید با اسکرول به ناحیهٔ دیدنی برسد"
+        )
         wizard.close()
     finally:
         service.close()
