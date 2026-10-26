@@ -95,7 +95,8 @@ def test_infeasible_deadline_offers_four_suggestions(service):
         TopicDeadline(topic_id=topic.id, kind=DeadlineKind.FINAL_CONSOLIDATION,
                       target_date=TODAY + _dt.timedelta(days=2), is_master=True)
     )
-    suggestions = service.deadline_suggestions(topic.id)
+    # today را صریح می‌فرستیم تا تست به تاریخ واقعی ماشین گره نخورد.
+    suggestions = service.deadline_suggestions(topic.id, today=TODAY)
     actions = {s.action.value for s in suggestions}
     assert {"more_time", "less_volume", "reprioritize", "move_deadline"} <= actions
 
