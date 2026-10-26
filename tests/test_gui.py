@@ -594,3 +594,119 @@ def test_tall_onboarding_step_scrolls_instead_of_clipping(qapp, tmp_path: Path):
         wizard.close()
     finally:
         service.close()
+
+
+# ---------------------------------------------------------------------------
+# پیمایش صفحه‌های اصلی و اندازهٔ دیالوگ‌ها
+# ---------------------------------------------------------------------------
+
+def test_every_main_page_is_scrollable_instead_of_clipped(
+    qapp, window: MainWindow
+):
+    """هیچ صفحهٔ اصلی نباید محتوایش از دید بیرون بزند.
+
+    پیش از این اصلاح، صفحهٔ «مرورهای من» (ReviewPage) محتوایی بلندتر از
+    فضای دیدنی می‌ساخت و چون هیچ ناحیهٔ پیمایشی نداشت، برچسب‌های پایینی
+    کاملاً فرو می‌ریختند (ارتفاع صفر) و متن چندخطی بریده می‌شد؛ کاربر
+    راهی برای دیدن آن‌ها نداشت.
+    """
+    from PySide6.QtWidgets import QScrollArea
+
+    stack = window.stack
+    assert isinstance(window.page_scroll, QScrollArea)
+    assert window.page_scroll.widget() is stack
+    assert window.page_scroll.widgetResizable() is True
+    window.show()
+    qapp.processEvents()
+    for index in range(stack.count()):
+        stack.setCurrentIndex(index)
+        qapp.processEvents()
+        page = stack.widget(index)
+        # محتوای صفحه هرگز از ناحیهٔ دیدنی کوچک‌تر نیست: یا جا می‌شود، یا
+        # ناحیهٔ پیمایش بیرونی به‌اندازهٔ محتوا بالا می‌کشد.
+        assert page.height() >= window.page_scroll.viewport().height() - 1, (
+            f"صفحهٔ {page.__class__.__name__} از ناحیهٔ دیدنی کوچک‌تر شد"
+        )
+        # و هیچ برچسبی به ارتفاع صفر نمی‌ریزد (یعنی محتوای نامرئی نمی‌شود).
+        for label in page.findChildren(QLabel):
+            if not label.isVisible() or not label.text().strip():
+                continue
+            assert label.height() > 0 or label.parent() is None, (
+                f"برچسب «{label.text()[:24]}» در "
+                f"{page.__class__.__name__} ارتفاع صفر گرفت"
+            )
+
+
+def test_page_scroll_range_follows_current_page(qapp, window: MainWindow):
+    """نوار پیمایش بیرونی باید فقط به صفحهٔ جاری گوش بدهد.
+
+    ``QStackedWidget`` به‌صورت پیش‌فرض بزرگ‌ترین حداقلِ همهٔ صفحه‌ها را
+    گزارش می‌کند؛ بدون اصلاح، پس از دیدن صفحهٔ بلند، صفحه‌های کوچک هم
+    نوار پیمایش بی‌مورد می‌گرفتند و کاربر به فضای خالی می‌لغزید.
+    """
+    stack = window.stack
+    window.show()
+    qapp.processEvents()
+    # داشبورد کوتاه است: نباید هیچ اسکرول بی‌موردی داشته باشد.
+    stack.setCurrentIndex(0)
+    qapp.processEvents()
+    small_range = window.page_scroll.verticalScrollBar().maximum()
+    # صفحهٔ «مرورهای من» بلند است: باید اسکرول بگیرد.
+    review_index = next(
+        i for i in range(stack.count())
+        if stack.widget(i).__class__.__name__ == "ReviewPage"
+    )
+    stack.setCurrentIndex(review_index)
+    qapp.processEvents()
+    tall_range = window.page_scroll.verticalScrollBar().maximum()
+    assert tall_range > 0, "صفحهٔ بلند باید اسکرول‌شدنی باشد"
+    # بازگشت به صفحهٔ کوتاه، نوار را باید آزاد کند.
+    stack.setCurrentIndex(0)
+    qapp.processEvents()
+    assert window.page_scroll.verticalScrollBar().maximum() <= small_range
+
+
+def test_form_dialogs_are_wide_enough_for_persian_labels(
+    qapp, tmp_path: Path
+):
+    """دیالوگ‌های فرم نباید باریک شوند.
+
+    برچسب‌های فارسی مثل «موعد نخستین بازیابی (شمسی):» و فهرست‌های کشویی
+    بلندند؛ با اندازهٔ پیش‌فرض چیدمان، چند دیالوگ حدود ۲۳۰ پیکسل عرض
+    می‌گرفتند و محتوایشان بریده می‌شد.
+    """
+    from k2.ui.views.classes import FixedEventDialog, RoutineDialog
+    from k2.ui.views.course_bank import AddTopicDialog
+    from k2.ui.views.exams import RecordAttemptDialog
+    from k2.ui.views.review import AddReviewDialog
+    from k2.ui.views.study_timer_page import ManualSessionDialog
+
+    service = AdvisorService(tmp_path / "dlg.db")
+    try:
+        dialogs = [
+            AddActivityDialog(service),
+            AddTopicDialog(service),
+            RecordAttemptDialog(service),
+            AddReviewDialog(service),
+            FixedEventDialog(service),
+            RoutineDialog(service),
+            ManualSessionDialog(service),
+        ]
+        for dialog in dialogs:
+            dialog.show()
+            qapp.processEvents()
+            assert dialog.minimumWidth() >= 460, (
+                f"{dialog.__class__.__name__} عرض حداقل "
+                f"{dialog.minimumWidth()} پیکسل دارد"
+            )
+            # برچسب‌های فرم باید ارتفاع واقعی داشته باشند (فرو نریزند).
+            for label in dialog.findChildren(QLabel):
+                if not label.isVisible() or not label.text().strip():
+                    continue
+                assert label.height() > 0, (
+                    f"برچسب «{label.text()[:24]}» در "
+                    f"{dialog.__class__.__name__} ارتفاع صفر گرفت"
+                )
+            dialog.close()
+    finally:
+        service.close()

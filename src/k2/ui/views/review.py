@@ -39,6 +39,8 @@ class AddReviewDialog(QDialog):
         self.item: ReviewItem | None = None
         self.setWindowTitle("افزودن مورد مرور فعال")
         self.setLayoutDirection(Qt.RightToLeft)
+        # حداقل پهنا برای اینکه برچسب‌های بلند فارسی بریده نشوند.
+        self.setMinimumWidth(540)
         form = QFormLayout(self)
         self.label_edit = QLineEdit()
         self.label_edit.setPlaceholderText("سؤال، مفهوم یا مهارتی که باید از حافظه بازیابی شود")

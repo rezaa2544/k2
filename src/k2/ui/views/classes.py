@@ -82,6 +82,8 @@ class FixedEventDialog(QDialog):
             "ثبت کلاس" if event_item is None else "ویرایش کلاس"
         )
         self.setLayoutDirection(Qt.RightToLeft)
+        # حداقل پهنا برای اینکه برچسب‌های فارسی و فهرست‌های کشویی بریده نشوند.
+        self.setMinimumWidth(580)
         form = QFormLayout(self)
 
         self.title_edit = QLineEdit()
@@ -183,6 +185,8 @@ class RoutineDialog(QDialog):
         self.routine = routine
         self.setWindowTitle("ثبت روال ضروری" if routine is None else "ویرایش روال")
         self.setLayoutDirection(Qt.RightToLeft)
+        # حداقل پهنا برای اینکه برچسب‌های فارسی و فهرست‌های کشویی بریده نشوند.
+        self.setMinimumWidth(560)
         form = QFormLayout(self)
 
         self.title_edit = QLineEdit()

@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as _dt
 from typing import Optional
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QSize, QTimer, Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QFrame,
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QStackedWidget,
     QStatusBar,
     QVBoxLayout,
@@ -62,6 +63,44 @@ NAV_ITEMS = [
     ("▣   گزارش مشاور", "گزارش مشاور", "گزارش روزانه و هفتگی با دلیل تغییرها"),
     ("⚙   تنظیمات", "تنظیمات", "ترجیحات، ضریب‌ها و پشتیبان‌گیری"),
 ]
+
+
+class _PageStack(QStackedWidget):
+    """پشتهٔ صفحه‌ها که اندازه‌هایش را فقط بر پایهٔ صفحهٔ *جاری* می‌سنجد.
+
+    ``QStackedWidget`` به‌صورت پیش‌فرض بزرگ‌ترین مقدار را از میان همهٔ صفحه‌ها
+    گزارش می‌کند. وقتی کل پشته در یک ``QScrollArea`` باشد، همین باعث می‌شود
+    پس از دیدن یک صفحهٔ بلند، همهٔ صفحه‌های کوچک هم نوار پیمایش بی‌مورد
+    بگیرند و کاربر به فضای خالی بلغزد. این زیرکلاس هر پنج پرسش اندازه را
+    به صفحهٔ نمایش‌داده‌شده واگذار می‌کند.
+    """
+
+    def _page(self):
+        return self.currentWidget()
+
+    def hasHeightForWidth(self) -> bool:  # noqa: N802 - نام Qt
+        page = self._page()
+        return bool(page and page.hasHeightForWidth())
+
+    def heightForWidth(self, width: int) -> int:  # noqa: N802 - نام Qt
+        page = self._page()
+        if page is None or not page.hasHeightForWidth():
+            return -1
+        return page.heightForWidth(width)
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802 - نام Qt
+        page = self._page()
+        if page is None:
+            return super().minimumSizeHint()
+        hint = page.minimumSizeHint()
+        return QSize(max(hint.width(), 0), max(hint.height(), 0))
+
+    def sizeHint(self) -> QSize:  # noqa: N802 - نام Qt
+        page = self._page()
+        if page is None:
+            return super().sizeHint()
+        hint = page.sizeHint()
+        return QSize(max(hint.width(), 0), max(hint.height(), 0))
 
 
 class MainWindow(QMainWindow):
@@ -187,7 +226,7 @@ class MainWindow(QMainWindow):
         top.addWidget(self.refresh_button)
         content.addWidget(topbar)
 
-        self.stack = QStackedWidget()
+        self.stack = _PageStack()
         self.stack.setObjectName("pageStack")
         self.dashboard = DashboardPage(self.service)
         self.today = TodayPlanPage(self.service)
@@ -214,7 +253,18 @@ class MainWindow(QMainWindow):
         # صفحهٔ «برنامهٔ امروز» زیرمجموعهٔ داشبورد است و از همان‌جا باز می‌شود.
         self.stack.addWidget(self.today)
         self._extra_pages = {"today": self.stack.indexOf(self.today)}
-        content.addWidget(self.stack, 1)
+        # صفحه‌هایی مثل «مرور فعال» با دادهٔ واقعی محتوای بلندتری از فضای
+        # دیدنی می‌سازند؛ پیش از این پایین‌ترین بخش آن‌ها از دید خارج می‌شد و
+        # متن برچسب‌ها بریده می‌شد بدون این‌که کاربر بتواند پیمایش کند. با
+        # ``widgetResizable`` صفحه‌های کوچک همان اندازهٔ دیدنی می‌مانند و
+        # نوار پیمایش فقط وقتی ظاهر می‌شود که محتوا جا نشود.
+        self.page_scroll = QScrollArea()
+        self.page_scroll.setObjectName("pageScroll")
+        self.page_scroll.setWidget(self.stack)
+        self.page_scroll.setWidgetResizable(True)
+        self.page_scroll.setFrameShape(QFrame.NoFrame)
+        self.page_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        content.addWidget(self.page_scroll, 1)
         root.addWidget(host, 1)
         self.nav.setCurrentRow(0)
 
