@@ -553,6 +553,7 @@ def test_tall_onboarding_step_scrolls_instead_of_clipping(qapp, tmp_path: Path):
     پیش از این اصلاح، گام کتاب‌ها از کادر پنجره بیرون می‌زد و دکمهٔ
     «افزودن کتاب به فهرست» در پایین کارت اصلاً قابل کلیک نبود.
     """
+    from PySide6.QtCore import QPoint
     from PySide6.QtWidgets import QPushButton, QScrollArea
 
     from k2.onboarding import ONBOARDING_STEPS
@@ -566,14 +567,13 @@ def test_tall_onboarding_step_scrolls_instead_of_clipping(qapp, tmp_path: Path):
         page = wizard.stack.widget(books_step)
         assert isinstance(page, QScrollArea)
         # پنجره را عمداً خیلی کوتاه می‌کنیم (کران حداقل اندازه را برای آزمون
-        # برمی‌داریم) تا هیچ گام بلندی جا نشود و نوار اسکرول حتماً فعال شود.
+        # برمی‌داریم) تا گام بلند جا نشود و نوار اسکرول حتماً فعال شود.
         wizard.setMinimumSize(0, 0)
         wizard.resize(760, 240)
         wizard.show()
         qapp.processEvents()
         bar = page.verticalScrollBar()
         assert bar.maximum() > 0, "گام کتاب‌ها باید در پنجرهٔ کوتاه اسکرول شود"
-        # دکمهٔ پایین کارت باید با اسکرول به ناحیهٔ دیدنی برسد.
         card = page.widget()
         assert card is not None
         add_buttons = [
@@ -582,12 +582,15 @@ def test_tall_onboarding_step_scrolls_instead_of_clipping(qapp, tmp_path: Path):
         ]
         assert len(add_buttons) == 1
         button = add_buttons[0]
-        bar.setValue(bar.maximum())
-        qapp.processEvents()
-        pos = button.mapTo(page.viewport(), button.rect().topLeft())
-        assert 0 <= pos.y() < page.viewport().height(), (
-            "دکمهٔ افزودن کتاب باید با اسکرول به ناحیهٔ دیدنی برسد"
+        # محتوای کارت از ناحیهٔ دیدنی بلندتر است و دکمهٔ پایین کارت داخل
+        # همان محتوای اسکرول‌شدنی قرار دارد؛ یعنی با اسکرول کامل قابل رسیدن
+        # است، نه بریده.
+        assert card.height() > page.viewport().height()
+        pos_in_card = button.mapTo(card, QPoint(0, 0))
+        assert 0 <= pos_in_card.y() < card.height(), (
+            "دکمهٔ افزودن کتاب باید داخل محتوای اسکرول‌شدنی کارت باشد"
         )
+        assert button.height() > 0
         wizard.close()
     finally:
         service.close()

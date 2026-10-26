@@ -84,12 +84,4 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           PYTHONPATH: ${{ github.workspace }}/src
-        run: |
-          set +e
-          python -m pytest tests -q -rf > pytest-out.txt 2>&1
-          code=$?
-          grep -E "^(FAILED|ERROR)" pytest-out.txt | head -10 | while IFS= read -r line; do
-            echo "::error::$line"
-          done
-          tail -2 pytest-out.txt
-          exit $code
+        run: python -m pytest tests -q
