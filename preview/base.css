@@ -91,7 +91,7 @@ button{cursor:pointer}
 .menu-separator{height:2px;margin:6px 9px;background:var(--border)}
 
 /* ---------- چیدمان کلی ---------- */
-.app-layout{display:flex;min-height:750px;direction:rtl}
+.app-layout{display:flex;min-height:750px;max-height:calc(100vh - 48px);direction:rtl}
 .sidebar{
   display:flex;flex:0 0 250px;flex-direction:column;padding:20px 14px 15px;
   background:var(--sidebar);color:var(--sidebar-text);
@@ -150,7 +150,10 @@ button{cursor:pointer}
 .btn.danger:hover{background:var(--danger);color:#fff}
 
 /* ---------- صفحه ---------- */
-.page-content{min-height:0;flex:1}
+/* .page-content تنها ناحیهٔ اسکرول‌شدنیِ پنجره است. بی overflow، صفحه‌های بلند
+   (مثل راه‌اندازی با فهرست کامل کتاب‌ها) کل پنجرهٔ شبیه‌سازی‌شده را کش می‌دادند
+   و در صفحهٔ مرورگر به بلندی هزاران پیکسل می‌رسید. */
+.page-content{min-height:0;flex:1;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain}
 .page-scroll{display:flex;flex-direction:column;gap:14px;padding:1px 2px 7px}
 .page-heading{margin:0;color:var(--text);font-size:17px;font-weight:900}
 .page-intro{margin:-9px 0 0;color:var(--muted);font-size:12px;font-weight:500}
@@ -159,7 +162,11 @@ button{cursor:pointer}
 .setup-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .setup-card{padding:11px 12px;border-radius:13px}
 .setup-card .card-title{margin-bottom:8px}
-.setup-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;padding-top:9px;border-top:1px solid var(--border)}
+/* ردیف کنش‌های راه‌اندازی: کنش‌های فرعی کنار هم و کنش اصلی لبهٔ مقابل.
+   قبلاً دو <span> خالی با space-between فاصلهٔ مردهٔ بزرگ می‌ساختند و دکمهٔ
+   اصلی را به لبهٔ مقابل پرت می‌کردند. */
+.setup-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:8px;margin-top:10px;padding-top:9px;border-top:1px solid var(--border)}
+.setup-actions .btn.primary{margin-inline-start:auto}
 .setup-course-list{display:grid;gap:7px;margin:8px 0}
 .setup-course-list .card{padding:9px 10px;border-radius:11px}
 .setup-course-list .catalog-course{margin:0}

@@ -18,6 +18,8 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QScrollArea,
+    QSizePolicy,
     QStackedWidget,
     QTimeEdit,
     QVBoxLayout,
@@ -67,12 +69,36 @@ class OnboardingWizard(QDialog):
         self._routine_editors: dict[str, dict] = {}
         self.setWindowTitle("راه‌اندازی — مشاور هوشمند کنکور")
         self.setLayoutDirection(Qt.RightToLeft)
-        self.resize(720, 560)
+        # اندازهٔ اولیهٔ کافی برای گام‌های کوتاه؛ گام‌های بلند داخل ناحیهٔ
+        # اسکرول نمایش داده می‌شوند، پس هیچ ورودی‌ای بریده یا دست‌نیافتنی
+        # نمی‌شود. حداقل اندازه باعث می‌شود کاربر بتواند پنجره را بزرگ‌تر کند.
+        self.resize(760, 620)
+        self.setMinimumSize(620, 460)
         self._build()
         self._load_state_into_widgets()
         self._goto(self.state.current_index)
 
     # ---- ساخت ----
+
+    def _wrap_step(self, card: QWidget) -> QScrollArea:
+        """گام راه‌اندازی را در ناحیهٔ اسکرول می‌گذارد.
+
+        بدون این، گام‌های بلند (کتاب‌ها، کلاس‌ها، روال‌ها) از کادر پنجره
+        بیرون می‌زدند و دکمه‌های پایین‌شان — از جمله «افزودن کتاب به فهرست» —
+        بریده و دست‌نیافتنی می‌شدند. ``setWidgetResizable`` باعث می‌شود محتوا
+        در عرض موجود بنشیند و فقط وقتی بلندتر است اسکرول شود.
+        """
+        scroll = QScrollArea()
+        scroll.setObjectName("onboardingStepScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        # کارت در ارتفاع کشش نمی‌خورد تا وقتی محتوا کوتاه است، فاصلهٔ خالی
+        # اضافی در پایین کارت نماند.
+        card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        scroll.setWidget(card)
+        return scroll
 
     def _build(self) -> None:
         root = QVBoxLayout(self)
@@ -100,7 +126,7 @@ class OnboardingWizard(QDialog):
 
         self.stack = QStackedWidget()
         for step in ONBOARDING_STEPS:
-            self.stack.addWidget(self._build_step(step))
+            self.stack.addWidget(self._wrap_step(self._build_step(step)))
         body.addWidget(self.stack, 1)
         root.addLayout(body, 1)
 

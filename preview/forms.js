@@ -166,13 +166,15 @@
         + setupConflictBlock()
         + `<label class="check-label"><input type="checkbox" data-flow="confirm" ${o.confirm ? 'checked' : ''}> اطلاعات را بررسی کرده و ذخیره می‌کنم.</label>`;
     }
-    const nav = `<div class="setup-actions">`
-      + (step > 0 ? actionBtn('مرحلهٔ قبل', 'wizard-back') : '<span></span>')
-      + (SETUP_OPTIONAL[step] ? actionBtn('رد کردن این گام', 'wizard-skip') : '<span></span>')
-      + (step < SETUP_TOTAL - 1
-        ? actionBtn('ذخیره و ادامه', 'wizard-next', 'primary')
-        : actionBtn('ذخیره و ورود', 'wizard-finish', 'primary'))
-      + `</div>`;
+    // فقط کنش‌های واقعی ساخته می‌شوند. قبلاً برای خانه‌های خالی یک span
+    // تهی تولید می‌شد و با space-between فاصلهٔ مرده و دکمهٔ سرریخته می‌ساخت.
+    const navButtons = [];
+    if (step > 0) navButtons.push(actionBtn('مرحلهٔ قبل', 'wizard-back'));
+    if (SETUP_OPTIONAL[step]) navButtons.push(actionBtn('رد کردن این گام', 'wizard-skip'));
+    navButtons.push(step < SETUP_TOTAL - 1
+      ? actionBtn('ذخیره و ادامه', 'wizard-next', 'primary')
+      : actionBtn('ذخیره و ورود', 'wizard-finish', 'primary'));
+    const nav = '<div class="setup-actions">' + navButtons.join('') + '</div>';
     return `<div class="page-scroll"><div class="setup-shell">`
        + `<div class="setup-head"><div><h2 class="page-heading">راه‌اندازی · گام ${faNum(step + 1)} از ${faNum(SETUP_TOTAL)}</h2>`
       + `<p class="page-intro">پیشرفت ذخیره می‌شود؛ هر وقت خواستی ادامه بده.</p></div>`

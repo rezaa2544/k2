@@ -200,3 +200,124 @@ def test_preview_pages_match_desktop_navigation():
     ]
     assert nav_titles == desktop_titles
     assert "سرفصل درس‌ها" in [t for _, t, _ in NAV_ITEMS]
+
+
+def _setup_wizard_script() -> str:
+    """هر ۷ گام جادوگر پیش‌نمایش رندر می‌شوند و کنش‌های هر گام برداشته می‌شود."""
+    return r"""
+// «failures» و «rows» را اسکریپت میزبان تعریف کرده؛ اینجا فقط استفاده می‌کنیم.
+const TOTAL = 7;
+const wizardRows = [];
+clickAction('setup');
+const host = document.querySelector('#pageContent');
+if (!host) { console.log('FAIL: pageContent missing'); process.exit(1) }
+for (let step = 0; step < TOTAL; step++) {
+  try {
+    preview.setState(Object.assign({}, preview.getState(), {
+      onboarding: Object.assign({}, preview.getState().onboarding, { step }),
+    }));
+    preview.render();
+    const html = host.innerHTML || '';
+    if (html.length < 40) throw new Error('empty render');
+    // فقط ناحیهٔ کنش‌های گام را می‌کنیم؛ بقیهٔ صفحه ممکن است <span> معنادار
+    // داشته باشد ولی این ناحیه قبلاً با <span></span> پُر می‌شد.
+    const m = html.match(/<div class="setup-actions">([\s\S]*?)<\/div>/);
+    if (!m) throw new Error('setup-actions missing');
+    const inner = m[1];
+    if (inner.indexOf('<span></span>') >= 0) throw new Error('empty placeholder span');
+    if (inner.indexOf('<span >') >= 0) throw new Error('empty placeholder span (spaced)');
+    const labels = (inner.match(/>([^<>]+)</g) || []).map(s => s.slice(1, -1).trim())
+      .filter(Boolean);
+    if (!labels.length) throw new Error('no action buttons');
+    if (!labels.some(l => l.indexOf('ذخیره') === 0)) throw new Error('no save button');
+    wizardRows.push(step + ':' + labels.join('|'));
+  } catch (e) { failures++; console.log('FAIL step ' + step + ': ' + e.message) }
+}
+console.log(JSON.stringify({ failures, titles, rows: wizardRows }));
+process.exit(failures ? 1 : 0);
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node برای اجرای پیش‌نمایش لازم است")
+def test_setup_wizard_steps_have_no_dead_placeholder_spans(preview_js, tmp_path):
+    """ردیف کنش‌های هر گام راه‌اندازی فقط دکمهٔ واقعی دارد.
+
+    پیش‌تر برای خانه‌های خالی ``<span></span>`` ساخته می‌شد و با
+    ``justify-content:space-between`` فاصلهٔ مردهٔ بزرگ می‌ساخت و دکمهٔ اصلی
+    را به لبهٔ مقابل کارت پرت می‌کرد.
+    """
+    payload = tmp_path / "preview-bundle.js"
+    payload.write_text(preview_js, encoding="utf-8")
+    harness = tmp_path / "wizard.js"
+    prelude = (
+        "const fs=require('fs');const src=fs.readFileSync("
+        + repr(str(payload))
+        + ",'utf8');\n"
+    )
+    harness.write_text(
+        prelude
+        + _smoke_script().replace(
+            "const factory_src = process.argv[2];", "const factory_src = src;"
+        ).replace(
+            "console.log(JSON.stringify({failures, titles}));\nprocess.exit(failures ? 1 : 0);",
+            _setup_wizard_script(),
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [NODE, str(harness)],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=120,
+        cwd=str(ROOT),
+    )
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    assert result.returncode == 0, stdout + stderr
+    assert "FAIL" not in stdout, stdout
+    import json
+
+    data = json.loads(stdout.strip().splitlines()[-1])
+    assert data["failures"] == 0
+    assert len(data["rows"]) == 7
+
+
+def test_preview_setup_page_scrolls_inside_a_bounded_window():
+    """صفحهٔ بلند باید داخل پنجرهٔ شبیه‌سازی‌شده اسکرول شود، نه بیرون زدن.
+
+    بی ``overflow-y:auto`` روی ``.page-content`` و بی ``max-height`` روی
+    ``.app-layout``، صفحهٔ راه‌اندازی (فهرست کامل کتاب‌ها) کل پنجره را به
+    بلندی هزاران پیکسل می‌کشید و ``.app-window{overflow:hidden}`` بقیه را
+    می‌بُرد.
+    """
+    css = (PREVIEW_DIR / "base.css").read_text(encoding="utf-8")
+    html = PREVIEW.read_text(encoding="utf-8")
+
+    page_content = re.search(r"\.page-content\{([^}]*)\}", css)
+    assert page_content, "قاعدهٔ .page-content پیدا نشد"
+    assert "overflow-y:auto" in page_content.group(1), page_content.group(1)
+    assert "overflow-x:hidden" in page_content.group(1), page_content.group(1)
+
+    app_layout = re.search(r"\.app-layout\{([^}]*)\}", css)
+    assert app_layout, "قاعدهٔ .app-layout پیدا نشد"
+    assert "max-height" in app_layout.group(1), app_layout.group(1)
+    assert "min-height:750px" in app_layout.group(1), app_layout.group(1)
+
+    # همان قواعد باید در HTML ساخته‌شده هم باشند.
+    assert ".page-content{min-height:0;flex:1;overflow-y:auto" in html
+    assert ".app-layout{display:flex;min-height:750px;max-height:" in html
+
+
+def test_preview_setup_actions_push_primary_button_to_the_far_edge():
+    """کنش اصلی لبهٔ مقابل است، بدون فاصلهٔ مردهٔ ``space-between``."""
+    css = (PREVIEW_DIR / "base.css").read_text(encoding="utf-8")
+    actions = re.search(r"\.setup-actions\{([^}]*)\}", css)
+    assert actions, "قاعدهٔ .setup-actions پیدا نشد"
+    assert "justify-content:space-between" not in actions.group(1)
+    assert "justify-content:flex-start" in actions.group(1)
+    assert ".setup-actions .btn.primary{margin-inline-start:auto}" in css
+    # و در HTML نهایی هم.
+    assert ".setup-actions .btn.primary{margin-inline-start:auto}" in (
+        PREVIEW.read_text(encoding="utf-8")
+    )

@@ -102,6 +102,26 @@ def test_past_master_deadline_is_rejected():
     assert plan.warnings
 
 
+def test_past_master_deadline_still_offers_the_four_actions():
+    """مهلت گذشته هم باید چهار راه بدهد، نه فقط یک هشدار.
+
+    پیش‌تر مسیر «مهلت در گذشته» زودهنگام return می‌شد و هیچ پیشنهادی ساخته
+    نمی‌شد؛ کاربر می‌دید که مهلت گذشته است ولی هیچ اقدامی برایش پیشنهاد
+    نمی‌شد.
+    """
+    plan = back_calculate(_input(consolidation_date=TODAY - _dt.timedelta(days=3)))
+    actions = {s.action for s in plan.suggestions}
+    assert actions == {
+        FeasibilityAction.MORE_TIME,
+        FeasibilityAction.LESS_VOLUME,
+        FeasibilityAction.REPRIORITIZE,
+        FeasibilityAction.MOVE_DEADLINE,
+    }
+    assert plan.overload_minutes > 0
+    assert any(s.shift_days > 0 for s in plan.suggestions)
+    assert "گذشته" in plan.warnings[0]
+
+
 def test_final_track_requires_more_time_than_konkur_track():
     konkur = stage_minutes_for(DeadlineKind.PRACTICE, track=TrackKind.KONKUR)
     final = stage_minutes_for(DeadlineKind.PRACTICE, track=TrackKind.FINAL)

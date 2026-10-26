@@ -143,9 +143,31 @@ def back_calculate(inp: DeadlineInput) -> TopicDeadlinePlan:
 
     if inp.consolidation_date < today:
         plan.feasible = False
+        late_days = (today - inp.consolidation_date).days
         plan.warnings.append(
-            "مهلت تثبیت نهایی در گذشته است؛ ابتدا آن را به یک تاریخ ممکن ببر."
+            f"مهلت تثبیت نهایی {_fa(late_days)} روز در گذشته است؛ آن روزها "
+            "دیگر وجود ندارند و به‌عنوان کمبود ظرفیت حساب می‌شوند."
         )
+        # مهلت گذشته هم باید همان چهار راه را بدهد. پیش‌تر اینجا زودهنگام
+        # return می‌شد و کاربر فقط هشدار می‌دید، بدون هیچ اقدامی که بتواند
+        # انتخاب کند؛ حجم کار و کمبود تقویمی را حساب می‌کنیم تا پیشنهادها
+        # معنادار بمانند.
+        total_minutes = sum(
+            stage_minutes_for(
+                kind, track=inp.track, override=inp.stage_minutes.get(kind)
+            )
+            for kind in BACKWARD_ORDER
+        )
+        plan.total_minutes = total_minutes
+        plan.required_days = round(
+            total_minutes / max(1, inp.daily_capacity_minutes), 1
+        )
+        plan.available_days = 0
+        plan.missing_days = (
+            max(1, -(-total_minutes // max(1, inp.daily_capacity_minutes)))
+            + late_days
+        )
+        plan.suggestions = build_suggestions(plan, inp)
         return plan
 
     total_minutes = 0
