@@ -85,6 +85,8 @@ class AddTopicDialog(QDialog):
         self.service = service
         self.setWindowTitle("افزودن مبحث")
         self.setLayoutDirection(Qt.RightToLeft)
+        # حداقل پهنا برای اینکه برچسب‌های فارسی و فهرست‌های کشویی بریده نشوند.
+        self.setMinimumWidth(520)
         self.topic: Topic | None = None
         form = QFormLayout(self)
 

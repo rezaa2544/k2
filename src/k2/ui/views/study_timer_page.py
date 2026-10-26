@@ -54,6 +54,8 @@ class ManualSessionDialog(QDialog):
         self.session = session
         self.setWindowTitle("ثبت دستی ساعت مطالعه")
         self.setLayoutDirection(Qt.RightToLeft)
+        # حداقل پهنا برای اینکه برچسب‌های فارسی و فهرست‌های کشویی بریده نشوند.
+        self.setMinimumWidth(580)
         form = QFormLayout(self)
 
         self.kind_combo = QComboBox()

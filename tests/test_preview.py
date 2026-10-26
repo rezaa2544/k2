@@ -186,3 +186,30 @@ def test_preview_javascript_parses_when_node_is_available(tmp_path: Path):
         encoding="utf-8",
         errors="replace",
     )
+
+
+def test_preview_metric_cards_are_well_formed():
+    """کارت‌های شاخص پیش‌نمایش نباید تگ نبسته داشته باشند.
+
+    تست رگرسیون: در ``weeklyPage`` برچسب «ظرفیت امروز» بدون ``</p>`` و بدون
+    مقدارش نوشته شده بود؛ یعنی کارت هیچ عددی نشان نمی‌داد و HTML معیوب بود.
+    الگو: هر ``<p class="metric-label">`` باید با ``</p>`` بسته شود و کارتِ
+    هر شاخص باید یک ``metric-value`` هم داشته باشد.
+    """
+    html = PREVIEW.read_text(encoding="utf-8")
+    # هیچ برچسبی نباید مستقیم با </article> بسته شود.
+    assert not re.search(
+        r'metric-label">[^<]*</article>', html
+    ), "یک کارت شاخص تگ </p> و مقدار خود را از دست داده است"
+    # هر کارت شاخص باید برچسب بسته و یک مقدار داشته باشد.
+    cards = re.findall(
+        r'<article class="metric[^"]*">.*?</article>', html, re.S
+    )
+    assert cards, "کارت شاخصی در پیش‌نمایش یافت نشد"
+    for card in cards:
+        assert re.search(r'<p class="metric-label">[^<]*</p>', card), (
+            f"کارت شاخص برچسب بسته‌نشده دارد: {card[:70]!r}"
+        )
+        assert '<p class="metric-value">' in card, (
+            f"کارت شاخص مقدار ندارد: {card[:70]!r}"
+        )

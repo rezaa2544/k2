@@ -42,6 +42,8 @@ class AddActivityDialog(QDialog):
         self.service = service
         self.setWindowTitle("افزودن فعالیت")
         self.setLayoutDirection(Qt.RightToLeft)
+        # حداقل پهنا برای اینکه برچسب‌های فارسی و فهرست‌های کشویی بریده نشوند.
+        self.setMinimumWidth(560)
         #: فعالیت ساخته‌شده پس از پذیرش؛ برای صفحه‌هایی که دیالوگ را می‌بازند.
         self.activity: Activity | None = None
 

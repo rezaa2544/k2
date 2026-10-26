@@ -38,6 +38,8 @@ class RecordAttemptDialog(QDialog):
         self.service = service
         self.setWindowTitle("ثبت نوبت آزمون")
         self.setLayoutDirection(Qt.RightToLeft)
+        # حداقل پهنا برای اینکه برچسب‌های فارسی و فهرست‌های کشویی بریده نشوند.
+        self.setMinimumWidth(500)
         self.attachment_path: str | None = None
 
         form = QFormLayout(self)
