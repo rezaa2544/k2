@@ -54,6 +54,8 @@ class QuestionDialog(QDialog):
         self.attempt_id = attempt_id
         self.setWindowTitle("ثبت سؤال اشتباه")
         self.setLayoutDirection(Qt.RightToLeft)
+        # حداقل پهنا برای اینکه برچسب‌های فارسی و فهرست‌های کشویی بریده نشوند.
+        self.setMinimumWidth(560)
         form = QFormLayout(self)
 
         self.number_spin = QSpinBox()

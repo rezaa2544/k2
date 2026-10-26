@@ -144,6 +144,8 @@ class CorrectSessionDialog(QDialog):
         self.session = session
         self.setWindowTitle("اصلاح جلسهٔ ثبت‌شده")
         self.setLayoutDirection(Qt.RightToLeft)
+        # حداقل پهنا برای اینکه برچسب‌های فارسی و فهرست‌های کشویی بریده نشوند.
+        self.setMinimumWidth(520)
         form = QFormLayout(self)
 
         self.field_combo = QComboBox()

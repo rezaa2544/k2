@@ -645,6 +645,8 @@ class ScheduleEventDialog(QDialog):
         self.fixed_event = event
         self.setWindowTitle("ویرایش رویداد هفتگی" if event else "افزودن رویداد هفتگی")
         self.setLayoutDirection(Qt.RightToLeft)
+        # حداقل پهنا برای اینکه برچسب‌های فارسی و فهرست‌های کشویی بریده نشوند.
+        self.setMinimumWidth(560)
         form = QFormLayout(self)
         self.title_edit = QLineEdit(event.title if event else "")
         form.addRow("عنوان:", self.title_edit)
@@ -712,6 +714,8 @@ class RoutineDialog(QDialog):
         self.routine = routine
         self.setWindowTitle("ویرایش روال" if routine else "افزودن روال")
         self.setLayoutDirection(Qt.RightToLeft)
+        # حداقل پهنا برای اینکه برچسب‌های فارسی و فهرست‌های کشویی بریده نشوند.
+        self.setMinimumWidth(520)
         form = QFormLayout(self)
         self.title_edit = QLineEdit(routine.title if routine else "")
         form.addRow("عنوان:", self.title_edit)

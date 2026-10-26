@@ -55,6 +55,8 @@ class DeadlineDialog(QDialog):
         self.deadline = deadline
         self.setWindowTitle("ثبت مهلت مبحث" if deadline is None else "ویرایش مهلت")
         self.setLayoutDirection(Qt.RightToLeft)
+        # حداقل پهنا برای اینکه برچسب‌های فارسی و فهرست‌های کشویی بریده نشوند.
+        self.setMinimumWidth(520)
         form = QFormLayout(self)
 
         self.topic_combo = QComboBox()
