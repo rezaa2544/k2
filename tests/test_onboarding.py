@@ -309,3 +309,142 @@ def test_service_schedule_crud_is_persistent_and_detects_conflict(service: Advis
     assert not service.schedule_conflicts()
     service.delete_fixed_event(second.id)
     assert len(service.repo.list_fixed_events()) == 1
+
+
+def _seed_legacy_schedule_without_marker(service: AdvisorService) -> None:
+    """همان bundle نمونه، ولی بدون marker ``schedule.sample_imported``.
+
+    marker فقط در نسخه‌هایی گذاشته شده بود که خودشان داده را import کرده‌اند.
+    پایگاه‌داده‌هایی که از مسیر دیگری (مثلاً کپی فایل یا نسخهٔ میانی) این
+    داده را دارند marker ندارند، و پاک‌سازی آن‌ها را انجام نمی‌داد.
+    """
+    for title, kind, subject_id, weekday, start, end, recorded, notes in LEGACY_IMPORTED_EVENT_SIGNATURES:
+        service.repo.create_fixed_event(FixedEvent(
+            title=title, kind=FixedEventKind(kind), subject_id=subject_id,
+            weekday=weekday, start_minute=start, end_minute=end,
+            is_recorded=recorded, notes=notes,
+        ))
+    for title, kind, start, end, weekdays, scope, counts_as_study in LEGACY_IMPORTED_ROUTINE_SIGNATURES:
+        service.repo.create_routine(Routine(
+            title=title, kind=RoutineKind(kind), start_minute=start,
+            end_minute=end, weekdays=frozenset(weekdays),
+            scope=RoutineScope(scope), counts_as_study=counts_as_study,
+        ))
+    service.conn.commit()
+
+
+def test_legacy_sample_schedule_is_removed_even_without_the_marker(tmp_path):
+    """bundle نمونه باید حذف شود حتی اگر markerش نباشد.
+
+    کاربر گفت: «دیتاهای اولیه (فقط زمانبندی‌ها) در برنامه هست که باید اونو
+    حذف و برنامه به صورت خام باشه.» بدون این تست، پایگاه‌داده‌ای که marker
+    ندارد برای همیشه دادهٔ نمونه را نگه می‌دارد و همان ساعت‌های ساختگی در
+    صفحهٔ کلاس‌ها و در پنجرهٔ تعارض راه‌اندازی دیده می‌شوند.
+    """
+    db = tmp_path / "legacy-no-marker.db"
+    old_service = AdvisorService(db)
+    _seed_legacy_schedule_without_marker(old_service)
+    old_service.close()
+
+    upgraded = AdvisorService(db)
+    try:
+        assert upgraded.repo.list_fixed_events() == []
+        assert upgraded.repo.list_routines() == []
+        assert upgraded.repo.get_setting("schedule.sample_imported") == "legacy-cleaned"
+    finally:
+        upgraded.close()
+
+
+def test_a_real_user_schedule_is_never_touched_by_legacy_cleanup(tmp_path):
+    """پاک‌سازی نباید هیچ برنامهٔ واقعی کاربر را دست بزند."""
+    db = tmp_path / "real.db"
+    service = AdvisorService(db)
+    try:
+        service.create_fixed_event(FixedEvent(
+            title="کلاس شیمی", kind=FixedEventKind.LIVE_CLASS,
+            weekday=1, start_minute=900, end_minute=1140,
+        ))
+        service.create_routine(Routine(
+            title="خواب شب", kind=RoutineKind.SLEEP,
+            start_minute=1380, end_minute=360, weekdays=frozenset(range(7)),
+            scope=RoutineScope.DAILY,
+        ))
+    finally:
+        service.close()
+
+    reopened = AdvisorService(db)
+    try:
+        assert [e.title for e in reopened.repo.list_fixed_events()] == ["کلاس شیمی"]
+        assert [r.title for r in reopened.repo.list_routines()] == ["خواب شب"]
+        assert reopened.repo.get_setting("schedule.sample_imported") is None
+    finally:
+        reopened.close()
+
+
+def test_exam_cycle_step_lets_the_user_define_the_times(tmp_path):
+    """مرحلهٔ چرخهٔ آزمون جامع دیگر گزینهٔ از پیش چاپ‌شده نیست.
+
+    کاربر گفت: «در راه اندازی اولیه، بخش چرخه آزمون جامع، طوری باشد که
+    خودمان تایم ها رو براش تعریف کنیم. مثلا هر دو هفته یک بار در ساعت
+    ..:..»
+    """
+    from k2.onboarding import ONBOARDING_STEPS
+
+    step = next(s for s in ONBOARDING_STEPS if s.key == "comprehensive_exam_cycle")
+    assert step.kind == "exam_cycle", "مرحله باید ورودی ساختگیِ کاربر بگیرد، نه choice"
+    assert not step.options, "هیچ گزینهٔ از پیش تعیین‌شده‌ای نمانده باشد"
+
+
+def test_exam_cycle_editor_roundtrips_user_values(qapp):
+    from k2.ui.views.onboarding import ExamCycleEditor
+
+    editor = ExamCycleEditor()
+    editor.weekday_combo.setCurrentIndex(editor.weekday_combo.findData(4))
+    editor.time_range.set_start_minutes(8 * 60)
+    editor.time_range.set_end_minutes(12 * 60)
+    editor.every_spin.setValue(2)
+    editor.name_edit.setText("آزمون جامع تجربی")
+
+    restored = ExamCycleEditor()
+    restored.set_json(editor.to_json())
+    assert restored.weekday_combo.currentData() == 4
+    assert restored.time_range.start_minutes() == 8 * 60
+    assert restored.time_range.end_minutes() == 12 * 60
+    assert restored.every_spin.value() == 2
+    assert restored.name_edit.text() == "آزمون جامع تجربی"
+
+
+def test_exam_cycle_editor_rejects_an_inverted_range(qapp):
+    from k2.ui.views.onboarding import ExamCycleEditor
+
+    editor = ExamCycleEditor()
+    editor.time_range.set_start_minutes(19 * 60)
+    editor.time_range.set_end_minutes(15 * 60)
+    assert not editor.is_valid()
+
+    editor.time_range.set_start_minutes(8 * 60)
+    editor.time_range.set_end_minutes(12 * 60)
+    assert editor.is_valid()
+
+    # «هنوز مشخص نیست» باید بدون خطا از مرحله رد شود.
+    editor.enabled_combo.setCurrentIndex(1)
+    assert editor.is_valid()
+
+
+def test_exam_cycle_becomes_a_real_recurring_event(tmp_path):
+    """چرخهٔ تعریف‌شده باید رویداد واقعی با تناوبِ خودش شود."""
+    import json
+
+    service = AdvisorService(tmp_path / "cycle.db")
+    try:
+        service.create_fixed_event(FixedEvent(
+            title="آزمون جامع", kind=FixedEventKind.EXAM, weekday=4,
+            start_minute=480, end_minute=720,
+            every_weeks=2,
+        ))
+        events = service.repo.list_fixed_events()
+        assert len(events) == 1
+        assert events[0].every_weeks == 2
+        assert events[0].kind == FixedEventKind.EXAM
+    finally:
+        service.close()

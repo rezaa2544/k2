@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+import json
 from typing import Optional
 
 from PySide6.QtCore import Qt
@@ -20,8 +21,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QSpinBox,
     QStackedWidget,
-
     QVBoxLayout,
     QWidget,
 )
@@ -47,7 +48,127 @@ from ...onboarding import (
     summarize,
 )
 from ...service import AdvisorService
-from ..widgets import Card, TimeRangeInput, info_box
+from ..widgets import Card, TimeRangeInput, format_clock, info_box
+
+
+class ExamCycleEditor(QWidget):
+    """چرخهٔ آزمون جامع: روز، بازهٔ ساعت و تناوب — همه با دست کاربر.
+
+    قبلاً این مرحله یک ``choice`` با سه گزینهٔ از پیش چاپ‌شده بود
+    («بله، هر دو هفته پنجشنبه ۰۸:۰۰ تا ۱۲:۰۰» …). کاربر گفت: «طوری باشد که
+    خودمان تایم ها رو براش تعریف کنیم. مثلا هر دو هفته یک بار در ساعت
+    ..:..» — پس ساعت و روز و تناوب ورودی کاربر می‌شوند، نه گزینهٔ ثابت.
+    """
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("field_comprehensive_exam_cycle")
+        self.setLayoutDirection(Qt.RightToLeft)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 4, 0, 0)
+
+        form = QFormLayout()
+        self.enabled_combo = QComboBox()
+        self.enabled_combo.addItem("بله — چرخهٔ آزمون جامع دارم", True)
+        self.enabled_combo.addItem("هنوز مشخص نیست / ندارم", False)
+        form.addRow("چرخهٔ آزمون جامع:", self.enabled_combo)
+
+        self.name_edit = QLineEdit()
+        self.name_edit.setPlaceholderText("مثلاً آزمون جامع تجربی")
+        self.name_edit.setText("آزمون جامع")
+        form.addRow("نام:", self.name_edit)
+
+        self.weekday_combo = QComboBox()
+        for value, label in enumerate(DAY_ORDER):
+            self.weekday_combo.addItem(label, value)
+        form.addRow("روز هفته:", self.weekday_combo)
+
+        self.time_range = TimeRangeInput("08:00", "12:00")
+        form.addRow("بازهٔ ساعت:", self.time_range)
+
+        self.every_spin = QSpinBox()
+        self.every_spin.setRange(1, 8)
+        self.every_spin.setValue(2)
+        self.every_spin.setSuffix(" هفته")
+        self.every_spin.setToolTip("۱ یعنی هر هفته؛ ۲ یعنی هر دو هفته یک بار")
+        form.addRow("تناوب:", self.every_spin)
+        layout.addLayout(form)
+
+        self.summary_label = QLabel()
+        self.summary_label.setObjectName("muted")
+        self.summary_label.setWordWrap(True)
+        layout.addWidget(self.summary_label)
+
+        self.enabled_combo.currentIndexChanged.connect(self._refresh)
+        self.weekday_combo.currentIndexChanged.connect(self._refresh)
+        self.every_spin.valueChanged.connect(self._refresh)
+        self.time_range.validityChanged.connect(self._refresh)
+        self._refresh()
+
+    # ------------------------------------------------------------------
+
+    def _refresh(self) -> None:
+        enabled = bool(self.enabled_combo.currentData())
+        for widget in (self.name_edit, self.weekday_combo, self.every_spin):
+            widget.setEnabled(enabled)
+        if not enabled:
+            self.summary_label.setText(
+                "چیزی ثبت نمی‌شود. بعداً هم می‌توانی از صفحهٔ «کلاس‌های من» "
+                "یک رویداد آزمون ثبت کنی."
+            )
+            return
+        day = DAY_ORDER[int(self.weekday_combo.currentData())]
+        every = int(self.every_spin.value())
+        repeat = "هر هفته" if every == 1 else f"هر {every} هفته یک بار"
+        span = (
+            f"{format_clock(self.time_range.start_minutes())}–"
+            f"{format_clock(self.time_range.end_minutes())}"
+        )
+        self.summary_label.setText(
+            f"هر {every} هفته، روز {day}، ساعت {span} ({repeat}). "
+            "این بازه در برنامهٔ هفتگی بسته می‌شود تا مطالعهٔ شخصی روی آزمون "
+            "جامع ننشیند."
+        )
+
+    def to_json(self) -> str:
+        return json.dumps(
+            {
+                "enabled": bool(self.enabled_combo.currentData()),
+                "name": self.name_edit.text().strip() or "آزمون جامع",
+                "weekday": int(self.weekday_combo.currentData()),
+                "start": self.time_range.start_minutes(),
+                "end": self.time_range.end_minutes(),
+                "every_weeks": int(self.every_spin.value()),
+            },
+            ensure_ascii=False,
+        )
+
+    def set_json(self, raw: str) -> None:
+        try:
+            data = json.loads(raw) if raw else {}
+        except (ValueError, TypeError):
+            data = {}
+        if not isinstance(data, dict):
+            return
+        index = self.enabled_combo.findData(bool(data.get("enabled", False)))
+        if index >= 0:
+            self.enabled_combo.setCurrentIndex(index)
+        if data.get("name"):
+            self.name_edit.setText(str(data["name"]))
+        index = self.weekday_combo.findData(int(data.get("weekday", 0)))
+        if index >= 0:
+            self.weekday_combo.setCurrentIndex(index)
+        self.every_spin.setValue(max(1, int(data.get("every_weeks", 2) or 1)))
+        if "start" in data and "end" in data:
+            self.time_range.set_range(int(data["start"]), int(data["end"]))
+        self._refresh()
+
+    def is_valid(self) -> bool:
+        if not bool(self.enabled_combo.currentData()):
+            return True
+        if not self.name_edit.text().strip():
+            return False
+        return self.time_range.is_valid()
 
 
 class OnboardingWizard(QDialog):
@@ -260,6 +381,9 @@ class OnboardingWizard(QDialog):
             card.add(widget)
         elif step.kind == "routines":
             widget = self._build_routine_editor(step.key)
+            card.add(widget)
+        elif step.kind == "exam_cycle":
+            widget = ExamCycleEditor()
             card.add(widget)
         elif step.kind == "number":
             widget = QComboBox()
@@ -929,7 +1053,9 @@ class OnboardingWizard(QDialog):
             )
             if widget is None:
                 continue
-            if isinstance(widget, QComboBox):
+            if isinstance(widget, ExamCycleEditor):
+                self.state.set_value(step.key, widget.to_json())
+            elif isinstance(widget, QComboBox):
                 self.state.set_value(step.key, str(widget.currentData() or ""))
             elif isinstance(widget, QLineEdit):
                 self.state.set_value(step.key, widget.text().strip())
@@ -959,6 +1085,10 @@ class OnboardingWizard(QDialog):
             + (ONBOARDING_STEPS[index - 1].title if index > 0 else "شروع")
         )
         self._refresh_nav()
+        if step.kind == "exam_cycle":
+            widget = self.stack.widget(index).findChild(ExamCycleEditor)
+            if widget is not None:
+                widget.set_json(self.state.values.get(step.key, ""))
         if step.kind == "confirm":
             self._collect()
             widget = self.stack.widget(index).findChild(QLabel, "field_confirm")
@@ -977,6 +1107,15 @@ class OnboardingWizard(QDialog):
                 self, "ورودی ناقص", f"«{step.title}» الزامی است."
             )
             return
+        if step.key == "comprehensive_exam_cycle":
+            editor = self.stack.widget(self.state.current_index).findChild(ExamCycleEditor)
+            if editor is not None and not editor.is_valid():
+                QMessageBox.warning(
+                    self, "چرخهٔ آزمون جامع",
+                    "بازهٔ ساعت چرخه معتبر نیست: پایان باید بعد از شروع باشد "
+                    "(و در همان روز)، یا نام چرخه را پر کن.",
+                )
+                return
         if step.key == "sleep_time" and parse_clock_pair(self.state.values.get("sleep_time", "")) is None:
             QMessageBox.warning(self, "بازهٔ خواب نامعتبر", "ساعت خواب و بیداری را به قالب ۲۳:۰۰ تا ۰۶:۰۰ وارد کنید.")
             return
@@ -1328,6 +1467,53 @@ class OnboardingWizard(QDialog):
                 )
                 self.service.create_fixed_event(event)
                 event_signatures.add(signature)
+
+        # چرخهٔ آزمون جامع: یک رویداد ثابت واقعی با تناوبِ خودِ کاربر.
+        # پیش‌تر این مرحله یک «انتخاب» از پیش چاپ‌شده بود که هیچ رویدادی
+        # نمی‌ساخت؛ حالا ساعت و روز و تناوب کاربر به برنامه می‌رود.
+        try:
+            cycle = json.loads(values.get("comprehensive_exam_cycle", "{}"))
+        except (ValueError, TypeError):
+            cycle = {}
+        if isinstance(cycle, dict) and cycle.get("enabled"):
+            try:
+                weekday = int(cycle.get("weekday", 0))
+                start, end = int(cycle.get("start", 0)), int(cycle.get("end", 0))
+                every = max(1, int(cycle.get("every_weeks", 1) or 1))
+            except (ValueError, TypeError):
+                weekday, start, end, every = None, 0, 0, 1
+            name = str(cycle.get("name", "")).strip() or "آزمون جامع"
+            if (
+                weekday is not None and 0 <= weekday <= 6
+                and 0 <= start < end <= 1440
+            ):
+                signature = (
+                    name, FixedEventKind.EXAM.value, None, weekday,
+                    start, end, False, every,
+                )
+                if signature not in {
+                    (
+                        e.title, e.kind.value, e.subject_id, e.weekday,
+                        e.start_minute, e.end_minute, e.is_recorded,
+                        max(1, int(getattr(e, "every_weeks", 1) or 1)),
+                    )
+                    for e in known_events
+                }:
+                    self.service.create_fixed_event(FixedEvent(
+                        title=name,
+                        kind=FixedEventKind.EXAM,
+                        subject_id=None,
+                        weekday=weekday,
+                        start_minute=start,
+                        end_minute=end,
+                        every_weeks=every,
+                        notes=(
+                            "چرخهٔ آزمون جامع — تعریف‌شده در راه‌اندازی"
+                            + ("" if every == 1 else f" · هر {every} هفته یک بار")
+                        ),
+                    ))
+                    self.service.set_cycle_anchor()
+                    known_events = self.service.repo.list_fixed_events()
 
         # خوابِ واردشده، تنظیمِ بیداری/خواب و بازهٔ محافظت‌شده را هم‌راستا می‌کند.
         sleep_pair = parse_clock_pair(values.get("sleep_time", ""))

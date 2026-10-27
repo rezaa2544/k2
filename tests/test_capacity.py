@@ -178,3 +178,62 @@ def test_overnight_routine_blocks_both_sides_of_midnight():
     )
     assert breakdown.fixed_minutes == 60  # فقط 05:00–06:00 داخل پنجرهٔ بیداری است
     assert all(not (iv.start < 5 * 60 + 30 < iv.end) for iv in breakdown.free)
+
+
+def test_biweekly_event_only_blocks_every_other_week():
+    """چرخهٔ «هر دو هفته» نباید هفتهٔ میانی را هم ببندد."""
+    import datetime as _dt
+
+    from k2.capacity import event_applies_on
+    from k2.domain.enums import FixedEventKind
+    from k2.domain.models import FixedEvent
+
+    anchor = _dt.date(2026, 10, 27)  # سه‌شنبه مرجع
+    event = FixedEvent(
+        title="آزمون جامع", kind=FixedEventKind.EXAM, weekday=5,
+        start_minute=480, end_minute=720, every_weeks=2,
+    )
+    # پنجشنبهٔ همان هفته
+    assert event_applies_on(event, _dt.date(2026, 10, 29), anchor)
+    # پنجشنبهٔ هفتهٔ بعد (۷ روز بعد)
+    assert not event_applies_on(event, _dt.date(2026, 11, 5), anchor)
+    # پنجشنبهٔ دو هفته بعد
+    assert event_applies_on(event, _dt.date(2026, 11, 12), anchor)
+
+
+def test_weekly_event_always_applies():
+    import datetime as _dt
+
+    from k2.capacity import event_applies_on
+    from k2.domain.enums import FixedEventKind
+    from k2.domain.models import FixedEvent
+
+    event = FixedEvent(
+        title="کلاس زیست", kind=FixedEventKind.LIVE_CLASS, weekday=0,
+        start_minute=900, end_minute=1140, every_weeks=1,
+    )
+    for day in range(1, 40):
+        assert event_applies_on(event, _dt.date(2026, 10, 1) + _dt.timedelta(days=day))
+
+
+def test_collect_fixed_intervals_skips_the_off_week():
+    """ظرفیت هفتهٔ میانی نباید ساعت آزمون جامع را کم کند."""
+    import datetime as _dt
+
+    from k2.capacity import collect_fixed_intervals
+    from k2.domain.enums import FixedEventKind
+    from k2.domain.models import FixedEvent
+
+    anchor = _dt.date(2026, 10, 27)
+    event = FixedEvent(
+        title="آزمون جامع", kind=FixedEventKind.EXAM, weekday=5,
+        start_minute=480, end_minute=720, every_weeks=2,
+    )
+    on_week = collect_fixed_intervals(
+        _dt.date(2026, 10, 29), [event], [], (), anchor
+    )
+    off_week = collect_fixed_intervals(
+        _dt.date(2026, 11, 5), [event], [], (), anchor
+    )
+    assert [i.label for i in on_week] == ["آزمون جامع"]
+    assert off_week == []

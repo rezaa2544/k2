@@ -177,12 +177,23 @@ class AdvisorService:
         self.conn.commit()
 
     def _remove_untouched_legacy_schedule_seed(self) -> None:
-        """فقط bundle نمونهٔ قدیمیِ دست‌نخورده را با marker معتبر پاک می‌کند.
+        """bundle نمونهٔ قدیمیِ دست‌نخورده را پاک می‌کند.
 
-        اگر حتی یک رویداد/روال تغییر کرده، رکوردی اضافه شده یا استثنایی ثبت
-        شده باشد، هیچ‌چیز حذف نمی‌شود تا دادهٔ واقعی کاربر محفوظ بماند.
+        کاربر گفت: «دیتاهای اولیه (فقط زمانبندی‌ها) در برنامه هست که باید
+        اونو حذف و برنامه به صورت خام باشه و خودمون بهش دیتا بدیم.»
+
+        شرط سخت‌گیرانه این است که **همهٔ** رویدادها و روال‌ها مو‌به‌مو با
+        امضاهای نسخهٔ نمونه بخوانند. اگر حتی یک ردیف تغییر کرده، رکوردی
+        اضافه شده یا استثنایی ثبت شده باشد، هیچ‌چیز حذف نمی‌شود.
+
+        قبلاً شرط اضافی ``schedule.sample_imported == "1"`` هم بود. آن marker
+        فقط در پایگاه‌داده‌هایی گذاشته می‌شد که خودِ آن نسخه داده را import
+        کرده بود؛ پایگاه‌داده‌هایی که از مسیر دیگری (کopi فایل، نسخهٔ میانی)
+        داده را دارند marker ندارند و برای همیشه ساعت‌های ساختگی را نگه
+        می‌داشتند — همان چیزی که کاربر دید. چون تطابق مو‌به‌موی امضاها به
+        تنهایی کافی و قوی است، شرط marker برداشته شد.
         """
-        if self.repo.get_setting("schedule.sample_imported") != "1":
+        if self.repo.get_setting("schedule.sample_imported") == "legacy-cleaned":
             return
         events = self.repo.list_fixed_events()
         routines = self.repo.list_routines()
@@ -414,6 +425,8 @@ class AdvisorService:
             raise ValueError("روز هفته باید بین شنبه تا جمعه باشد.")
         if not (0 <= event.start_minute < event.end_minute <= 1440):
             raise ValueError("بازهٔ رویداد باید در همان روز و با پایان بعد از شروع باشد.")
+        if max(1, int(getattr(event, "every_weeks", 1) or 1)) > 52:
+            raise ValueError("تناوب رویداد نمی‌تواند بیش از ۵۲ هفته باشد.")
 
     @staticmethod
     def _validate_routine_time(routine) -> None:
@@ -464,6 +477,20 @@ class AdvisorService:
     # برنامه‌ریزی
     # ------------------------------------------------------------------
 
+    #: تاریخی که شمارش تناوب رویدادهای «هر چند هفته یک بار» از آن آغاز می‌شود.
+    CYCLE_ANCHOR_KEY = "schedule.cycle_anchor"
+
+    @property
+    def cycle_anchor(self) -> Optional[_dt.date]:
+        """تاریخ مرجع تناوب؛ اگر کاربر چرخه‌ای تعریف نکرده باشد ``None``."""
+        raw = self.repo.get_setting(self.CYCLE_ANCHOR_KEY)
+        if not raw:
+            return None
+        try:
+            return _dt.date.fromisoformat(raw)
+        except ValueError:
+            return None
+
     def build_context(self, date: Optional[_dt.date] = None) -> SchedulingContext:
         return SchedulingContext(
             wake_minute=self.wake_minute,
@@ -471,11 +498,18 @@ class AdvisorService:
             fixed_events=self.repo.list_fixed_events(),
             routines=self.repo.list_routines(),
             exceptions=self.repo.list_exceptions(date),
+            cycle_anchor=self.cycle_anchor,
             energy_level=self.energy_level,
             peak_hours=self.peak_hours,
             focus_factor=self._focus_factor(),
             settings=self.settings,
         )
+
+    def set_cycle_anchor(self, value: Optional[_dt.date] = None) -> None:
+        """تاریخ مرجع تناوب را ثبت می‌کند (پیش‌فرض: امروز)."""
+        anchor = value or _dt.date.today()
+        self.repo.set_setting(self.CYCLE_ANCHOR_KEY, anchor.isoformat())
+        self.conn.commit()
 
     def _focus_factor(self) -> float:
         activities = self.repo.list_activities()

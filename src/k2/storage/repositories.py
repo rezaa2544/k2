@@ -479,7 +479,7 @@ class Repository:
     def create_fixed_event(self, event: FixedEvent) -> int:
         cursor = self.conn.execute(
             "INSERT INTO fixed_event (title, kind, subject_id, weekday, start_minute, "
-            "end_minute, is_recorded, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "end_minute, is_recorded, every_weeks, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 event.title,
                 event.kind.value,
@@ -488,6 +488,7 @@ class Repository:
                 event.start_minute,
                 event.end_minute,
                 1 if event.is_recorded else 0,
+                max(1, int(getattr(event, "every_weeks", 1) or 1)),
                 event.notes,
             ),
         )
@@ -508,6 +509,7 @@ class Repository:
                 start_minute=row["start_minute"],
                 end_minute=row["end_minute"],
                 is_recorded=bool(row["is_recorded"]),
+                every_weeks=max(1, int(row["every_weeks"] or 1)),
                 notes=row["notes"],
             )
             for row in rows
@@ -516,10 +518,12 @@ class Repository:
     def update_fixed_event(self, event: FixedEvent) -> None:
         self.conn.execute(
             """UPDATE fixed_event SET title = ?, kind = ?, subject_id = ?, weekday = ?,
-                 start_minute = ?, end_minute = ?, is_recorded = ?, notes = ? WHERE id = ?""",
+                 start_minute = ?, end_minute = ?, is_recorded = ?, every_weeks = ?,
+                 notes = ? WHERE id = ?""",
             (
                 event.title, event.kind.value, event.subject_id, event.weekday,
                 event.start_minute, event.end_minute, 1 if event.is_recorded else 0,
+                max(1, int(getattr(event, "every_weeks", 1) or 1)),
                 event.notes, event.id,
             ),
         )
