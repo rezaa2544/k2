@@ -398,23 +398,23 @@ def test_onboarding_persists_classes_commitments_sleep_and_custom_routines(qapp,
         class_editor["title"].setText("کلاس زیست مؤسسه")
         class_editor["subject"].setCurrentText("زیست‌شناسی")
         class_editor["weekday"].setCurrentIndex(1)
-        class_editor["start"].setTime(QTime(15, 0))
-        class_editor["end"].setTime(QTime(17, 0))
+        class_editor["time_range"].set_start_minutes(15 * 60)
+        class_editor["time_range"].set_end_minutes(17 * 60)
         wizard._add_event_row("classes")
 
         event_editor = wizard._event_editors["weekly_schedule"]
         event_editor["title"].setText("آزمون آزمایشی")
         event_editor["kind"].setCurrentIndex(event_editor["kind"].findData(FixedEventKind.EXAM.value))
         event_editor["weekday"].setCurrentIndex(5)
-        event_editor["start"].setTime(QTime(8, 0))
-        event_editor["end"].setTime(QTime(12, 0))
+        event_editor["time_range"].set_start_minutes(8 * 60)
+        event_editor["time_range"].set_end_minutes(12 * 60)
         wizard._add_event_row("weekly_schedule")
 
         routine_editor = wizard._routine_editors["routines"]
         routine_editor["title"].setText("استراحت بعدازظهر")
         routine_editor["kind"].setCurrentIndex(routine_editor["kind"].findData(RoutineKind.REST.value))
-        routine_editor["start"].setTime(QTime(16, 0))
-        routine_editor["end"].setTime(QTime(16, 30))
+        routine_editor["time_range"].set_start_minutes(16 * 60)
+        routine_editor["time_range"].set_end_minutes(16 * 60 + 30)
         wizard._add_routine_row("routines")
         wizard._apply_to_profile()
 
@@ -445,8 +445,8 @@ def test_calendar_dialog_values_roundtrip_and_validate(qapp, tmp_path: Path):
         event_dialog.weekday_combo.setCurrentIndex(2)
         from PySide6.QtCore import QTime
 
-        event_dialog.start_edit.setTime(QTime(15, 0))
-        event_dialog.end_edit.setTime(QTime(17, 0))
+        event_dialog.time_range.set_start_minutes(15 * 60)
+        event_dialog.time_range.set_end_minutes(17 * 60)
         event = event_dialog.value()
         event_id = service.create_fixed_event(event)
         assert service.repo.list_fixed_events()[0].id == event_id
@@ -457,8 +457,9 @@ def test_calendar_dialog_values_roundtrip_and_validate(qapp, tmp_path: Path):
         routine_dialog.kind_combo.setCurrentIndex(
             routine_dialog.kind_combo.findData(RoutineKind.SLEEP.value)
         )
-        routine_dialog.start_edit.setTime(QTime(23, 0))
-        routine_dialog.end_edit.setTime(QTime(6, 0))
+        # خواب از نیمه‌شب می‌گذرد؛ end < start برای روال مجاز است.
+        routine_dialog.time_range.set_start_minutes(23 * 60)
+        routine_dialog.time_range.set_end_minutes(6 * 60)
         routine = routine_dialog.value()
         routine_id = service.create_routine(routine)
         assert service.repo.list_routines()[0].id == routine_id
@@ -736,3 +737,54 @@ def test_form_dialogs_are_wide_enough_for_persian_labels(
             dialog.close()
     finally:
         service.close()
+
+
+def test_settings_dialogs_reject_an_inverted_time_range(qapp, tmp_path: Path, monkeypatch):
+    """دیالوگ تنظیمات نباید بازهٔ معکوس را بپذیرد.
+
+    قبلاً ``ScheduleEventDialog`` و ``RoutineDialog`` در settings.py دکمهٔ
+    ``accepted`` را مستقیم به ``accept()`` بسته بودند و **هیچ
+    اعتبارسنجی** نداشتند؛ کاربر «۱۹:۰۰ تا ۱۵:۰۰» را می‌پذیرفت و بعد
+    ``create_fixed_event`` استثنا می‌داد. حالا اعتبارسنجی در خود دیالوگ است.
+    """
+    from k2.ui.views import settings as settings_view
+    from k2.ui.views.settings import RoutineDialog, ScheduleEventDialog
+
+    # notify یک QMessageBox مودال است؛ بدون این، تست منتظر کاربر می‌ماند.
+    monkeypatch.setattr(settings_view, "notify", lambda *a, **k: None)
+
+    service = AdvisorService(tmp_path / "inverted.db")
+    try:
+        dialog = ScheduleEventDialog(service)
+        dialog.title_edit.setText("کلاس")
+        dialog.time_range.set_start_minutes(19 * 60)
+        dialog.time_range.set_end_minutes(15 * 60)
+        assert not dialog.time_range.is_valid()
+        assert "پیش از شروع" in dialog.time_range.error_text()
+        # دکمهٔ ذخیره باید غیرفعال باشد، نه اینکه خطا را به لایهٔ بعد بدهد.
+        dialog._accept()
+        assert not hasattr(dialog, "result_event")
+
+        routine = RoutineDialog()
+        routine.title_edit.setText("خواب")
+        routine.time_range.set_start_minutes(23 * 60)
+        routine.time_range.set_end_minutes(6 * 60)
+        # روال از نیمه‌شب می‌گذرد، پس معکوس بودن مجاز است.
+        assert routine.time_range.is_valid()
+        saved = routine.value()
+        assert saved.start_minute == 23 * 60 and saved.end_minute == 6 * 60
+    finally:
+        service.close()
+
+
+def test_classes_page_prints_clock_not_raw_minutes(qapp, tmp_path: Path):
+    """جدول کلاس‌ها باید ساعت نشان دهد، نه دقیقهٔ خام.
+
+    ``jdate.format_clock`` ساعت و دقیقه می‌گیرد؛ قبلاً به آن «دقیقه از
+    نیمه‌شب» پاس داده می‌شد و ستون ساعت «۹۰۰:۰۰» چاپ می‌کرد.
+    """
+    from k2.ui.widgets import format_clock
+
+    assert format_clock(900) == "۱۵:۰۰"
+    assert format_clock(1140) == "۱۹:۰۰"
+    assert format_clock(0) == "۰۰:۰۰"

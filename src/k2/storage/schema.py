@@ -7,7 +7,7 @@ migration انجام نمی‌شود.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 #: اسکریپت نسخهٔ ۱ — اسکیمای اولیه.
 MIGRATION_1 = """
@@ -431,6 +431,13 @@ CREATE INDEX IF NOT EXISTS idx_syllabus_section_subject
     ON syllabus_section(subject, grade);
 """
 
+#: نسخهٔ ۹ — تناوب رویداد ثابت (چرخهٔ آزمون جامع).
+#: کاربر در راه‌اندازی می‌گوید «هر دو هفته یک بار پنجشنبه ۰۸:۰۰ تا ۱۲:۰۰».
+#: بدون این ستون، یا هفته‌ای ساخته می‌شد (اشتباه) یا نمی‌شد ذخیره کرد.
+MIGRATION_9 = """
+ALTER TABLE fixed_event ADD COLUMN every_weeks INTEGER NOT NULL DEFAULT 1;
+"""
+
 MIGRATIONS: list[tuple[int, str]] = [
     (1, MIGRATION_1),
     (2, MIGRATION_2),
@@ -440,4 +447,5 @@ MIGRATIONS: list[tuple[int, str]] = [
     (6, MIGRATION_6),
     (7, MIGRATION_7),
     (8, MIGRATION_8),
+    (9, MIGRATION_9),
 ]

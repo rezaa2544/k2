@@ -347,8 +347,8 @@ def test_fixed_event_dialog_validates_range(window, monkeypatch):
 
     dialog = FixedEventDialog(window.service)
     dialog.title_edit.setText("کلاس")
-    dialog.start_edit.setTime(_dt.time(18, 0))
-    dialog.end_edit.setTime(_dt.time(17, 0))
+    dialog.time_range.set_start_minutes(18 * 60)
+    dialog.time_range.set_end_minutes(17 * 60)
     dialog._accept()
     assert not hasattr(dialog, "result_event")
 
@@ -428,3 +428,73 @@ def test_tests_page_lists_tests_and_errors(window):
     window.tests.refresh()
     assert window.tests.test_table.rowCount() == 1
     assert "تست" in window.tests.summary.text()
+
+
+# ---------------------------------------------------------------------------
+# هدف فصل: «تا تاریخ فلانی این فصل تمام شود»
+# ---------------------------------------------------------------------------
+
+
+def test_chapter_goal_dialog_computes_a_plan(window, monkeypatch):
+    """دیالوگ هدف فصل باید از روی دادهٔ سرفصل کتاب برنامه بسازد."""
+    from k2 import syllabus as syl
+    from k2.jdate import format_jalali, persian_digits
+    from k2.ui.views.syllabus import ChapterGoalDialog
+
+    chapter = syl.chapters("زیست‌شناسی", 11)[0]
+    assert chapter.sections, "فصل باید گفتار داشته باشد"
+    dialog = ChapterGoalDialog(window.service, "زیست‌شناسی", 11, chapter)
+    dialog.date_edit.setText(
+        format_jalali(_dt.date.today() + _dt.timedelta(days=120), with_weekday=False)
+    )
+    dialog._accept()
+
+    text = dialog.output.text()
+    assert "گفتارهای شمرده‌شده" in text
+    assert "پله‌ها" in text
+    assert "تقسیم روزانه" in text
+    # ظرفیت پیش‌فرض از خودِ برنامه می‌آید، نه عدد ثابت.
+    assert dialog.capacity_spin.value() >= 0
+
+
+def test_chapter_goal_dialog_refuses_an_impossible_deadline(window, monkeypatch):
+    """مهلت نزدیک ⇒ هشدار صادقانه، نه تاریخ جعلی."""
+    from k2 import syllabus as syl
+    from k2.jdate import format_jalali, persian_digits
+    from k2.ui.views import syllabus as sylview
+    from k2.ui.views.syllabus import ChapterGoalDialog
+
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        sylview, "notify", lambda *a, **k: warnings.append(str(a[1] if len(a) > 1 else ""))
+    )
+    chapter = syl.chapters("زیست‌شناسی", 11)[0]
+    dialog = ChapterGoalDialog(window.service, "زیست‌شناسی", 11, chapter)
+    dialog.capacity_spin.setValue(30)
+    dialog.date_edit.setText(
+        format_jalali(_dt.date.today() + _dt.timedelta(days=2), with_weekday=False)
+    )
+    dialog._accept()
+    assert warnings, "برای مهلت نشدنی باید هشدار داده شود"
+    assert any("شدنی نیست" in w for w in warnings)
+
+
+def test_chapter_goal_counts_all_sections_when_none_is_assessed(window, monkeypatch):
+    """گفتار ارزیابی‌نشده ⇒ برنامه خالی نمی‌شود، کل فصل حساب می‌شود."""
+    from k2 import syllabus as syl
+    from k2.jdate import format_jalali, persian_digits
+    from k2.ui.views.syllabus import ChapterGoalDialog
+
+    chapter = syl.chapters("زیست‌شناسی", 11)[0]
+    dialog = ChapterGoalDialog(window.service, "زیست‌شناسی", 11, chapter)
+    total, open_count = dialog._section_counts()
+    assert total == chapter.sections
+    assert open_count == 0
+    # دامنه باید خودکار به «همهٔ گفتارهای فصل» برود.
+    dialog.date_edit.setText(
+        format_jalali(_dt.date.today() + _dt.timedelta(days=120), with_weekday=False)
+    )
+    dialog._accept()
+    assert dialog.scope_combo.currentData() is False
+    assert "گفتارهای شموله‌شده" not in dialog.output.text()
+    assert persian_digits(str(total)) in dialog.output.text()

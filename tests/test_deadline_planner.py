@@ -182,3 +182,118 @@ def test_zero_capacity_does_not_produce_a_fake_plan():
 def test_feasibility_depends_on_capacity(consolidation, expected_feasible):
     plan = back_calculate(_input(consolidation_date=consolidation))
     assert plan.feasible is expected_feasible
+
+
+# ---------------------------------------------------------------------------
+# هدف فصل: «تا تاریخ فلانی فصل X تمام شود»
+# ---------------------------------------------------------------------------
+
+
+def _today() -> _dt.date:
+    return _dt.date(2026, 10, 27)
+
+
+def test_chapter_goal_counts_every_section_and_is_feasible_when_there_is_time():
+    from k2.chapter_goal import ChapterGoalInput, plan_chapter_goal
+
+    plan = plan_chapter_goal(ChapterGoalInput(
+        subject="زیست‌شناسی", grade=11, chapter=1,
+        deadline=_today() + _dt.timedelta(days=90),
+        daily_capacity_minutes=120,
+        section_count=7, open_section_count=7, today=_today(),
+    ))
+    assert plan.feasible
+    assert plan.section_count == 7
+    assert plan.open_section_count == 7
+    assert plan.total_minutes == plan.minutes_per_section * 7
+    assert plan.available_days >= plan.required_days
+    assert plan.per_day, "تقسیم روزانه باید ساخته شود"
+    assert sum(day.minutes for day in plan.per_day) == plan.total_minutes
+
+
+def test_chapter_goal_is_honest_when_the_deadline_is_too_close():
+    """مهلت نزدیک ⇒ تاریخ جعلی ساخته نمی‌شود، کمبود روز گفته می‌شود."""
+    from k2.chapter_goal import ChapterGoalInput, plan_chapter_goal
+
+    plan = plan_chapter_goal(ChapterGoalInput(
+        subject="زیست‌شناسی", grade=11, chapter=1,
+        deadline=_today() + _dt.timedelta(days=2),
+        daily_capacity_minutes=60,
+        section_count=7, open_section_count=7, today=_today(),
+    ))
+    assert not plan.feasible
+    assert plan.missing_days > 0
+    assert any("کم داری" in w for w in plan.warnings)
+    assert not plan.per_day
+
+
+def test_chapter_goal_can_count_only_open_needs():
+    from k2.chapter_goal import ChapterGoalInput, plan_chapter_goal
+
+    plan = plan_chapter_goal(ChapterGoalInput(
+        subject="زیست‌شناسی", grade=11, chapter=1,
+        deadline=_today() + _dt.timedelta(days=30),
+        daily_capacity_minutes=120,
+        only_open_needs=True,
+        section_count=7, open_section_count=2, today=_today(),
+    ))
+    assert plan.open_section_count == 2
+    assert plan.total_minutes == plan.minutes_per_section * 2
+
+
+def test_chapter_goal_without_open_sections_says_so():
+    from k2.chapter_goal import ChapterGoalInput, plan_chapter_goal
+
+    plan = plan_chapter_goal(ChapterGoalInput(
+        subject="زیست‌شناسی", grade=11, chapter=1,
+        deadline=_today() + _dt.timedelta(days=30),
+        daily_capacity_minutes=120,
+        only_open_needs=True,
+        section_count=7, open_section_count=0, today=_today(),
+    ))
+    assert not plan.feasible
+    assert any("گفتارِ بازِ شمارش‌شدنی نیست" in w for w in plan.warnings)
+
+
+def test_chapter_goal_without_a_deadline_does_not_invent_dates():
+    from k2.chapter_goal import ChapterGoalInput, plan_chapter_goal
+
+    plan = plan_chapter_goal(ChapterGoalInput(
+        subject="زیست‌شناسی", grade=11, chapter=1,
+        deadline=None, daily_capacity_minutes=120,
+        section_count=7, open_section_count=7, today=_today(),
+    ))
+    assert not plan.feasible
+    assert not plan.milestones
+    assert not plan.per_day
+
+
+def test_chapter_goal_back_calculates_from_the_chapter_volume():
+    """تاریخ شروع باید از حجمِ *کل فصل* بیاید، نه از حجم یک گفتار."""
+    from k2.chapter_goal import ChapterGoalInput, plan_chapter_goal
+
+    deadline = _today() + _dt.timedelta(days=30)
+    small = plan_chapter_goal(ChapterGoalInput(
+        subject="زیست‌شناسی", grade=11, chapter=1,
+        deadline=deadline, daily_capacity_minutes=120,
+        section_count=7, open_section_count=1, today=_today(),
+    ))
+    large = plan_chapter_goal(ChapterGoalInput(
+        subject="زیست‌شناسی", grade=11, chapter=1,
+        deadline=deadline, daily_capacity_minutes=120,
+        section_count=7, open_section_count=7, today=_today(),
+    ))
+    assert large.milestones[-1].date < small.milestones[-1].date
+
+
+def test_chapter_goal_zero_capacity_is_refused():
+    from k2.chapter_goal import ChapterGoalInput, plan_chapter_goal
+
+    plan = plan_chapter_goal(ChapterGoalInput(
+        subject="زیست‌شناسی", grade=11, chapter=1,
+        deadline=_today() + _dt.timedelta(days=30),
+        daily_capacity_minutes=0,
+        section_count=7, open_section_count=7, today=_today(),
+    ))
+    assert not plan.feasible
+    assert any("ظرفیت روزانه" in w for w in plan.warnings)

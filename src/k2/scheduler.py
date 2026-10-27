@@ -16,6 +16,7 @@ import datetime as _dt
 from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
+from . import capacity
 from .capacity import CapacityBreakdown, Interval, compute_capacity
 from .config import Settings
 from .domain.enums import ActivityState, DeadlineType, EnergyNeed
@@ -36,6 +37,8 @@ class SchedulingContext:
     fixed_events: Sequence[FixedEvent] = field(default_factory=list)
     routines: Sequence[Routine] = field(default_factory=list)
     exceptions: Sequence = field(default_factory=list)
+    #: تاریخ شروعِ شمارش تناوب رویدادهای «هر چند هفته یک بار».
+    cycle_anchor: Optional[_dt.date] = None
     energy_level: int = 2
     #: بازه‌های پربازده (دقیقه از ابتدای شبانه‌روز) — خودگزارشی یا آموخته‌شده.
     peak_hours: Sequence[tuple[int, int]] = field(default_factory=list)
@@ -50,6 +53,7 @@ class SchedulingContext:
             fixed_events=self.fixed_events,
             routines=self.routines,
             exceptions=self.exceptions,
+            anchor=self.cycle_anchor,
             energy_level=self.energy_level,
             settings=self.settings,
             focus_factor=self.focus_factor,
@@ -779,7 +783,11 @@ def detect_fixed_conflicts(date: _dt.date, context: SchedulingContext) -> list[s
     """
     weekday = weekday_index(date)
     events = sorted(
-        (e for e in context.fixed_events if e.weekday == weekday),
+        (
+            e for e in context.fixed_events
+            if e.weekday == weekday
+            and capacity.event_applies_on(e, date, context.cycle_anchor)
+        ),
         key=lambda e: e.start_minute,
     )
     messages: list[str] = []

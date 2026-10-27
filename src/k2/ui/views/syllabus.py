@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import datetime as _dt
 from typing import Optional
 
 from PySide6.QtCore import Qt
@@ -15,6 +16,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFormLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -29,7 +31,15 @@ from PySide6.QtWidgets import (
 )
 
 from ... import syllabus as syl
+from ...chapter_goal import ChapterGoalInput, plan_chapter_goal
 from ...domain.models import SyllabusChapterEdit, SyllabusSection
+from ...jdate import (
+    format_jalali,
+    format_minutes,
+    format_number,
+    parse_jalali_date,
+    persian_digits,
+)
 from ...service import AdvisorService
 from ..widgets import Card, confirm, info_box, notify
 
@@ -172,8 +182,15 @@ class SyllabusPage(QWidget):
         )
         self.btn_counts.clicked.connect(self._enter_counts)
         header.addWidget(self.btn_counts)
+        self.btn_goal = QPushButton("هدف این فصل تا تاریخ…")
+        self.btn_goal.setObjectName("primary")
+        self.btn_goal.setToolTip(
+            "بگو تا چه تاریخی می‌خواهی این فصل تمام شود؛ برنامه می‌گوید شدنی "
+            "است یا نه و از چه روزی باید شروع کنی."
+        )
+        self.btn_goal.clicked.connect(self._chapter_goal)
+        header.addWidget(self.btn_goal)
         self.btn_needs = QPushButton("نیازهای باز سرفصل")
-        self.btn_needs.setObjectName("primary")
         self.btn_needs.setToolTip("گفتارهایی که نیاز باز دارند؛ ورودی مستقیم برنامه‌ریزی")
         self.btn_needs.clicked.connect(self._show_needs)
         header.addWidget(self.btn_needs)
@@ -524,6 +541,19 @@ class SyllabusPage(QWidget):
             )
             self._reload()
 
+    def _chapter_goal(self) -> None:
+        chapter = self._selected_chapter()
+        if chapter is None:
+            notify(
+                self, "فصلی انتخاب نشده",
+                "ابتدا یک فصل را از فهرست انتخاب کن.",
+            )
+            return
+        dialog = ChapterGoalDialog(
+            self.service, self._current_subject(), self._current_grade(), chapter, self
+        )
+        dialog.exec()
+
     def _show_needs(self) -> None:
         needs = self.service.syllabus_open_needs()
         if not needs:
@@ -614,6 +644,192 @@ class _TextDialog(QDialog):
     def _accept(self) -> None:
         self.value = self.edit.text().strip()
         self.accept()
+
+
+class ChapterGoalDialog(QDialog):
+    """«تا تاریخ فلانی فصل X از کتاب Y تمام شود.»
+
+    کاربر گفت: «من یک بخش رو لازم دارم که برایم تعیین کند که تا تایم
+    فلانی، مثلا بخش ۱ رو از کتاب فلانی تمام کنم.»
+
+    فصل‌بندی از همان دادهٔ سرفصل کتاب درسی می‌آید و دستی تایپ نمی‌شود؛
+    کاربر فقط مهلت و ظرفیت روزانه را می‌دهد و برنامه می‌گوید شدنی است یا
+    نه و از چه روزی باید شروع کند.
+    """
+
+    def __init__(
+        self,
+        service: AdvisorService,
+        subject: str,
+        grade: int,
+        chapter,
+        parent: Optional[QWidget] = None,
+    ):
+        super().__init__(parent)
+        self.service = service
+        self.subject = subject
+        self.grade = grade
+        self.chapter = chapter
+        self.setWindowTitle("هدف فصل: تا چه تاریخی تمام شود؟")
+        self.setLayoutDirection(Qt.RightToLeft)
+        self.setMinimumWidth(620)
+        root = QVBoxLayout(self)
+
+        info = info_box()
+        info.setText(
+            f"{subject} · پایهٔ {format_number(grade)} · فصل "
+            f"{format_number(chapter.no)} — {chapter.title or 'بدون نام رسمی'}. "
+            "گفتارهای این فصل از کتاب درسی می‌آیند و لازم نیست دستی تایپ شوند."
+        )
+        root.addWidget(info)
+
+        form = QFormLayout()
+        self.date_edit = QLineEdit()
+        self.date_edit.setPlaceholderText("مثلاً ۱۴۰۵/۰۸/۱۵")
+        form.addRow("مهلت پایان این فصل (شمسی):", self.date_edit)
+
+        self.capacity_spin = QSpinBox()
+        self.capacity_spin.setRange(0, 720)
+        self.capacity_spin.setSingleStep(15)
+        self.capacity_spin.setSuffix(" دقیقه")
+        self.capacity_spin.setValue(self._default_capacity())
+        self.capacity_spin.setToolTip(
+            "ظرفیت مؤثر روزانهٔ مطالعه؛ از ساعت بیداری، خواب، کلاس و "
+            "بازه‌های ضروری‌ات حساب می‌شود."
+        )
+        form.addRow("ظرفیت روزانه:", self.capacity_spin)
+
+        self.scope_combo = QComboBox()
+        self.scope_combo.addItem("فقط گفتارهایی که نیاز باز دارند", True)
+        self.scope_combo.addItem("همهٔ گفتارهای فصل", False)
+        form.addRow("دامنهٔ کار:", self.scope_combo)
+        root.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Ok).setText("محاسبهٔ برنامه")
+        buttons.button(QDialogButtonBox.Cancel).setText("بستن")
+        buttons.accepted.connect(self._accept)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons)
+
+        self.output = QLabel()
+        self.output.setWordWrap(True)
+        self.output.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        root.addWidget(self.output, 1)
+
+    def _default_capacity(self) -> int:
+        try:
+            breakdown = self.service.build_context().capacity_for(_dt.date.today())
+            return max(0, int(breakdown.effective_minutes))
+        except Exception:  # pragma: no cover - ظرفیت نباید پنجره را بشکند
+            return 180
+
+    def _section_counts(self) -> tuple[int, int]:
+        """(تعداد همهٔ گفتارها، تعداد گفتارهای نیازباز)."""
+        total = self.chapter.sections or 0
+        records = {
+            (r.chapter, r.section): r
+            for r in self.service.repo.list_syllabus_sections(
+                self.subject, self.grade
+            )
+            if r.chapter == self.chapter.no
+        }
+        open_count = 0
+        for section in range(1, total + 1):
+            if syl.section_needs(records.get((self.chapter.no, section))):
+                open_count += 1
+        return total, open_count
+
+    def _accept(self) -> None:
+        try:
+            deadline = parse_jalali_date(self.date_edit.text())
+        except ValueError as exc:
+            notify(self, "تاریخ نامعتبر", str(exc))
+            return
+        if deadline is None:
+            notify(self, "مهلت لازم است", "تاریخ مهلت این فصل را وارد کن.")
+            return
+
+        total, open_count = self._section_counts()
+        only_open = bool(self.scope_combo.currentData())
+        if only_open and open_count == 0 and total > 0:
+            # هنوز هیچ گفتاری ارزیابی نشده؛ «فقط نیازهای باز» یعنی صفر و
+            # برنامه خالی می‌شود. در این حالت کل فصل حساب می‌شود و همین
+            # در خروجی نوشته می‌شود — نه اینکه عددی ساخته شود.
+            only_open = False
+            index = self.scope_combo.findData(False)
+            if index >= 0:
+                self.scope_combo.setCurrentIndex(index)
+        plan = plan_chapter_goal(
+            ChapterGoalInput(
+                subject=self.subject,
+                grade=self.grade,
+                chapter=self.chapter.no,
+                deadline=deadline,
+                daily_capacity_minutes=int(self.capacity_spin.value()),
+                only_open_needs=only_open,
+                section_count=total,
+                open_section_count=open_count,
+            )
+        )
+        self.output.setText(self._render(plan))
+        if not plan.feasible:
+            notify(
+                self,
+                "این مهلت با ظرفیت فعلی شدنی نیست",
+                "\n".join(plan.warnings) or "جزئیات را در پایین ببین.",
+            )
+
+    @staticmethod
+    def _date_text(value: _dt.date) -> str:
+        """تاریخ با ارقام فارسی، هم‌خوان با بقیهٔ اعداد همین پنجره."""
+        return persian_digits(format_jalali(value, with_weekday=False))
+
+    @staticmethod
+    def _render(plan) -> str:
+        lines: list[str] = []
+        lines.append(
+            f"گفتارهای شمرده‌شده: {format_number(plan.open_section_count)} "
+            f"از {format_number(plan.section_count)}"
+        )
+        lines.append(
+            f"زمان هر گفتار: {format_minutes(plan.minutes_per_section)} — "
+            f"جمع {format_minutes(plan.total_minutes)}"
+        )
+        lines.append(
+            f"ظرفیت روزانه: {format_minutes(plan.capacity_minutes_per_day)} — "
+            f"روزهای لازم: {format_number(plan.required_days, digits=1)}، "
+            f"روزهای موجود: {format_number(plan.available_days)}"
+        )
+        if plan.milestones:
+            lines.append("")
+            lines.append("پله‌ها (از عقب به جلو):")
+            for milestone in plan.milestones:
+                lines.append(
+                    f"  • {milestone.label}: {ChapterGoalDialog._date_text(milestone.date)}"
+                    f" ({format_minutes(milestone.minutes)})"
+                )
+        if plan.per_day:
+            lines.append("")
+            lines.append(f"تقسیم روزانه ({format_number(len(plan.per_day))} روز):")
+            for day in plan.per_day[:10]:
+                lines.append(
+                    f"  • {ChapterGoalDialog._date_text(day.date)}: "
+                    f"{format_minutes(day.minutes)} "
+                    f"({format_number(day.sections, digits=1)} گفتار)"
+                )
+            if len(plan.per_day) > 10:
+                lines.append(f"  … و {format_number(len(plan.per_day) - 10)} روز دیگر")
+        if plan.warnings:
+            lines.append("")
+            lines.append("هشدارها:")
+            lines.extend(f"  • {w}" for w in plan.warnings)
+        if plan.suggestions:
+            lines.append("")
+            lines.append("راه‌های جبران:")
+            for suggestion in plan.suggestions:
+                lines.append(f"  • {suggestion.title}: {suggestion.detail}")
+        return "\n".join(lines)
 
 
 class _NeedsDialog(QDialog):

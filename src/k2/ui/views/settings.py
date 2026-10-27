@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSpinBox,
     QScrollArea,
-    QTimeEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -32,7 +31,7 @@ from ...domain.models import ExamProfile, FixedEvent, Routine
 from ...konkur_catalog import EXAM_WEIGHT_BY_GROUP
 from ...jdate import format_jalali_long
 from ...service import AdvisorService
-from ..widgets import Card, confirm, info_box, notify
+from ..widgets import Card, TimeRangeInput, confirm, info_box, notify
 
 
 def _parse_clock(text: str) -> int | None:
@@ -658,12 +657,8 @@ class ScheduleEventDialog(QDialog):
         for index, day in enumerate(DAY_ORDER):
             self.weekday_combo.addItem(day, index)
         form.addRow("روز:", self.weekday_combo)
-        self.start_edit = QTimeEdit()
-        self.start_edit.setDisplayFormat("HH:mm")
-        self.end_edit = QTimeEdit()
-        self.end_edit.setDisplayFormat("HH:mm")
-        form.addRow("از:", self.start_edit)
-        form.addRow("تا:", self.end_edit)
+        self.time_range = TimeRangeInput("15:00", "16:00")
+        form.addRow("بازهٔ رویداد:", self.time_range)
         self.subject_combo = QComboBox()
         self.subject_combo.addItem("بدون پیوند به درس", None)
         for subject in service.repo.list_subjects(include_unselected=True):
@@ -674,31 +669,43 @@ class ScheduleEventDialog(QDialog):
         self.notes_edit = QLineEdit(event.notes if event else "")
         form.addRow("یادداشت:", self.notes_edit)
         self.buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        self.buttons.accepted.connect(self.accept)
+        self.buttons.accepted.connect(self._accept)
         self.buttons.rejected.connect(self.reject)
+        self.time_range.attach_button_box(self.buttons)
         form.addRow(self.buttons)
         if event:
             self.title_edit.setText(event.title)
             self.kind_combo.setCurrentIndex(max(0, self.kind_combo.findData(event.kind.value)))
             self.weekday_combo.setCurrentIndex(max(0, self.weekday_combo.findData(event.weekday)))
-            self.start_edit.setTime(self.start_edit.time().fromString(
-                f"{event.start_minute // 60:02d}:{event.start_minute % 60:02d}", "HH:mm"))
-            self.end_edit.setTime(self.end_edit.time().fromString(
-                f"{event.end_minute // 60:02d}:{event.end_minute % 60:02d}", "HH:mm"))
+            self.time_range.set_start_minutes(event.start_minute)
+            self.time_range.set_end_minutes(event.end_minute)
             self.subject_combo.setCurrentIndex(max(0, self.subject_combo.findData(event.subject_id)))
             self.recorded_check.setChecked(event.is_recorded)
 
+    def _accept(self) -> None:
+        """اعتبارسنجی پیش از بستن؛ نه خطای خام پس از ذخیره.
+
+        قبلاً ``accepted`` مستقیم به ``accept()`` بسته بود و این دیالوگ
+        هیچ بررسی‌ای نداشت؛ کاربر بازهٔ معکوس می‌گذاشت و خطا در لایهٔ
+        سرویس ظاهر می‌شد.
+        """
+        if not self.title_edit.text().strip():
+            notify(self, "عنوان لازم است", "عنوان رویداد را وارد کن.")
+            return
+        if not self.time_range.is_valid():
+            notify(self, "بازهٔ نامعتبر", self.time_range.error_text())
+            return
+        self.accept()
+
     def value(self, event_id: int | None = None) -> FixedEvent:
-        start = self.start_edit.time()
-        end = self.end_edit.time()
         return FixedEvent(
             id=event_id,
             title=self.title_edit.text().strip(),
             kind=FixedEventKind(self.kind_combo.currentData()),
             subject_id=self.subject_combo.currentData(),
             weekday=int(self.weekday_combo.currentData()),
-            start_minute=start.hour() * 60 + start.minute(),
-            end_minute=end.hour() * 60 + end.minute(),
+            start_minute=self.time_range.start_minutes(),
+            end_minute=self.time_range.end_minutes(),
             is_recorded=self.recorded_check.isChecked(),
             notes=self.notes_edit.text().strip(),
         )
@@ -723,12 +730,11 @@ class RoutineDialog(QDialog):
         for kind in RoutineKind:
             self.kind_combo.addItem(kind.label, kind.value)
         form.addRow("دسته:", self.kind_combo)
-        self.start_edit = QTimeEdit()
-        self.start_edit.setDisplayFormat("HH:mm")
-        self.end_edit = QTimeEdit()
-        self.end_edit.setDisplayFormat("HH:mm")
-        form.addRow("از:", self.start_edit)
-        form.addRow("تا:", self.end_edit)
+        # خواب از نیمه‌شب می‌گذرد (۲۳:۰۰ تا ۰۶:۰۰) پس end < start مجاز است.
+        self.time_range = TimeRangeInput(
+            "07:00", "07:30", allow_cross_midnight=True,
+        )
+        form.addRow("بازهٔ روال:", self.time_range)
         self.scope_combo = QComboBox()
         for scope in RoutineScope:
             self.scope_combo.addItem(scope.label, scope.value)
@@ -745,26 +751,32 @@ class RoutineDialog(QDialog):
         self.study_check.setChecked(routine.counts_as_study if routine else False)
         form.addRow("محاسبه:", self.study_check)
         self.buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        self.buttons.accepted.connect(self.accept)
+        self.buttons.accepted.connect(self._accept)
         self.buttons.rejected.connect(self.reject)
+        self.time_range.attach_button_box(self.buttons)
         form.addRow(self.buttons)
         if routine:
             self.kind_combo.setCurrentIndex(max(0, self.kind_combo.findData(routine.kind.value)))
             self.scope_combo.setCurrentIndex(max(0, self.scope_combo.findData(routine.scope.value)))
-            self.start_edit.setTime(self.start_edit.time().fromString(
-                f"{routine.start_minute // 60:02d}:{routine.start_minute % 60:02d}", "HH:mm"))
-            self.end_edit.setTime(self.end_edit.time().fromString(
-                f"{routine.end_minute // 60:02d}:{routine.end_minute % 60:02d}", "HH:mm"))
+            self.time_range.set_start_minutes(routine.start_minute)
+            self.time_range.set_end_minutes(routine.end_minute)
+
+    def _accept(self) -> None:
+        if not self.title_edit.text().strip():
+            notify(self, "عنوان لازم است", "عنوان بازهٔ ضروری را وارد کن.")
+            return
+        if not self.time_range.is_valid():
+            notify(self, "بازهٔ نامعتبر", self.time_range.error_text())
+            return
+        self.accept()
 
     def value(self, routine_id: int | None = None) -> Routine:
-        start = self.start_edit.time()
-        end = self.end_edit.time()
         return Routine(
             id=routine_id,
             title=self.title_edit.text().strip(),
             kind=RoutineKind(self.kind_combo.currentData()),
-            start_minute=start.hour() * 60 + start.minute(),
-            end_minute=end.hour() * 60 + end.minute(),
+            start_minute=self.time_range.start_minutes(),
+            end_minute=self.time_range.end_minutes(),
             weekdays=frozenset(i for i, item in enumerate(self.day_checks) if item.isChecked()),
             scope=RoutineScope(self.scope_combo.currentData()),
             counts_as_study=self.study_check.isChecked(),

@@ -149,11 +149,34 @@ def _routine_applies(routine: Routine, date: _dt.date) -> bool:
     return _routine_applies_weekday(routine, weekday_index(date))
 
 
+def event_applies_on(
+    event: FixedEvent,
+    date: _dt.date,
+    anchor: Optional[_dt.date] = None,
+) -> bool:
+    """آیا این رویداد در آن روز واقعاً اتفاق می‌افتد؟
+
+    ``every_weeks=2`` یعنی «هر دو هفته یک بار»؛ بدون این بررسی، چرخهٔ دو
+    هفته‌ای هر هفته زمان می‌بست و برنامهٔ هفته‌های میانی بی‌دلیل پر می‌شد.
+
+    اگر ``anchor`` داده شود (تاریخی که کاربر چرخه را تعریف کرده) شمارش از
+    همان روز آغاز می‌شود و قابل پیش‌بینی است. بدون anchor، شمارهٔ هفتهٔ ISO
+    مبنا می‌شود — قطعی ولی برای کاربر نامفهوم، پس anchor همیشه بهتر است.
+    """
+    weeks = max(1, int(getattr(event, "every_weeks", 1) or 1))
+    if weeks <= 1:
+        return True
+    if anchor is not None:
+        return ((date - anchor).days // 7) % weeks == 0
+    return date.isocalendar()[1] % weeks == 0
+
+
 def collect_fixed_intervals(
     date: _dt.date,
     fixed_events: Sequence[FixedEvent],
     routines: Sequence[Routine],
     exceptions: Sequence=(),
+    anchor: Optional[_dt.date] = None,
 ) -> list[Interval]:
     """بازه‌های محافظت‌شدهٔ یک روز.
 
@@ -168,6 +191,8 @@ def collect_fixed_intervals(
 
     for event in fixed_events:
         if event.weekday != weekday or event.is_recorded:
+            continue
+        if not event_applies_on(event, date, anchor):
             continue
         exc = exception_map.get(event.id)
         if exc is not None and exc.cancelled:
@@ -238,6 +263,7 @@ def compute_capacity(
     energy_level: int = 2,
     settings: Settings | None = None,
     focus_factor: float | None = None,
+    anchor: Optional[_dt.date] = None,
 ) -> CapacityBreakdown:
     """ظرفیت واقعی یک روز را محاسبه می‌کند.
 
@@ -251,6 +277,7 @@ def compute_capacity(
         energy_level: خودگزارشی انرژی ۱..۳.
         settings: تنظیمات برنامه.
         focus_factor: ضریب تمرکز؛ اگر داده نشود از تنظیمات/میانهٔ تاریخچه خوانده می‌شود.
+        anchor: تاریخ شروع شمارش تناوب رویدادهای «هر چند هفته یک بار».
     """
     settings = settings or Settings()
     cap_settings: CapacitySettings = settings.capacity
@@ -258,7 +285,9 @@ def compute_capacity(
     segments = awake_segments(wake_minute, sleep_minute)
     awake_total = sum(end - start for start, end in segments)
 
-    protected = collect_fixed_intervals(date, fixed_events, routines, exceptions)
+    protected = collect_fixed_intervals(
+        date, fixed_events, routines, exceptions, anchor
+    )
     covered = merge_intervals(protected)
     covered_total = sum(
         _intersect_minutes(interval, segments) for interval in covered
