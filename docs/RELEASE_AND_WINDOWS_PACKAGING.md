@@ -38,12 +38,12 @@ packaging/output/K2/
 SHA-256:
 
 ```
-f6b07953a4a5ec963d9a5624ff964adbb0ec031249322a15c70b23d2effb1ec3  K2.exe
-c8ec0507a17719d691aea458302cc4e68953894a2e0b42450c1b4329e8a8f910  K2-windows-x64.zip
-5601f8c4403d4f08ce4ccbab671002f215b03e493035ecff2b50308f7fd792f3  K2-Setup-1.0.0.exe
+c6baeea3df963f7bd473866a32bd664eddcd1291dec8b0c9f7fe1a4f9eb297bc  K2.exe
+e076b6691a3d8df5095de067c506d869aff8636c2ea4b980f17b32637ef97594  K2-windows-x64.zip
+0437d80537902ac6b1a74c051233d0c8b46f6004888f09bdd6101c581ce133c4  K2-Setup-1.0.0.exe
 ```
 
-نسخهٔ ساخت محلی در `release/K2-windows-x64.zip` می‌ماند (خروجی در `.gitignore` است). برای درخواست دانلود مستقیم کاربر، همان بسته در `downloads/K2-windows-x64.zip` نیز در مخزن ثبت شده است (۵۷٬۳۹۲٬۷۷۳ بایت؛ حدود ۴۵ MiB). این آرشیو شامل `K2.exe` و `_internal/` است؛ فایل EXE به‌تنهایی اجراشدنی نیست.
+نسخهٔ ساخت محلی در `release/K2-windows-x64.zip` می‌ماند (خروجی در `.gitignore` است). برای درخواست دانلود مستقیم کاربر، همان بسته در `downloads/K2-windows-x64.zip` نیز در مخزن ثبت شده است (۵۷٬۳۹۲٬۸۸۷ بایت؛ حدود ۴۵ MiB). این آرشیو شامل `K2.exe` و `_internal/` است؛ فایل EXE به‌تنهایی اجراشدنی نیست.
 
 ---
 
@@ -279,7 +279,7 @@ OutputBaseFilename=K2-Setup-1.0.0
 2. `Verify the installer is a standard Windows package` — امضای `MZ` و متادیتای `ProductName`
 3. `Upload the installer` — artifact + ضمیمهٔ release
 
-Inno Setup 6.7.1 روی `windows-latest` از پیش نصب است و نیازی به نصب دستی نیست. نصب‌کنندهٔ ساخته‌شده در `downloads/K2-Setup-1.0.0.exe` نیز در مخزن ثبت شده است (۳۹٬۳۴۳٬۵۰۶ بایت) تا دانلود مستقیم کار کند.
+Inno Setup 6.7.1 روی `windows-latest` از پیش نصب است و نیازی به نصب دستی نیست. نصب‌کنندهٔ ساخته‌شده در `downloads/K2-Setup-1.0.0.exe` نیز در مخزن ثبت شده است (۳۹٬۳۴۳٬۵۱۲ بایت) تا دانلود مستقیم کار کند.
 
 ### ۸.۴ ساخت محلی
 
