@@ -7,7 +7,6 @@ import datetime as _dt
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QComboBox,
-    QDateTimeEdit,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -28,7 +27,7 @@ from ...domain.enums import SessionKind
 from ...domain.models import StudySession, StudySessionRevision
 from ...jdate import format_datetime, format_jalali, format_minutes, format_number
 from ...service import AdvisorService
-from ..widgets import Card, info_box, notify, warn_box
+from ..widgets import Card, LatinDateTimeField, info_box, notify, warn_box
 
 SESSION_KINDS = [
     (SessionKind.STUDY, "مطالعهٔ مستقل"),
@@ -75,12 +74,10 @@ class ManualSessionDialog(QDialog):
             self.topic_combo.addItem(f"{topic.subject_name} · {topic.name}", topic.id)
         form.addRow("مبحث:", self.topic_combo)
 
-        self.start_edit = QDateTimeEdit()
-        self.start_edit.setCalendarPopup(True)
-        self.start_edit.setDisplayFormat("yyyy-MM-dd HH:mm")
-        self.end_edit = QDateTimeEdit()
-        self.end_edit.setCalendarPopup(True)
-        self.end_edit.setDisplayFormat("yyyy-MM-dd HH:mm")
+        # LatinDateTimeField: تاریخ میلادی و ساعت ۲۴ ساعته با اعداد لاتین.
+        # QDateTimeEdit خام زیر locale فارسی «۴۵:۱۹ ۲۷-۱۰-۲۰۲۶» نشان می‌داد.
+        self.start_edit = LatinDateTimeField()
+        self.end_edit = LatinDateTimeField()
         now = _dt.datetime.now().replace(second=0, microsecond=0)
         self.start_edit.setDateTime(now - _dt.timedelta(hours=1))
         self.end_edit.setDateTime(now)
