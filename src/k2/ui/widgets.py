@@ -12,7 +12,7 @@ from __future__ import annotations
 import datetime as _dt
 from typing import Optional
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QDate, QDateTime, QLocale, Qt, Signal, QTime
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QDialogButtonBox,
@@ -20,13 +20,13 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMessageBox,
-    QTimeEdit,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
 from ..jdate import persian_digits
-from .theme import COLORS, tone_colors
+from .theme import COLORS, base_font, tone_colors
 
 
 def _repolish(widget: QWidget) -> None:
@@ -216,13 +216,186 @@ def format_duration(minutes: int) -> str:
     return f"{hours} ساعت و {rest} دقیقه"
 
 
+# ارقام فارسی و عربی که کاربر ممکن است تایپ کند، به لاتین برگردانده می‌شوند.
+_LATIN_DIGITS = str.maketrans(
+    "۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩",
+    "01234567890123456789",
+)
+
+
+class _LatinSpinBox(QSpinBox):
+    """جعبهٔ چرخش که بی‌توجه به زبان سیستم همیشه اعداد لاتین می‌دهد.
+
+    ``QSpinBox`` و ``QTimeEdit`` استاندارد مقدار را با ``QLocale::toString``
+    رسم می‌کنند؛ روی فارسی «۰۷:۳۰» می‌شود و کاربری که به اعداد لاتین عادت
+    دارد باید معنی شود. این زیرکلاس همان دو متبدل متن را می‌گیرد تا خروجی
+    همیشه ``%02d`` لاتین باشد — هم برای نمایش و هم برای آنچه کاربر تایپ
+    می‌کند (اگر ارقام فارسی بزند هم پذیرفته و لاتین می‌شود).
+    """
+
+    def __init__(self, low: int, high: int, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setRange(low, high)
+        self.setDisplayIntegerBase(10)
+        # بدون پیچش: غلتیدن ۲۳ به ۰ باعث می‌شد کاربر ناخواسته ساعت اشتباه بگذارد.
+        self.setWrapping(False)
+        self.setKeyboardTracking(False)
+        self.setAccelerated(True)
+        self.setAlignment(Qt.AlignCenter)
+
+    def textFromValue(self, value: int) -> str:  # noqa: N802 - Qt naming
+        return f"{value:02d}"
+
+    def valueFromText(self, text: str) -> int:  # noqa: N802 - Qt naming
+        cleaned = text.translate(_LATIN_DIGITS)
+        digits = "".join(ch for ch in cleaned if ch.isdigit())
+        try:
+            value = int(digits)
+        except ValueError:
+            return self.minimum()
+        return max(self.minimum(), min(self.maximum(), value))
+
+
+class _TimeField(QWidget):
+    """یک کادر ساعت: دو جعبهٔ چرخش (ساعت و دقیقه) با جداکنندهٔ دونقطه.
+
+    چرا ``QTimeEdit`` کنار گذاشته شد:
+
+    * اعداد را با locale سیستم می‌کشید؛ فارسی «۰۷:۳۰» می‌شد.
+    * در ``QTimeEdit`` کل رشته یک قلم واحد دارد، پس نمی‌شد ساعت را از دقیقه
+      پررنگ/بزرگ‌تر کرد تا در یک نگاه جدا شود.
+    * دو جعبهٔ ۰–۲۳ و ۰–۵۹ قالب ۲۴ ساعته را ساختاراً تضمین می‌کنند، نه فقط
+      با یک قالب نمایشی؛ امکان «۱۸:۰۰ بعدازظهر» بودن وجود ندارد.
+
+    ساعت یک درجه بزرگ‌تر و پررنگ‌تر از دقیقه است.
+    """
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        # اعداد همیشه چپ‌به‌راست می‌مانند حتی وقتی پنجرهٔ کل راست‌به‌چپ است.
+        self.setLayoutDirection(Qt.LeftToRight)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(1)
+
+        self.hour_spin = _LatinSpinBox(0, 23)
+        self.minute_spin = _LatinSpinBox(0, 59)
+
+        self.colon = QLabel(":")
+        self.colon.setObjectName("timeColon")
+
+        # قلم را با helper برنامه می‌سازیم تا خانوادهٔ Vazirmatn و فایل وزن
+        # درست انتخاب شود، حتی اگر هنوز تم روی پنجره اعمال نشده باشد.
+        base = base_font()
+        size = base.pointSize() or 10
+        hour_font = base_font(size + 2, 700)
+        minute_font = base_font(size, 400)
+        self.hour_spin.setFont(hour_font)
+        self.colon.setFont(hour_font)
+        self.minute_spin.setFont(minute_font)
+
+        for spin in (self.hour_spin, self.minute_spin):
+            spin.setFixedWidth(62)
+
+        layout.addWidget(self.hour_spin)
+        layout.addWidget(self.colon)
+        layout.addWidget(self.minute_spin)
+
+    def minutes(self) -> int:
+        return self.hour_spin.value() * 60 + self.minute_spin.value()
+
+    def set_minutes(self, minutes: int) -> None:
+        total = int(minutes) % 1440
+        self.hour_spin.setValue(total // 60)
+        self.minute_spin.setValue(total % 60)
+
+    def setToolTip(self, text: str) -> None:  # noqa: N802 - Qt naming
+        for spin in (self.hour_spin, self.minute_spin):
+            spin.setToolTip(text)
+
+
+class LatinDateTimeField(QWidget):
+    """کادر تاریخ‌وزمان: سال/ماه/روز و ساعت/دقیقه، همه با اعداد لاتین.
+
+    چرا ترکیبی و نه ``QDateTimeEdit``: پنجرهٔ برنامه راست‌به‌چپ است و هر سه
+    ویرایشگر تاریخ/ساعتِ Qt متن خودشان را راست‌به‌چپ رندر می‌کنند؛
+    «2026-10-27 19:45» می‌شود «۴۵:۱۹ ۲۷-۱۰-۲۰۲۶». دادن locale لاتین فقط
+    ارقام را درست می‌کند («45:19 27-10-2026»)، تراضی گروه‌ها نه.
+
+    جعبه‌های جدا هر کدام فقط ارقام دارند و ارقام حتی در پاراگراف
+    راست‌به‌چپ چپ‌به‌راست می‌مانند، پس ترتیب حفظ می‌شود. سال/ماه/روز
+    میلادی است چون همان چیزی است که پایگاه داده ذخیره می‌کند؛ نمایشِ
+    جلالی همان‌جایی که باید (با ``format_datetime``) انجام می‌شود.
+    """
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setLayoutDirection(Qt.LeftToRight)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(3)
+
+        self.year_spin = _LatinSpinBox(1900, 2200)
+        self.month_spin = _LatinSpinBox(1, 12)
+        self.day_spin = _LatinSpinBox(1, 31)
+        self.time_field = _TimeField()
+
+        for spin in (self.year_spin, self.month_spin, self.day_spin):
+            spin.setFixedWidth(62)
+
+        layout.addWidget(self.year_spin)
+        layout.addWidget(QLabel("/"))
+        layout.addWidget(self.month_spin)
+        layout.addWidget(QLabel("/"))
+        layout.addWidget(self.day_spin)
+        layout.addSpacing(10)
+        layout.addWidget(self.time_field)
+
+        # اگر ماه یا سال عوض شد و روز از طول ماه بیشتر بود، پایین می‌آید؛
+        # وگرنه کاربر «۳۱ فوریه» می‌ساخت و مقدار بی‌صدا جا می‌افتاد.
+        self.month_spin.valueChanged.connect(self._clamp_day)
+        self.year_spin.valueChanged.connect(self._clamp_day)
+
+        self.setToolTip("تاریخ میلادی و ساعت ۲۴ ساعته، با اعداد لاتین")
+
+    # ------------------------------------------------------------------
+
+    def _clamp_day(self) -> None:
+        days = QDate(self.year_spin.value(), self.month_spin.value(), 1).daysInMonth()
+        if self.day_spin.value() > days:
+            self.day_spin.setValue(days)
+
+    def dateTime(self) -> QDateTime:
+        year, month = self.year_spin.value(), self.month_spin.value()
+        day = min(self.day_spin.value(), QDate(year, month, 1).daysInMonth())
+        return QDateTime(
+            QDate(year, month, day),
+            QTime(self.time_field.hour_spin.value(), self.time_field.minute_spin.value()),
+        )
+
+    def setDateTime(self, value: "QDateTime | _dt.datetime") -> None:
+        """``QDateTime`` یا ``datetime`` پایتون را می‌پذیرد.
+
+        ``ManualSessionDialog`` مقدار اولیه را با ``datetime`` پایتون
+        می‌گذارد و آزمون‌ها ``QDateTime`` پاس می‌دهند؛ هر دو باید کار کنند.
+        ``datetime`` بی‌توجه به منطقهٔ زمانی یعنی زمان محلی، پس مستقیم
+        استفاده می‌شود.
+        """
+        local = value.toLocalTime().toPython() if isinstance(value, QDateTime) else value
+        self.year_spin.setValue(local.year)
+        self.month_spin.setValue(local.month)
+        self.day_spin.setValue(local.day)
+        self.time_field.set_minutes(local.hour * 60 + local.minute)
+
+
 class TimeRangeInput(QWidget):
     """ورودی بازهٔ ساعت با اعتبارسنجی زنده.
 
-    ``QTimeEdit`` خالی هیچ چیزی دربارهٔ *ترتیب* شروع و پایان نمی‌گوید؛
-    کاربر می‌توانست «۱۹:۰۰ تا ۱۵:۰۰» را بپذیرد و بعد در پایگاه داده یا
-    در پنجرهٔ تعارض، بازه‌ای می‌دید که معنایی ندارد. این ویجت همان دو
-    کادر را نگه می‌دارد اما سه چیز اضافه می‌کند:
+    کادرهای ساعت با دو جعبهٔ چرخش جدا (ساعت و دقیقه) ساخته شده‌اند تا
+    اعداد همیشه لاتین بمانند و ساعت از دقیقه پررنگ/بزرگ‌تر و قابل تفکیک
+    باشد؛ قالب ۲۴ ساعته هم با بازهٔ ۰–۲۳ ساختاری است، نه فقط نمایشی.
+
+    جدا از آن، این ویجت سه چیز اضافه می‌کند:
 
     * مدتِ بازه هر لحظه کنار کادرها دیده می‌شود («۲ ساعت»)،
     * اگر پایان پیش از شروع باشد، خطای قرمز **جای همان کادر** می‌آید،
@@ -253,19 +426,11 @@ class TimeRangeInput(QWidget):
         layout.setSpacing(8)
 
         self.start_label = QLabel(start_label)
-        self.start_edit = QTimeEdit()
+        self.start_field = _TimeField()
         self.sep_label = QLabel(end_label)
-        self.end_edit = QTimeEdit()
-        for edit in (self.start_edit, self.end_edit):
-            edit.setDisplayFormat("HH:mm")
-            # بدون پیچش: غلتیدن ۰۰:۰۰ به ۲۳:۵۹ باعث می‌شد کاربر ناخواسته
-            # بازه‌ای بسازد که شب را می‌پیچد.
-            edit.setWrapping(False)
-            edit.setCurrentSection(QTimeEdit.HourSection)
-            edit.setAlignment(Qt.AlignCenter)
-            edit.setMinimumWidth(84)
-            edit.setMaximumWidth(96)
-            edit.setToolTip("قالب ۲۴ ساعته، مثلاً ۰۷:۳۰ یا ۱۹:۰۰")
+        self.end_field = _TimeField()
+        for field in (self.start_field, self.end_field):
+            field.setToolTip("قالب ۲۴ ساعته با اعداد لاتین، مثلاً 07:30 یا 19:00")
 
         self.duration_label = QLabel()
         self.duration_label.setObjectName("muted")
@@ -274,14 +439,19 @@ class TimeRangeInput(QWidget):
         self.duration_label.setFont(duration_font)
 
         layout.addWidget(self.start_label)
-        layout.addWidget(self.start_edit)
+        layout.addWidget(self.start_field)
         layout.addWidget(self.sep_label)
-        layout.addWidget(self.end_edit)
+        layout.addWidget(self.end_field)
         layout.addWidget(self.duration_label)
         layout.addStretch(1)
 
-        self.start_edit.timeChanged.connect(self._revalidate)
-        self.end_edit.timeChanged.connect(self._revalidate)
+        for spin in (
+            self.start_field.hour_spin,
+            self.start_field.minute_spin,
+            self.end_field.hour_spin,
+            self.end_field.minute_spin,
+        ):
+            spin.valueChanged.connect(self._revalidate)
         self.set_range(start, end)
 
     # ------------------------------------------------------------------
@@ -290,29 +460,27 @@ class TimeRangeInput(QWidget):
 
     def set_range(self, start: str | int, end: str | int) -> None:
         """مقدار اولیه/جدید را می‌گذارد (``HH:mm`` یا دقیقه از نیمه‌شب)."""
-        self.start_edit.setTime(self._to_qtime(start))
-        self.end_edit.setTime(self._to_qtime(end))
+        self.start_field.set_minutes(self._to_minutes(start))
+        self.end_field.set_minutes(self._to_minutes(end))
 
     @staticmethod
-    def _to_qtime(value: str | int) -> _dt.time:
+    def _to_minutes(value: str | int) -> int:
         if isinstance(value, str):
             hour, _, minute = value.partition(":")
-            return _dt.time(int(hour), int(minute or 0))
-        return _dt.time((int(value) % 1440) // 60, int(value) % 60)
+            return int(hour) * 60 + int(minute or 0)
+        return int(value) % 1440
 
     def start_minutes(self) -> int:
-        value = self.start_edit.time()
-        return value.hour() * 60 + value.minute()
+        return self.start_field.minutes()
 
     def end_minutes(self) -> int:
-        value = self.end_edit.time()
-        return value.hour() * 60 + value.minute()
+        return self.end_field.minutes()
 
     def set_start_minutes(self, minutes: int) -> None:
-        self.start_edit.setTime(self._to_qtime(int(minutes)))
+        self.start_field.set_minutes(int(minutes))
 
     def set_end_minutes(self, minutes: int) -> None:
-        self.end_edit.setTime(self._to_qtime(int(minutes)))
+        self.end_field.set_minutes(int(minutes))
 
     # ------------------------------------------------------------------
     # اعتبار
