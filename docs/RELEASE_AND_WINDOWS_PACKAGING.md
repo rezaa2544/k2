@@ -218,15 +218,40 @@ OutputBaseFilename=K2-Setup-1.0.0
 | قابلیت | پیاده‌سازی |
 |---|---|
 | نصب در Program Files | `DefaultDirName={autopf}\...` + `PrivilegesRequired=admin` |
-| فهرست Start-Menu | `[Icons]` با `{group}` + `{commonprograms}` |
+| صفحهٔ توافق‌نامهٔ استفاده | `LicenseFile=EULA.txt` — پذیرش صریح کاربر |
+| صفحهٔ پوشهٔ مقصد | پیش‌فرض Inno (غیرفعال نشده) |
+| صفحهٔ پوشهٔ منوی Start | `DisableProgramGroupPage=no` |
+| صفحهٔ گونهٔ نصب | `[Types]` با «نصب کامل» و «نصب دلخواه» (`iscustom`) |
+| اجزای قابل انتخاب | `[Components]` — برنامه `fixed`، راهنمای کاربر اختیاری |
+| کارهای افزودنی | `[Tasks]` — میان‌بر میزکار (per-user/common) + `AllowNoIcons=yes` |
+| فهرست Start-Menu | `[Icons]` با `{group}` (برنامه، راهنما، حذف نصب) |
 | میان‌بر میزکار | `[Tasks]` اختیاری (per-user و common) |
-| ثبت در Add/Remove Programs | خودکار توسط Inno Setup با `AppId` ثابت |
-| حذف استاندارد | `{uninstallexe}` + `UninstallDisplayIcon` |
+| ثبت در Add/Remove Programs | خودکار توسط Inno Setup با `AppId` ثابت + `AppComments`/`AppContact`/`AppPublisher`/`AppVersion` |
+| حذف استاندارد | `{uninstallexe}` + `UninstallDisplayIcon` + `UninstallDisplayName` |
+| ارتقای تمیز | `[InstallDelete]` پوشهٔ مستندات کهنه را پیش از کپی پاک می‌کند |
 | جلوگیری از نصب هم‌زمان | `AppMutex` (mutex واقعی در `src/k2/app.py`) + `CloseApplications=yes` |
-| فارسی و راست‌چین | `packaging/innosetup/Languages/Farsi.isl` با `RightToLeft=yes` |
+| فارسی و راست‌چین | `packaging/innosetup/Languages/Farsi.isl` کامل با `RightToLeft=yes` |
 | حفظ دادهٔ کاربر | `[UninstallDelete]` فقط `{app}` را پاک می‌کند |
 
-#### ۸.۲.۱ قفل نسخهٔ یگانه (single instance)
+#### ۸.۲.۰ فایل زبان فارسی کامل
+
+`Farsi.isl` همهٔ پیام‌های صفحه‌هایی را که این نصب‌کننده نشان می‌دهد پوشش
+می‌دهد (۱۸۰ پیام). چرا لازم بود: Inno Setup برای هر پیامی که در فایل زبان
+نباشد **خودکار به انگلیسی برمی‌گردد**؛ نتیجه نصب‌کننده‌ای بود که بعضی
+صفحه‌ها فارسی و بعضی انگلیسی‌اند و برای کاربر «ناقص» به نظر می‌رسید.
+تست `test_persian_language_file_covers_every_wizard_page_shown` دقیقاً همان
+فهرست پیام‌های موردنیاز را از روی خود `.iss` می‌سازد و ترجمه‌نشده‌ها را
+می‌گیرد، پس اگر صفحهٔ تازه‌ای اضافه شود تست می‌شکند.
+
+#### ۸.۲.۱ راهنمای کاربر نصب‌شده (چرا HTML و نه Markdown)
+
+`packaging/USER_GUIDE.html` یک فایل خودبسندهٔ فارسی و راست‌چین است که در
+`{app}\docs` نصب می‌شود، میان‌بر منوی Start می‌گیرد و تیک صفحهٔ پایان را
+دارد. عمداً Markdown نیست: ویندوز به‌صورت پیش‌فرض برنامه‌ای برای `.md`
+ندارد و باز کردنش می‌شکند، ولی HTML را همیشه مرورگر پیش‌فرض باز می‌کند.
+فایل هیچ پیوند بیرونی و هیچ جاوااسکریپتی ندارد تا آفلاین خوانده شود.
+
+#### ۸.۲.۲ قفل نسخهٔ یگانه (single instance)
 
 نصب‌کننده با `AppMutex=K2KonkurAdvisorMutex` می‌پرسد «برنامه باز است؟». این
 اعلام فقط وقتی معنا دارد که خود برنامه همان mutex را بسازد؛ پس

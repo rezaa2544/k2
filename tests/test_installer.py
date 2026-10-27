@@ -24,6 +24,8 @@ SPEC = ROOT / "k2.spec"
 WORKFLOW = ROOT / ".github" / "workflows" / "build-windows.yml"
 README = ROOT / "README.md"
 PACKAGER = ROOT / "packaging" / "create_windows_download.py"
+EULA = ROOT / "packaging" / "EULA.txt"
+USER_GUIDE = ROOT / "packaging" / "USER_GUIDE.html"
 
 GUID = re.compile(r"^\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}$")
 
@@ -39,12 +41,17 @@ def _packager_module():
 
 _DEFINE = re.compile(r"^\s*#define\s+(\w+)\s+(.*?)\s*$")
 _INLINE = re.compile(r"\{#(\w+)\}")
+# بخش‌هایی که از شکل پارامتری «Name: x; Description: y» استفاده می‌کنند،
+# نه «key=value». اگر بخشی اینجا نباشد، تجزیه‌ساز آن را خالی می‌بیند و
+# تست «بخش خالی» کاذباً می‌شکند.
 _PARAM_SECTIONS = {
     "Files",
     "Icons",
     "Tasks",
     "Run",
     "Languages",
+    "Types",
+    "Components",
     "UninstallDelete",
     "InstallDelete",
 }
@@ -106,6 +113,28 @@ def _iss_sections(text: str) -> dict[str, dict[str, str]]:
             key, value = line.split("=", 1)
             sections[current][key.strip().lower()] = value.strip()
     return sections
+
+
+def _iss_section_body(script: str, name: str) -> str:
+    """بدنهٔ یک بخش ISS را برمی‌گرداند، بدون کامنت‌ها.
+
+    چرا لازم است: ``script.split("[InstallDelete]")[1].split("[")[0]`` روی
+    کامنتی که نام بخش دیگری را می‌آورد (مثل توضیح «بخش [Code] حذف شده»)
+    زودتر بریده می‌شود و بخش را خالی می‌بیند. این تابع خط‌به‌خط کار می‌کند.
+    """
+    lines = script.splitlines()
+    out: list[str] = []
+    inside = False
+    for raw in lines:
+        stripped = raw.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            if inside:
+                break
+            inside = stripped[1:-1].lower() == name.lower()
+            continue
+        if inside and stripped and not stripped.startswith(";"):
+            out.append(stripped)
+    return "\n".join(out)
 
 
 def _app_id(text: str) -> str:
@@ -662,9 +691,465 @@ def test_uninstall_delete_only_removes_the_install_folder():
     پوشهٔ برنامه. حذف نصب باید فقط فایل‌های نصب‌شده را پاک کند.
     """
     script = (ROOT / "packaging" / "k2_installer.iss").read_text(encoding="utf-8")
-    section = script.split("[UninstallDelete]")[1]
+    section = _iss_section_body(script, "UninstallDelete")
     assert "{app}" in section, "حذف نصب پوشهٔ برنامه را هدف نگرفته"
     for forbidden in ("{localappdata}", "{userappdata}", "K2_DATA_DIR", "k2.db"):
         assert forbidden not in section, (
             f"حذف نصب دادهٔ کاربر را هدف گرفته: {forbidden}"
         )
+
+
+# --------------------------------------------------------------------------
+# ۴) کامل‌بودن نصب‌کننده: صفحه‌ها، اجزا و متادیتای استاندارد
+#
+# چرا این بخش اضافه شد: کاربر گفت «فایل نصبی کامل نیست؛ باید کلا در سیستم
+# نصب بشه و کاملاً استاندارد مثل همهٔ نصب‌کننده‌های ویندوز». نسخهٔ قبلی فقط
+# فایل‌ها را کپی و میان‌بر می‌ساخت؛ صفحهٔ توافق‌نامه، انتخاب پوشهٔ منوی Start،
+# گونهٔ نصب و اجزای اختیاری نداشت. این تست‌ها همان کمبودها را می‌بندند.
+# --------------------------------------------------------------------------
+
+
+def test_installer_shows_a_license_agreement_page():
+    """صفحهٔ پذیرش توافق‌نامه، مثل هر نصب‌کنندهٔ استاندارد.
+
+    بدون ``LicenseFile``، Inno صفحهٔ «توافق‌نامهٔ استفاده» را نشان نمی‌دهد و
+    کاربر هیچ شرط صریحی نمی‌پذیرد.
+    """
+    setup = _iss_sections(ISS.read_text(encoding="utf-8"))["Setup"]
+    assert setup.get("licensefile", "").strip(), (
+        "LicenseFile تنظیم نشده؛ صفحهٔ توافق‌نامه دیده نمی‌شود"
+    )
+    assert EULA.exists(), "فایل توافق‌نامه وجود ندارد"
+    text = EULA.read_text(encoding="utf-8")
+    assert len(text) > 1500, "متن توافق‌نامه کوتاه است و واقعی نیست"
+    # باید فارسی و راست‌چین باشد و بندهای اصلی را داشته باشد.
+    for must in ("مالکیت", "ضمانت", "حذف نصب", "داده"):
+        assert must in text, f"توافق‌نامه بند «{must}» را ندارد"
+
+
+def test_installer_lets_the_user_choose_the_start_menu_folder():
+    """کاربر حق دارد پوشهٔ میان‌برهای منوی Start را عوض کند."""
+    setup = _iss_sections(ISS.read_text(encoding="utf-8"))["Setup"]
+    assert setup.get("disableprogramgrouppage", "").lower() != "yes", (
+        "DisableProgramGroupPage=yes صفحهٔ انتخاب پوشهٔ منوی Start را حذف می‌کند"
+    )
+
+
+def test_installer_lets_the_user_decline_icons():
+    """کاربر بتواند میان‌بر نخواهد؛ AllowNoIcons=no این حق را می‌گیرد."""
+    setup = _iss_sections(ISS.read_text(encoding="utf-8"))["Setup"]
+    assert setup.get("allownoicons", "").lower() == "yes", (
+        "AllowNoIcons باید yes باشد تا کاربر بتواند میان‌بر نخواهد"
+    )
+    # ولی میان‌برهای Start Menu نباید به تسک وابسته شوند، وگرنه در نصب
+    # خاموش ساخته نمی‌شوند.
+    icons = ISS.read_text(encoding="utf-8").split("[Icons]")[1].split("[")[0]
+    for line in icons.splitlines():
+        if line.strip().startswith("{group}") and "Tasks:" in line:
+            pytest.fail(f"میان‌بر منوی Start به تسک وابسته است: {line.strip()}")
+
+
+def test_installer_offers_installation_types_including_custom():
+    """گونهٔ نصب (کامل/دلخواه) باید انتخاب شود، مثل نصب‌کننده‌های استاندارد."""
+    sections = _iss_sections(ISS.read_text(encoding="utf-8"))
+    types = sections.get("Types", {})
+    assert types, "بخش [Types] خالی است؛ صفحهٔ گونهٔ نصب دیده نمی‌شود"
+    flags = " ".join(types.values())
+    assert "iscustom" in flags.lower(), (
+        "هیچ گونهٔ نصبِ iscustom نیست؛ کاربر نمی‌تواند اجزا را دستی انتخاب کند"
+    )
+
+
+def test_installer_offers_an_optional_documentation_component():
+    """اجزای قابل انتخاب: برنامه اجباری، مستندات اختیاری."""
+    sections = _iss_sections(ISS.read_text(encoding="utf-8"))
+    components = sections.get("Components", {})
+    assert components, "بخش [Components] خالی است"
+    joined = " ".join(f"{k} {v}" for k, v in components.items())
+    assert "fixed" in joined.lower(), (
+        "برنامهٔ اصلی باید fixed باشد تا کاربر نتواند آن را بردارد"
+    )
+    # یک جزء اختیاریِ واقعی باید باشد تا صفحهٔ گونهٔ نصب معنا داشته باشد.
+    assert any(
+        "fixed" not in v.lower() for v in components.values()
+    ), "هیچ جزء اختیاری وجود ندارد؛ صفحهٔ گونهٔ نصب بی‌معنا است"
+
+
+def test_installer_registers_a_complete_add_remove_programs_entry():
+    """ورودی «برنامه‌ها و قابلیت‌ها» باید کامل باشد، نه فقط یک نام."""
+    setup = _iss_sections(ISS.read_text(encoding="utf-8"))["Setup"]
+    for key in ("appcomments", "appcontact", "apppublisher", "appversion"):
+        assert setup.get(key, "").strip(), f"{key} برای ورودی رجیستری لازم است"
+    assert setup.get("uninstalldisplayname", "").strip()
+    assert setup.get("uninstalldisplayicon", "").strip()
+    assert setup.get("createuninstallregkey", "").lower() == "yes"
+    # آیکن ورودی رجیستری باید به مسیر *نصب‌شده* اشاره کند، نه به فایل نصبی.
+    assert "{app}" in setup.get("uninstalldisplayicon", ""), (
+        "UninstallDisplayIcon باید به {app} اشاره کند"
+    )
+
+
+def test_installer_cleans_stale_files_on_upgrade():
+    """``[InstallDelete]`` باید باشد تا فایل‌های کهنهٔ نسخهٔ قبل نمانند."""
+    script = ISS.read_text(encoding="utf-8")
+    assert "[InstallDelete]" in script, (
+        "بدون [InstallDelete]، فایل‌های نسخهٔ قبل روی دیسک می‌مانند"
+    )
+    section = _iss_section_body(script, "InstallDelete")
+    assert any("Type:" in ln for ln in section.splitlines()), (
+        "[InstallDelete] واقعاً چیزی حذف نمی‌کند"
+    )
+
+
+def test_installed_documentation_is_html_so_windows_can_open_it():
+    """راهنمای نصب‌شده باید HTML باشد، نه Markdown.
+
+    ویندوز به‌صورت پیش‌فرض برنامه‌ای برای ``.md`` ندارد؛ باز کردنش می‌شکند.
+    HTML را همیشه مرورگر پیش‌فرض باز می‌کند.
+    """
+    files = _iss_section_body(ISS.read_text(encoding="utf-8"), "Files")
+    assert "USER_GUIDE.html" in files, "راهنمای کاربر به‌عنوان جزء نصب نمی‌شود"
+    assert ".md" not in files, (
+        "فایل .md نصب می‌شود؛ ویندوز بی‌برنامهٔ مرتبط آن را باز نمی‌کند"
+    )
+    assert USER_GUIDE.exists()
+    html = USER_GUIDE.read_text(encoding="utf-8")
+    assert html.lstrip().lower().startswith("<!doctype html")
+    assert 'lang="fa"' in html and 'dir="rtl"' in html, "راهنما باید فارسی و راست‌چین باشد"
+    # باید واقعاً چیزی بگوید، نه یک صفحهٔ خالی.
+    for must in ("راه‌اندازی", "پشتیبان", "حذف نصب"):
+        assert must in html, f"راهنمای کاربر بخش «{must}» را ندارد"
+
+
+def test_user_guide_is_self_contained_and_offline():
+    """راهنمای نصب‌شده نباید به اینترنت وابسته باشد."""
+    html = USER_GUIDE.read_text(encoding="utf-8")
+    for pattern in ("https://", "http://", "src=\"http", "href=\"http"):
+        assert pattern not in html, f"راهنما به بیرون ارجاع می‌دهد: {pattern}"
+    # هیچ فونت یا اسکریپت بیرونی هم نباشد.
+    assert "<script" not in html.lower(), "راهنما به جاوااسکریپت وابسته است"
+
+
+def test_persian_language_file_covers_every_wizard_page_shown():
+    """هیچ صفحه‌ای از جادوار نباید به انگلیسی برگردد.
+
+    Inno برای پیامی که در فایل زبان نباشد خودکار به انگلیسی برمی‌گردد؛ نتیجه
+    نصب‌کننده‌ای است که نصفش فارسی و نصفش انگلیسی است. این تست همهٔ پیام‌های
+    صفحه‌هایی را که این نصب‌کننده نشان می‌دهد پوشش می‌دهد.
+    """
+    text = FARSI_ISL.read_text(encoding="utf-8")
+    script = ISS.read_text(encoding="utf-8")
+
+    # صفحه‌هایی که اسکریپت فعال کرده است.
+    setup = _iss_sections(script)["Setup"]
+    required = {
+        "ClickNext", "ClickInstall", "ClickCancel",
+        "WelcomeLabel1", "WelcomeLabel2",
+        "ReadyLabel1", "ReadyLabel2a", "ReadyLabel2b",
+        "InstallingLabel", "FinishedHeadingLabel", "FinishedLabel",
+        "SetupWindowTitle", "SetupAppTitle",
+        "ButtonNext", "ButtonBack", "ButtonInstall", "ButtonCancel",
+        "StatusExtractFiles", "StatusCreateIcons",
+        "ConfirmTitle", "ConfirmUninstall",
+        "ExitSetupTitle", "ExitSetupMessage",
+    }
+    if setup.get("licensefile", "").strip():
+        required |= {
+            "WizardLicense", "LicenseLabel3", "LicenseAccepted", "LicenseNotAccepted",
+        }
+    if "Types" in _iss_sections(script):
+        required |= {
+            "WizardSelectComponents", "SelectComponentsDesc",
+            "SelectComponentsLabel2", "TypesGroupLabel",
+            "ReadyMemoType", "ReadyMemoComponents",
+        }
+    if setup.get("disableprogramgrouppage", "").lower() != "yes":
+        required |= {
+            "WizardSelectProgramGroup", "SelectStartMenuFolderLabel3",
+            "SelectStartMenuFolderBrowseLabel", "NoProgramGroupCheck2",
+        }
+    if setup.get("allownoicons", "").lower() == "yes":
+        required |= {"WizardSelectTasks", "SelectTasksDesc", "SelectTasksLabel2"}
+
+    missing = sorted(k for k in required if f"{k}=" not in text)
+    assert not missing, f"این پیام‌ها ترجمه نشده و کاربر انگلیسی می‌بیند: {missing}"
+
+
+def test_persian_language_file_has_no_empty_or_untranslated_values():
+    """هیچ پیامی نباید خالی یا همان کلید انگلیسی باشد."""
+    text = FARSI_ISL.read_text(encoding="utf-8")
+    messages = text.split("[Messages]")[1]
+    bad = []
+    for line in messages.splitlines():
+        line = line.strip()
+        if not line or line.startswith(";") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if not value.strip():
+            bad.append(key)
+        elif value.strip() == key.strip():
+            bad.append(key)
+    assert not bad, f"این پیام‌ها خالی یا ترجمه‌نشده‌اند: {bad}"
+
+
+def test_readme_describes_the_standard_wizard_pages():
+    """README نباید کمتر از واقعیت نصب‌کننده را توصیف کند.
+
+    قبلاً README فقط «خوش‌آمد → مقصد → نصب» را می‌گفت، در حالی که کاربر
+    نصب‌کننده را «ناقص» دیده بود. توضیح باید با صفحه‌هایی که اسکریپت واقعاً
+    نشان می‌دهد هم‌خوان باشد.
+    """
+    readme = README.read_text(encoding="utf-8")
+    setup = _iss_sections(ISS.read_text(encoding="utf-8"))["Setup"]
+
+    if setup.get("licensefile", "").strip():
+        assert "توافق‌نامه" in readme, "README صفحهٔ توافق‌نامه را توضیح نمی‌دهد"
+    if setup.get("disableprogramgrouppage", "").lower() != "yes":
+        assert "منوی Start" in readme, "README صفحهٔ منوی Start را توضیح نمی‌دهد"
+    if "Types" in _iss_sections(ISS.read_text(encoding="utf-8")):
+        assert "گونهٔ نصب" in readme, "README صفحهٔ گونهٔ نصب را توضیح نمی‌دهد"
+    if setup.get("allownoicons", "").lower() == "yes":
+        assert "میان‌بر میزکار" in readme, "README کارهای افزودنی را توضیح نمی‌دهد"
+    # هشدار SmartScreen باید باشد، وگرنه کاربر فایل را خراب می‌پندارد.
+    assert "SmartScreen" in readme, "README هشدار SmartScreen را توضیح نمی‌دهد"
+
+
+#: همهٔ directiveهای واقعی بخش [Setup] در Inno Setup 6. (Inno این‌ها را
+#: حساس به بزرگی و کوچکی حرف نمی‌بیند.)
+_SETUP_DIRECTIVES = {
+    "allowcancelduringinstall", "allownetworkdrive", "allownoicons",
+    "allowrootdirectory", "allowuncpath", "appcomments", "appcontact",
+    "appcopyright", "appendlicenseconfirmed", "appid", "appmutex",
+    "appname", "apppublisher", "apppublisherurl", "appreadmefile",
+    "appsupportphone", "appsupporturl", "appupdatesurl",
+    "appusermodelid", "appusermodeltoastactivatorclsid", "appvername",
+    "appversion", "architecturesallowed", "architecturesinstallin64bitmode",
+    "backcolor", "backcolor2", "backcolordirection", "backsolid",
+    "changesassociations", "changesenvironment", "closeapplications",
+    "closeapplicationsfilter", "color", "compression", "compressionthreads",
+    "createappdir", "createquicklaunchicon", "createuninstallregkey",
+    "defaultdialogfontname", "defaultdialogfontsize", "defaultdirname",
+    "defaultgroupname", "defaultuserinfoname", "defaultuserinfoorg",
+    "defaultuserinfoserial", "direxistswarning", "disabledirpage",
+    "disablefinishedpage", "disableprogramgrouppage", "disablereadymemo",
+    "disablereadypage", "disablestartupprompt", "disablewelcomepage",
+    "diskclustersize", "diskslicesize", "diskspanning",
+    "dontmergeduplicatefiles", "enabledirdoesntexistwarning", "encryption",
+    "extradiskspaceneeded", "flatcomponentslist", "infoafterfile",
+    "infobeforefile", "internalcompresslevel", "languagedetectionmethod",
+    "licensefile", "licensetext", "lzmaalgorithm", "lzmablocksize",
+    "lzmadictionarysize", "lzmadictionarysize64", "lzmanumblockthreads",
+    "lzmauseseparateprocess", "merged64bitinstallmode",
+    "minversion", "onlybelowversion", "openappuninstall",
+    "outputbasefilename", "outputdir", "outputmanifestfile", "password",
+    "privilegesrequired", "reservebytes", "restartapplications",
+    "restartapplicationsfilter", "restartifneededbyrun", "setupiconfile",
+    "setupmutex", "showcomponentsizes", "showlanguagedialog",
+    "showtasktreelines", "showundisplayablelanguages", "signeduninstaller",
+    "signeduninstallerdir", "slicesize", "solidcompression", "sourcedir",
+    "terminalservicesaware", "timestamprounding", "timestampsinutc",
+    "touchdate", "touchtime", "uninstalldisplayicon", "uninstalldisplayname",
+    "uninstalldisplaysize", "uninstalldisplayversion", "uninstallfilesdir",
+    "uninstalllogmode", "uninstallrestartcomputer", "uninstallstyle",
+    "updateversioninfo", "usepreviousappdir", "usepreviousgroup",
+    "usepreviousprivileges", "useprevioussetuptype", "useprevioustasks",
+    "useprevioususerinfo", "userinfopage", "usesetupldr",
+    "versioninfocompany", "versioninfocopyright",
+    "versioninfodescription", "versioninfooriginalfilename",
+    "versioninfoproductname", "versioninfoproducttextversion",
+    "versioninfotextversion", "versioninfoversion",
+    "wizardimagealphaformat", "wizardimagebackcolor", "wizardimagefile",
+    "wizardimagestretch", "wizardresizable", "wizardsizepercent",
+    "wizardsmallimagebackcolor", "wizardsmallimagefile", "wizardstyle",
+    "windowresizable", "windowshowmaximized", "windowstartmaximized",
+    "windowvisible", "windowallowclose", "windowtitle", "workdir",
+}
+
+
+def test_no_invented_setup_directives():
+    """هیچ directiveی در [Setup] نباشد که Inno Setup آن را نشناسد.
+
+    این خطا در CI واقعی پیدا شد: `UpdateUninstallLogName` نوشته شده بود،
+    Inno Setup آن را نشناخت و کل ساخت نصب‌کننده شکست، در حالی که تست‌های
+    محلی همه را می‌گذراندند. کامپایلر فقط در CI اجرا می‌شود، پس اینجا
+    همان داور است.
+    """
+    setup = _iss_sections(ISS.read_text(encoding="utf-8"))["Setup"]
+    bogus = sorted(d for d in setup if d.lower() not in _SETUP_DIRECTIVES)
+    assert not bogus, f"directiveهای ناشناخته در [Setup] (Inno آن‌ها را نمی‌شناسد): {bogus}"
+
+
+def test_setup_uses_only_real_sections():
+    """بخش‌هایی که هست باید بخش‌های واقعی Inno Setup باشند.
+
+    یک نام اشتباه (مثلاً [InstallDelete] به‌جای [InstallDelete]) باعث
+    می‌شود Inno کل بخش را نادیده بگیرد و تست‌های ساختاری کاذباً سبز شوند.
+    """
+    text = ISS.read_text(encoding="utf-8")
+    real = {
+        "Setup", "Types", "Components", "Tasks", "Dirs", "Files", "Icons",
+        "INI", "InstallDelete", "Languages", "Messages", "CustomMessages",
+        "LangOptions", "Permissions", "Run", "Script", "UninstallDelete",
+        "UninstallRun", "Registry",
+    }
+    found = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(";") or not stripped.startswith("["):
+            continue
+        name = stripped.split("]")[0][1:]
+        if name and name not in real:
+            found.append(name)
+    assert not found, f"بخش‌های ناشناخته (Inno کل بخش را نادیده می‌گیرد): {found}"
+
+
+#: پارامترهای مجاز هر بخش در Inno Setup 6 (به جز [Setup] که بالا بررسی شد).
+_SECTION_PARAMS = {
+    "Types": {"name", "description", "languages", "minversion", "onlybelowversion", "check", "flags"},
+    "Components": {"name", "description", "types", "extradiskspacerequired", "languages",
+                   "minversion", "onlybelowversion", "check", "flags", "size"},
+    "Tasks": {"name", "description", "groupdescription", "components", "languages",
+              "minversion", "onlybelowversion", "check", "flags"},
+    "Files": {"source", "destdir", "destname", "excludes", "externalsize", "copyflags",
+              "attribs", "permissions", "fontinstall", "strongassemblyname", "flags",
+              "components", "tasks", "languages", "minversion", "onlybelowversion",
+              "check", "beforeinstall", "afterinstall"},
+    "Icons": {"name", "filename", "parameters", "workingdir", "hotkey", "comment",
+              "iconfilename", "iconindex", "appusermodelid",
+              "appusermodeltoastactivatorclsid", "flags", "components", "tasks",
+              "languages", "minversion", "onlybelowversion", "beforeinstall",
+              "afterinstall"},
+    "Run": {"filename", "description", "parameters", "workingdir", "statusmsg",
+            "runonceid", "verb", "flags", "components", "tasks", "languages",
+            "minversion", "onlybelowversion", "beforeinstall", "afterinstall"},
+    "InstallDelete": {"name", "type", "components", "tasks", "languages",
+                      "minversion", "onlybelowversion", "check"},
+    "UninstallDelete": {"name", "type", "components", "tasks", "languages",
+                        "minversion", "onlybelowversion", "check"},
+    "Languages": {"name", "messagesfile", "licensefile", "infoafterfile",
+                  "infobeforefile", "flags"},
+}
+
+#: فلگ‌های مجاز هر بخش.
+_SECTION_FLAGS = {
+    "Types": {"iscustom"},
+    "Components": {"dontinheritcheck", "exclusive", "fixed", "restart", "showcheckbox"},
+    "Tasks": {"checked", "checkedonce", "dontinheritcheck", "exclusive", "unchecked",
+              "restart", "showcheckbox"},
+    "Files": {"allowunsafefiles", "comparetimestampalso", "confirmoverwrite",
+              "createallsubdirs", "deleteafterinstall", "dontcopy",
+              "dontverifychecksum", "external", "ignoreversion", "isreadme",
+              "noregerr", "overwritereadonly", "promptsfilenames",
+              "recursesubdirs", "regserver", "regtypelib", "replacesameversion",
+              "restartreplace", "sharedfile", "skipifsourcedoesntexist",
+              "solidbreak", "sortfilesbydate", "sortfilesbyname", "touch",
+              "uninsneveruninstall", "uninsremovereadonly", "uninsrestartdelete",
+              "uninsskipifsameversion"},
+    "Icons": {"allowunsafefiles", "closeonexit", "createonlyiffileexists",
+              "dontcloseonexit", "excludefromshowinnewinstall", "foldershortcut",
+              "preventpinning", "runmaximized", "runminimized", "shexeccontextinvoked",
+              "uninsneveruninstall", "useapppaths"},
+    "Run": {"32bit", "64bit", "postinstall", "runasoriginaluser",
+            "runascurrentuser", "runhidden", "runmaximized", "runminimized",
+            "nowait", "shellexec", "skipifdoesntexist", "skipifnotsilent",
+            "skipifsilent", "unchecked", "waituntilidle", "waituntilterminated",
+            "dontlogboth"},
+}
+
+
+def _iss_entries(section_body):
+    """سطرهای یک بخش را به جفت‌های (پارامتر، مقدار) تبدیل می‌کند.
+
+    برخلاف ``body.split(";")`` ساده، `;` داخل رشتهٔ دوتایی را نمی‌شکند.
+    """
+    entries = []
+    for line in section_body.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith(";"):
+            continue
+        parts, current, quoted = [], "", False
+        for ch in stripped:
+            if ch == '"':
+                quoted = not quoted
+                current += ch
+            elif ch == ";" and not quoted:
+                parts.append(current)
+                current = ""
+            else:
+                current += ch
+        if current.strip():
+            parts.append(current)
+        for part in parts:
+            if ":" in part:
+                key, value = part.split(":", 1)
+                entries.append((key.strip().lower(), value.strip()))
+    return entries
+
+
+def test_every_parameter_name_is_a_real_innosetup_parameter():
+    """نام پارامترها باید واقعی باشند، وگرنه Inno Setup آن‌ها را نمی‌شناسد.
+
+    کامپایلر فقط در CI اجرا می‌شود، پس این تست همان داور محلی است.
+    """
+    text = ISS.read_text(encoding="utf-8")
+    for section, allowed in _SECTION_PARAMS.items():
+        body = _iss_section_body(text, section)
+        if not body:
+            continue
+        for key, _ in _iss_entries(body):
+            assert key in allowed, (
+                f"پارامتر ناشناختهٔ {key!r} در [{section}] — Inno Setup آن را نمی‌شناسد"
+            )
+
+
+def test_every_flag_is_a_real_innosetup_flag():
+    """فلگ‌ها هم مانند پارامترها باید واقعی باشند."""
+    text = ISS.read_text(encoding="utf-8")
+    for section, allowed in _SECTION_FLAGS.items():
+        body = _iss_section_body(text, section)
+        if not body:
+            continue
+        for key, value in _iss_entries(body):
+            if key != "flags":
+                continue
+            for flag in re.split(r"[\s,]+", value.strip().strip('"')):
+                flag = flag.strip().lower()
+                if flag:
+                    assert flag in allowed, (
+                        f"فلگ ناشناختهٔ {flag!r} در [{section}]"
+                    )
+
+
+def test_section_flag_values_reference_real_types_and_components():
+    """``Types:`` و ``Components:`` باید به نام‌هایی اشاره کنند که واقعاً تعریف شده‌اند."""
+    text = ISS.read_text(encoding="utf-8")
+    types = {
+        v.strip().strip('"')
+        for k, v in _iss_entries(_iss_section_body(text, "Types"))
+        if k == "name"
+    }
+    components = {
+        v.strip().strip('"')
+        for k, v in _iss_entries(_iss_section_body(text, "Components"))
+        if k == "name"
+    }
+    tasks = {
+        v.strip().strip('"')
+        for k, v in _iss_entries(_iss_section_body(text, "Tasks"))
+        if k == "name"
+    }
+    # «Tasks:» نام کار را می‌خواهد، «Components:» نام جزء را؛ یکی نیستند.
+    known = {"components": components, "tasks": tasks}
+    for section in ("Components", "Tasks", "Files", "Icons", "Run"):
+        for key, value in _iss_entries(_iss_section_body(text, section)):
+            if key == "types":
+                for name in value.split():
+                    assert name in types, f"[{section}] به گونهٔ ناشناختهٔ {name!r} اشاره می‌کند"
+            if key in known:
+                for name in value.split(","):
+                    name = name.strip().strip('"')
+                    if not name:
+                        continue
+                    assert name in known[key], (
+                        f"[{section}] پارامتر {key!r} به نام ناشناختهٔ {name!r} اشاره می‌کند"
+                    )
