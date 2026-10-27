@@ -78,8 +78,6 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 ; هم داشته باشد؛ Inno این‌ها را خودش می‌نویسد ولی باید AllowNoIcons و
 ; CreateUninstallRegKey فعال باشند.
 CreateUninstallRegKey=yes
-Uninstallable=yes
-UpdateUninstallLogName=yes
 CloseApplications=yes
 RestartApplications=no
 AppMutex=K2KonkurAdvisorMutex,Global\K2KonkurAdvisorMutex

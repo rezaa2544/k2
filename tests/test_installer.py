@@ -783,7 +783,10 @@ def test_installer_registers_a_complete_add_remove_programs_entry():
     assert setup.get("uninstalldisplayname", "").strip()
     assert setup.get("uninstalldisplayicon", "").strip()
     assert setup.get("createuninstallregkey", "").lower() == "yes"
-    assert setup.get("uninstallable", "").lower() == "yes"
+    # آیکن ورودی رجیستری باید به مسیر *نصب‌شده* اشاره کند، نه به فایل نصبی.
+    assert "{app}" in setup.get("uninstalldisplayicon", ""), (
+        "UninstallDisplayIcon باید به {app} اشاره کند"
+    )
 
 
 def test_installer_cleans_stale_files_on_upgrade():
@@ -909,3 +912,244 @@ def test_readme_describes_the_standard_wizard_pages():
         assert "میان‌بر میزکار" in readme, "README کارهای افزودنی را توضیح نمی‌دهد"
     # هشدار SmartScreen باید باشد، وگرنه کاربر فایل را خراب می‌پندارد.
     assert "SmartScreen" in readme, "README هشدار SmartScreen را توضیح نمی‌دهد"
+
+
+#: همهٔ directiveهای واقعی بخش [Setup] در Inno Setup 6. (Inno این‌ها را
+#: حساس به بزرگی و کوچکی حرف نمی‌بیند.)
+_SETUP_DIRECTIVES = {
+    "allowcancelduringinstall", "allownetworkdrive", "allownoicons",
+    "allowrootdirectory", "allowuncpath", "appcomments", "appcontact",
+    "appcopyright", "appendlicenseconfirmed", "appid", "appmutex",
+    "appname", "apppublisher", "apppublisherurl", "appreadmefile",
+    "appsupportphone", "appsupporturl", "appupdatesurl",
+    "appusermodelid", "appusermodeltoastactivatorclsid", "appvername",
+    "appversion", "architecturesallowed", "architecturesinstallin64bitmode",
+    "backcolor", "backcolor2", "backcolordirection", "backsolid",
+    "changesassociations", "changesenvironment", "closeapplications",
+    "closeapplicationsfilter", "color", "compression", "compressionthreads",
+    "createappdir", "createquicklaunchicon", "createuninstallregkey",
+    "defaultdialogfontname", "defaultdialogfontsize", "defaultdirname",
+    "defaultgroupname", "defaultuserinfoname", "defaultuserinfoorg",
+    "defaultuserinfoserial", "direxistswarning", "disabledirpage",
+    "disablefinishedpage", "disableprogramgrouppage", "disablereadymemo",
+    "disablereadypage", "disablestartupprompt", "disablewelcomepage",
+    "diskclustersize", "diskslicesize", "diskspanning",
+    "dontmergeduplicatefiles", "enabledirdoesntexistwarning", "encryption",
+    "extradiskspaceneeded", "flatcomponentslist", "infoafterfile",
+    "infobeforefile", "internalcompresslevel", "languagedetectionmethod",
+    "licensefile", "licensetext", "lzmaalgorithm", "lzmablocksize",
+    "lzmadictionarysize", "lzmadictionarysize64", "lzmanumblockthreads",
+    "lzmauseseparateprocess", "merged64bitinstallmode",
+    "minversion", "onlybelowversion", "openappuninstall",
+    "outputbasefilename", "outputdir", "outputmanifestfile", "password",
+    "privilegesrequired", "reservebytes", "restartapplications",
+    "restartapplicationsfilter", "restartifneededbyrun", "setupiconfile",
+    "setupmutex", "showcomponentsizes", "showlanguagedialog",
+    "showtasktreelines", "showundisplayablelanguages", "signeduninstaller",
+    "signeduninstallerdir", "slicesize", "solidcompression", "sourcedir",
+    "terminalservicesaware", "timestamprounding", "timestampsinutc",
+    "touchdate", "touchtime", "uninstalldisplayicon", "uninstalldisplayname",
+    "uninstalldisplaysize", "uninstalldisplayversion", "uninstallfilesdir",
+    "uninstalllogmode", "uninstallrestartcomputer", "uninstallstyle",
+    "updateversioninfo", "usepreviousappdir", "usepreviousgroup",
+    "usepreviousprivileges", "useprevioussetuptype", "useprevioustasks",
+    "useprevioususerinfo", "userinfopage", "usesetupldr",
+    "versioninfocompany", "versioninfocopyright",
+    "versioninfodescription", "versioninfooriginalfilename",
+    "versioninfoproductname", "versioninfoproducttextversion",
+    "versioninfotextversion", "versioninfoversion",
+    "wizardimagealphaformat", "wizardimagebackcolor", "wizardimagefile",
+    "wizardimagestretch", "wizardresizable", "wizardsizepercent",
+    "wizardsmallimagebackcolor", "wizardsmallimagefile", "wizardstyle",
+    "windowresizable", "windowshowmaximized", "windowstartmaximized",
+    "windowvisible", "windowallowclose", "windowtitle", "workdir",
+}
+
+
+def test_no_invented_setup_directives():
+    """هیچ directiveی در [Setup] نباشد که Inno Setup آن را نشناسد.
+
+    این خطا در CI واقعی پیدا شد: `UpdateUninstallLogName` نوشته شده بود،
+    Inno Setup آن را نشناخت و کل ساخت نصب‌کننده شکست، در حالی که تست‌های
+    محلی همه را می‌گذراندند. کامپایلر فقط در CI اجرا می‌شود، پس اینجا
+    همان داور است.
+    """
+    setup = _iss_sections(ISS.read_text(encoding="utf-8"))["Setup"]
+    bogus = sorted(d for d in setup if d.lower() not in _SETUP_DIRECTIVES)
+    assert not bogus, f"directiveهای ناشناخته در [Setup] (Inno آن‌ها را نمی‌شناسد): {bogus}"
+
+
+def test_setup_uses_only_real_sections():
+    """بخش‌هایی که هست باید بخش‌های واقعی Inno Setup باشند.
+
+    یک نام اشتباه (مثلاً [InstallDelete] به‌جای [InstallDelete]) باعث
+    می‌شود Inno کل بخش را نادیده بگیرد و تست‌های ساختاری کاذباً سبز شوند.
+    """
+    text = ISS.read_text(encoding="utf-8")
+    real = {
+        "Setup", "Types", "Components", "Tasks", "Dirs", "Files", "Icons",
+        "INI", "InstallDelete", "Languages", "Messages", "CustomMessages",
+        "LangOptions", "Permissions", "Run", "Script", "UninstallDelete",
+        "UninstallRun", "Registry",
+    }
+    found = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(";") or not stripped.startswith("["):
+            continue
+        name = stripped.split("]")[0][1:]
+        if name and name not in real:
+            found.append(name)
+    assert not found, f"بخش‌های ناشناخته (Inno کل بخش را نادیده می‌گیرد): {found}"
+
+
+#: پارامترهای مجاز هر بخش در Inno Setup 6 (به جز [Setup] که بالا بررسی شد).
+_SECTION_PARAMS = {
+    "Types": {"name", "description", "languages", "minversion", "onlybelowversion", "check", "flags"},
+    "Components": {"name", "description", "types", "extradiskspacerequired", "languages",
+                   "minversion", "onlybelowversion", "check", "flags", "size"},
+    "Tasks": {"name", "description", "groupdescription", "components", "languages",
+              "minversion", "onlybelowversion", "check", "flags"},
+    "Files": {"source", "destdir", "destname", "excludes", "externalsize", "copyflags",
+              "attribs", "permissions", "fontinstall", "strongassemblyname", "flags",
+              "components", "tasks", "languages", "minversion", "onlybelowversion",
+              "check", "beforeinstall", "afterinstall"},
+    "Icons": {"name", "filename", "parameters", "workingdir", "hotkey", "comment",
+              "iconfilename", "iconindex", "appusermodelid",
+              "appusermodeltoastactivatorclsid", "flags", "components", "tasks",
+              "languages", "minversion", "onlybelowversion", "beforeinstall",
+              "afterinstall"},
+    "Run": {"filename", "description", "parameters", "workingdir", "statusmsg",
+            "runonceid", "verb", "flags", "components", "tasks", "languages",
+            "minversion", "onlybelowversion", "beforeinstall", "afterinstall"},
+    "InstallDelete": {"name", "type", "components", "tasks", "languages",
+                      "minversion", "onlybelowversion", "check"},
+    "UninstallDelete": {"name", "type", "components", "tasks", "languages",
+                        "minversion", "onlybelowversion", "check"},
+    "Languages": {"name", "messagesfile", "licensefile", "infoafterfile",
+                  "infobeforefile", "flags"},
+}
+
+#: فلگ‌های مجاز هر بخش.
+_SECTION_FLAGS = {
+    "Types": {"iscustom"},
+    "Components": {"dontinheritcheck", "exclusive", "fixed", "restart", "showcheckbox"},
+    "Tasks": {"checked", "checkedonce", "dontinheritcheck", "exclusive", "unchecked",
+              "restart", "showcheckbox"},
+    "Files": {"allowunsafefiles", "comparetimestampalso", "confirmoverwrite",
+              "createallsubdirs", "deleteafterinstall", "dontcopy",
+              "dontverifychecksum", "external", "ignoreversion", "isreadme",
+              "noregerr", "overwritereadonly", "promptsfilenames",
+              "recursesubdirs", "regserver", "regtypelib", "replacesameversion",
+              "restartreplace", "sharedfile", "skipifsourcedoesntexist",
+              "solidbreak", "sortfilesbydate", "sortfilesbyname", "touch",
+              "uninsneveruninstall", "uninsremovereadonly", "uninsrestartdelete",
+              "uninsskipifsameversion"},
+    "Icons": {"allowunsafefiles", "closeonexit", "createonlyiffileexists",
+              "dontcloseonexit", "excludefromshowinnewinstall", "foldershortcut",
+              "preventpinning", "runmaximized", "runminimized", "shexeccontextinvoked",
+              "uninsneveruninstall", "useapppaths"},
+    "Run": {"32bit", "64bit", "postinstall", "runasoriginaluser",
+            "runascurrentuser", "runhidden", "runmaximized", "runminimized",
+            "nowait", "shellexec", "skipifdoesntexist", "skipifnotsilent",
+            "skipifsilent", "unchecked", "waituntilidle", "waituntilterminated",
+            "dontlogboth"},
+}
+
+
+def _iss_entries(section_body):
+    """سطرهای یک بخش را به جفت‌های (پارامتر، مقدار) تبدیل می‌کند.
+
+    برخلاف ``body.split(";")`` ساده، `;` داخل رشتهٔ دوتایی را نمی‌شکند.
+    """
+    entries = []
+    for line in section_body.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith(";"):
+            continue
+        parts, current, quoted = [], "", False
+        for ch in stripped:
+            if ch == '"':
+                quoted = not quoted
+                current += ch
+            elif ch == ";" and not quoted:
+                parts.append(current)
+                current = ""
+            else:
+                current += ch
+        if current.strip():
+            parts.append(current)
+        for part in parts:
+            if ":" in part:
+                key, value = part.split(":", 1)
+                entries.append((key.strip().lower(), value.strip()))
+    return entries
+
+
+def test_every_parameter_name_is_a_real_innosetup_parameter():
+    """نام پارامترها باید واقعی باشند، وگرنه Inno Setup آن‌ها را نمی‌شناسد.
+
+    کامپایلر فقط در CI اجرا می‌شود، پس این تست همان داور محلی است.
+    """
+    text = ISS.read_text(encoding="utf-8")
+    for section, allowed in _SECTION_PARAMS.items():
+        body = _iss_section_body(text, section)
+        if not body:
+            continue
+        for key, _ in _iss_entries(body):
+            assert key in allowed, (
+                f"پارامتر ناشناختهٔ {key!r} در [{section}] — Inno Setup آن را نمی‌شناسد"
+            )
+
+
+def test_every_flag_is_a_real_innosetup_flag():
+    """فلگ‌ها هم مانند پارامترها باید واقعی باشند."""
+    text = ISS.read_text(encoding="utf-8")
+    for section, allowed in _SECTION_FLAGS.items():
+        body = _iss_section_body(text, section)
+        if not body:
+            continue
+        for key, value in _iss_entries(body):
+            if key != "flags":
+                continue
+            for flag in re.split(r"[\s,]+", value.strip().strip('"')):
+                flag = flag.strip().lower()
+                if flag:
+                    assert flag in allowed, (
+                        f"فلگ ناشناختهٔ {flag!r} در [{section}]"
+                    )
+
+
+def test_section_flag_values_reference_real_types_and_components():
+    """``Types:`` و ``Components:`` باید به نام‌هایی اشاره کنند که واقعاً تعریف شده‌اند."""
+    text = ISS.read_text(encoding="utf-8")
+    types = {
+        v.strip().strip('"')
+        for k, v in _iss_entries(_iss_section_body(text, "Types"))
+        if k == "name"
+    }
+    components = {
+        v.strip().strip('"')
+        for k, v in _iss_entries(_iss_section_body(text, "Components"))
+        if k == "name"
+    }
+    tasks = {
+        v.strip().strip('"')
+        for k, v in _iss_entries(_iss_section_body(text, "Tasks"))
+        if k == "name"
+    }
+    # «Tasks:» نام کار را می‌خواهد، «Components:» نام جزء را؛ یکی نیستند.
+    known = {"components": components, "tasks": tasks}
+    for section in ("Components", "Tasks", "Files", "Icons", "Run"):
+        for key, value in _iss_entries(_iss_section_body(text, section)):
+            if key == "types":
+                for name in value.split():
+                    assert name in types, f"[{section}] به گونهٔ ناشناختهٔ {name!r} اشاره می‌کند"
+            if key in known:
+                for name in value.split(","):
+                    name = name.strip().strip('"')
+                    if not name:
+                        continue
+                    assert name in known[key], (
+                        f"[{section}] پارامتر {key!r} به نام ناشناختهٔ {name!r} اشاره می‌کند"
+                    )
