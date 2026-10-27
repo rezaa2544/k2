@@ -64,7 +64,7 @@ weights = {
 # ---------------------------------------------------------------------------
 # سرفصل درس‌ها (پایه ← فصل ← گفتار) — دادهٔ اولیه تأییدنشده
 # ---------------------------------------------------------------------------
-#: ساختار سرفصل برای پیش‌نمایش: درس ← پایه ← فهرست فصل‌ها.
+#: ساختار سرفصل برای نسخهٔ مرورگری: درس ← پایه ← فهرست فصل‌ها.
 #: هر فصل می‌تواند فهرست ``topics`` داشته باشد؛ شناسهٔ هر گفتار همان کلید
 #: ذخیره‌سازی («درس|پایه|فصل|گفتار») است تا وضعیت étude مستقیماً به آن بچسبد.
 syllabus: dict[str, dict[str, list[dict]]] = {}
@@ -146,11 +146,11 @@ _syllabus_json = json.dumps(
 _weights_json = json.dumps(weights, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
 
 # ---------------------------------------------------------------------------
-# فونت همراه پیش‌نمایش: داخل خود فایل HTML embed می‌شود تا آفلاین و تک‌فایلی
+# فونت همراه نسخهٔ مرورگری: داخل خود فایل HTML embed می‌شود تا آفلاین و تک‌فایلی
 # بماند (هیچ نشانی https لازم نیست). وزن‌ها همان سلسله‌مراتب دسکتاپ است.
 # ---------------------------------------------------------------------------
 
-#: وزن‌های فونت استعداد که همراه پیش‌نمایش می‌شوند.
+#: وزن‌های فونت استعداد که همراه نسخهٔ مرورگری می‌شوند.
 FONT_WEIGHTS = (400, 600, 700, 800)
 
 
@@ -196,7 +196,7 @@ html = f'''<!doctype html>
 <html lang="fa" dir="rtl" data-source-revision="pending">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light">
-<title>K2 — پیش‌نمایش آفلاین تعاملی</title><style>{_font_css}\n{css}\n{extra_css}</style>
+<title>K2 — مشاور هوشمند کنکور</title><style>{_font_css}\n{css}\n{extra_css}</style>
 </head><body>
 <div class="preview-wrap">
   <section class="app-window" aria-label="K2"><header class="menu-bar"><div class="menu-group"><div class="menu-wrap"><button class="menu-button" id="programMenuButton" data-menu="programMenu" aria-expanded="false">برنامه</button><div class="menu-panel" id="programMenu"><button class="menu-item" data-action="setup">راه‌اندازی / ادامهٔ مصاحبه</button><button class="menu-item" data-action="backup-json">پشتیبان JSON</button><button class="menu-item" data-action="save-html">خروجی HTML داده‌دار</button><button class="menu-item" data-action="restore">بازیابی داده</button><div class="menu-separator"></div><button class="menu-item" data-action="quit">خروج</button></div></div><div class="menu-wrap"><button class="menu-button" id="helpMenuButton" data-menu="helpMenu" aria-expanded="false">راهنما</button><div class="menu-panel" id="helpMenu"><button class="menu-item" data-action="about">دربارهٔ K2</button><button class="menu-item" data-action="privacy">ذخیره و حریم خصوصی</button></div></div></div><div class="menu-meta"><span id="storageState">ذخیره‌سازی آماده</span><span class="shortcut">F5 · Ctrl+S · Ctrl+Q</span></div></header>
