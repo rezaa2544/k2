@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>راهنمای کاربر — مشاور هوشمند کنکور (K2)</title>
+<style>
+  :root{
+    --bg:#f4f7f5; --surface:#ffffff; --ink:#0f2f28; --muted:#5b6f68;
+    --border:#d3e0da; --accent:#0f7a63; --accent-soft:#e6f4f0;
+    --warn:#8a5a00; --warn-bg:#fff6e0;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:28px 20px 60px; background:var(--bg); color:var(--ink);
+    font-family:"Segoe UI",Tahoma,"Iranian Sans",sans-serif; line-height:1.95;
+  }
+  .wrap{max-width:820px;margin:0 auto}
+  header{background:var(--surface);border:2px solid var(--border);border-radius:16px;padding:22px 24px;margin-bottom:22px}
+  h1{margin:0 0 6px;font-size:26px;font-weight:800}
+  .sub{color:var(--muted);font-size:14px;margin:0}
+  h2{font-size:19px;font-weight:800;margin:30px 0 10px;padding-bottom:6px;border-bottom:2px solid var(--border)}
+  h3{font-size:16px;font-weight:800;margin:20px 0 6px}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0;padding-inline-start:22px}
+  li{margin:5px 0}
+  code{background:var(--accent-soft);border-radius:5px;padding:1px 6px;font-family:Consolas,monospace;font-size:13px;direction:ltr;display:inline-block}
+  .card{background:var(--surface);border:2px solid var(--border);border-radius:14px;padding:18px 20px;margin:14px 0}
+  .note{background:var(--accent-soft);border-inline-start:5px solid var(--accent);border-radius:10px;padding:14px 16px;margin:14px 0}
+  .warn{background:var(--warn-bg);border-inline-start:5px solid var(--warn);border-radius:10px;padding:14px 16px;margin:14px 0}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}
+  th,td{border:1px solid var(--border);padding:8px 10px;text-align:right}
+  th{background:var(--accent-soft);font-weight:800}
+  .steps{counter-reset:s;list-style:none;padding:0}
+  .steps li{counter-increment:s;position:relative;padding-inline-start:38px;margin:12px 0}
+  .steps li::before{
+    content:counter(s); position:absolute; inset-inline-start:0; top:2px;
+    width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;
+  }
+  footer{margin-top:34px;padding-top:14px;border-top:2px solid var(--border);color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>راهنمای کاربر — مشاور هوشمند کنکور</h1>
+  <p class="sub">K2 · نسخهٔ ۱٫۰٫۰ · برنامهٔ دسکتاپ فارسی، راست‌چین و آفلاین</p>
+</header>
+
+<div class="note">
+  <strong>این برنامه به اینترنت نیاز ندارد.</strong> هیچ داده‌ای از رایانهٔ شما بیرون نمی‌رود.
+  همهٔ چیزهایی که وارد می‌کنید روی همین رایانه، در پوشهٔ دادهٔ کاربر خودتان ذخیره می‌شود.
+</div>
+
+<h2>۱. نخستین کار: راه‌اندازی</h2>
+<p>با اولین اجرا، پنجرهٔ «راه‌اندازی» باز می‌شود. هر گام را می‌توانید رد کنید و بعداً ادامه دهید؛
+پیشرفت شما ذخیره می‌شود.</p>
+<ol class="steps">
+  <li><strong>پروفایل آزمون</strong> — رشته، سال و تاریخ آزمون را وارد کنید. اگر تاریخ رسمی ابلاغ نشده،
+      برنامه آن را «تأییدنشده» علامت می‌زند و چیزی جعل نمی‌کند.</li>
+  <li><strong>درس‌ها</strong> — درس‌های خودتان را از بانک دروس انتخاب کنید.</li>
+  <li><strong>کتاب‌ها</strong> — برای هر درس، کتاب‌هایی که واقعاً با آن‌ها کار می‌کنید انتخاب کنید.
+      برنامه فصل‌ها و گفتارها را از همین کتاب‌ها می‌سازد؛ لازم نیست دستی تایپ کنید.</li>
+  <li><strong>کلاس‌ها و تعهدها</strong> — کلاس، کلوب، سربرگ یا هر کار ثابت هفتگی را با روز و ساعت واقعی
+      وارد کنید. همین داده‌ها ظرفیت واقعی روزهای شما را می‌سازند.</li>
+  <li><strong>خواب، غذا و استراحت</strong> — روال‌های ثابت را ثبت کنید. بدون این‌ها برنامه شما را
+      بی‌نهایت فرض می‌کند.</li>
+  <li><strong>برآورد زمان</strong> — برای هر نوع کار چقدر زمان لازم دارید. اینها فرضیهٔ اولیهٔ
+      قابل ویرایش‌اند.</li>
+  <li><strong>بازبینی و ذخیره</strong> — یک نگاه به خلاصه بیندازید و ذخیره کنید.</li>
+</ol>
+
+<h2>۲. برنامهٔ روزانه و هفتگی از کجا می‌آید؟</h2>
+<p>برنامه از سه چیز ساخته می‌شود: <strong>ظرفیت واقعی</strong> شما (بعد از کم شدن کلاس، خواب و
+تعهدهای ثابت)، <strong>اولویت</strong> هر کار، و <strong>موعد مرور</strong> هر مبحث. اگر برنامه با
+واقعیت هم‌خوان نبود، اولین جایی که باید بررسی کنید همان «کلاس‌ها و تعهدها» و «روال‌های ثابت» است.</p>
+
+<h2>۳. پیگیری تسلط — با شواهد، نه با احساس</h2>
+<p>برای هر مبحث می‌توانید «سنجش» ثبت کنید: درصد پاسخ درست، تعداد سؤال، میزان اطمینان و تاریخ.
+سطح تسلط از همین شواهد محاسبه می‌شود و <strong>خودگزارش اطمینان از نمره جداست</strong> — برنامه
+هر دو را می‌پرسد چون آدم‌ها معمولاً اطمینانشان بیش از عملکرد واقعی است.</p>
+
+<h2>۴. مرور تطبیقی و نردبان تثبیت</h2>
+<p>هر مورد مرور یک موعد دارد. وقتی آن را انجام دادید، نتیجه را ثبت کنید؛ برنامه موعد بعدی را
+با فاصله‌گذاری بیشتر می‌گذارد. اگر یادتان رفت، فاصله کوتاه می‌شود. این همان چیزهایی است که در
+پژوهش‌های یادگیری تأیید شده، ولی <strong>تضمین حافظهٔ بلندمدت نیست</strong>.</p>
+
+<h2>۵. تست و تحلیل</h2>
+<p>هر نوبت آزمون را با تعداد درست، غلط، نزده و مدت ثبت کنید. برنامه آزمون و تحلیل آن را
+<strong>دو کار مستقل</strong> می‌شمارد، چون تحلیل بی‌آنکه زمان جداگانه بگیرید انجام نمی‌شود.</p>
+
+<div class="warn">
+  <strong>برنامه تصویر کارت پاسخ را نمی‌خوانَد.</strong> فقط نام و حجم فایل به‌عنوان یادداشت نگه داشته
+  می‌شود و اعداد را خودتان وارد می‌کنید.
+</div>
+
+<h2>۶. ذخیره، پشتیبان و انتقال</h2>
+<p>داده‌ها در پوشهٔ دادهٔ کاربر ویندوز شما ذخیره می‌شوند. برای انتقال به رایانهٔ دیگر:</p>
+<ul>
+  <li><strong>پشتیبان JSON</strong> — سبک و قابل بازگردانی.</li>
+  <li><strong>خروجی HTML داده‌دار</strong> — یک فایل خودبسنده که بدون اینترنت باز می‌شود.</li>
+</ul>
+<p>مرورگرها حدود ۵ مگابایت فضا می‌دهند؛ اگر سقف پر شود برنامه با پیام صریح هشدار می‌دهد.
+<strong>بین دستگاه‌ها همگام‌سازی خودکار وجود ندارد</strong> — انتقال فقط با پشتیبان گرفتن است.</p>
+
+<h2>۷. اگر حذف نصب کردید</h2>
+<p>حذف نصب از «برنامه‌ها و قابلیت‌ها» ویندوز فقط فایل‌های برنامه را پاک می‌کند.
+<strong>پوشهٔ دادهٔ شما دست‌نخورده می‌ماند</strong> تا اگر دوباره نصب کردید، داده‌هایتان سر جایشان باشد.
+اگر می‌خواهید داده‌ها هم پاک شود، اول پشتیبان بگیرید و بعد پوشهٔ داده را خودتان حذف کنید.</p>
+
+<h2>۸. چه چیزهایی را نباید انتظار داشته باشید</h2>
+<ul>
+  <li>تاریخ رسمی آزمون تا ابلاغ رسمی، «تأییدنشده» است.</li>
+  <li>ضرایب سوابق تحصیلی قابل ویرایش‌اند و حدس زده نمی‌شوند.</li>
+  <li>شمارش ویدئوی باقی‌مانده خالی می‌ماند تا شما پر کنید.</li>
+  <li>آستانه‌های «تثبیت حافظه» فرضیهٔ محصول‌اند و در تنظیمات قابل تغییر.</li>
+  <li>تعداد تست روزانه «پیشنهاد» است، نه «سهمیهٔ اجباری».</li>
+</ul>
+
+<footer>
+  این راهنما همراه نصب‌کننده می‌آید و آفلاین کار می‌کند. سؤال یا اشکال:
+  <span style="direction:ltr;display:inline-block">github.com/rezaa2544/k2</span>
+</footer>
+
+</div>
+</body>
+</html>

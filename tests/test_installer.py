@@ -24,6 +24,8 @@ SPEC = ROOT / "k2.spec"
 WORKFLOW = ROOT / ".github" / "workflows" / "build-windows.yml"
 README = ROOT / "README.md"
 PACKAGER = ROOT / "packaging" / "create_windows_download.py"
+EULA = ROOT / "packaging" / "EULA.txt"
+USER_GUIDE = ROOT / "packaging" / "USER_GUIDE.html"
 
 GUID = re.compile(r"^\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}$")
 
@@ -39,12 +41,17 @@ def _packager_module():
 
 _DEFINE = re.compile(r"^\s*#define\s+(\w+)\s+(.*?)\s*$")
 _INLINE = re.compile(r"\{#(\w+)\}")
+# بخش‌هایی که از شکل پارامتری «Name: x; Description: y» استفاده می‌کنند،
+# نه «key=value». اگر بخشی اینجا نباشد، تجزیه‌ساز آن را خالی می‌بیند و
+# تست «بخش خالی» کاذباً می‌شکند.
 _PARAM_SECTIONS = {
     "Files",
     "Icons",
     "Tasks",
     "Run",
     "Languages",
+    "Types",
+    "Components",
     "UninstallDelete",
     "InstallDelete",
 }
@@ -106,6 +113,28 @@ def _iss_sections(text: str) -> dict[str, dict[str, str]]:
             key, value = line.split("=", 1)
             sections[current][key.strip().lower()] = value.strip()
     return sections
+
+
+def _iss_section_body(script: str, name: str) -> str:
+    """بدنهٔ یک بخش ISS را برمی‌گرداند، بدون کامنت‌ها.
+
+    چرا لازم است: ``script.split("[InstallDelete]")[1].split("[")[0]`` روی
+    کامنتی که نام بخش دیگری را می‌آورد (مثل توضیح «بخش [Code] حذف شده»)
+    زودتر بریده می‌شود و بخش را خالی می‌بیند. این تابع خط‌به‌خط کار می‌کند.
+    """
+    lines = script.splitlines()
+    out: list[str] = []
+    inside = False
+    for raw in lines:
+        stripped = raw.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            if inside:
+                break
+            inside = stripped[1:-1].lower() == name.lower()
+            continue
+        if inside and stripped and not stripped.startswith(";"):
+            out.append(stripped)
+    return "\n".join(out)
 
 
 def _app_id(text: str) -> str:
@@ -662,9 +691,221 @@ def test_uninstall_delete_only_removes_the_install_folder():
     پوشهٔ برنامه. حذف نصب باید فقط فایل‌های نصب‌شده را پاک کند.
     """
     script = (ROOT / "packaging" / "k2_installer.iss").read_text(encoding="utf-8")
-    section = script.split("[UninstallDelete]")[1]
+    section = _iss_section_body(script, "UninstallDelete")
     assert "{app}" in section, "حذف نصب پوشهٔ برنامه را هدف نگرفته"
     for forbidden in ("{localappdata}", "{userappdata}", "K2_DATA_DIR", "k2.db"):
         assert forbidden not in section, (
             f"حذف نصب دادهٔ کاربر را هدف گرفته: {forbidden}"
         )
+
+
+# --------------------------------------------------------------------------
+# ۴) کامل‌بودن نصب‌کننده: صفحه‌ها، اجزا و متادیتای استاندارد
+#
+# چرا این بخش اضافه شد: کاربر گفت «فایل نصبی کامل نیست؛ باید کلا در سیستم
+# نصب بشه و کاملاً استاندارد مثل همهٔ نصب‌کننده‌های ویندوز». نسخهٔ قبلی فقط
+# فایل‌ها را کپی و میان‌بر می‌ساخت؛ صفحهٔ توافق‌نامه، انتخاب پوشهٔ منوی Start،
+# گونهٔ نصب و اجزای اختیاری نداشت. این تست‌ها همان کمبودها را می‌بندند.
+# --------------------------------------------------------------------------
+
+
+def test_installer_shows_a_license_agreement_page():
+    """صفحهٔ پذیرش توافق‌نامه، مثل هر نصب‌کنندهٔ استاندارد.
+
+    بدون ``LicenseFile``، Inno صفحهٔ «توافق‌نامهٔ استفاده» را نشان نمی‌دهد و
+    کاربر هیچ شرط صریحی نمی‌پذیرد.
+    """
+    setup = _iss_sections(ISS.read_text(encoding="utf-8"))["Setup"]
+    assert setup.get("licensefile", "").strip(), (
+        "LicenseFile تنظیم نشده؛ صفحهٔ توافق‌نامه دیده نمی‌شود"
+    )
+    assert EULA.exists(), "فایل توافق‌نامه وجود ندارد"
+    text = EULA.read_text(encoding="utf-8")
+    assert len(text) > 1500, "متن توافق‌نامه کوتاه است و واقعی نیست"
+    # باید فارسی و راست‌چین باشد و بندهای اصلی را داشته باشد.
+    for must in ("مالکیت", "ضمانت", "حذف نصب", "داده"):
+        assert must in text, f"توافق‌نامه بند «{must}» را ندارد"
+
+
+def test_installer_lets_the_user_choose_the_start_menu_folder():
+    """کاربر حق دارد پوشهٔ میان‌برهای منوی Start را عوض کند."""
+    setup = _iss_sections(ISS.read_text(encoding="utf-8"))["Setup"]
+    assert setup.get("disableprogramgrouppage", "").lower() != "yes", (
+        "DisableProgramGroupPage=yes صفحهٔ انتخاب پوشهٔ منوی Start را حذف می‌کند"
+    )
+
+
+def test_installer_lets_the_user_decline_icons():
+    """کاربر بتواند میان‌بر نخواهد؛ AllowNoIcons=no این حق را می‌گیرد."""
+    setup = _iss_sections(ISS.read_text(encoding="utf-8"))["Setup"]
+    assert setup.get("allownoicons", "").lower() == "yes", (
+        "AllowNoIcons باید yes باشد تا کاربر بتواند میان‌بر نخواهد"
+    )
+    # ولی میان‌برهای Start Menu نباید به تسک وابسته شوند، وگرنه در نصب
+    # خاموش ساخته نمی‌شوند.
+    icons = ISS.read_text(encoding="utf-8").split("[Icons]")[1].split("[")[0]
+    for line in icons.splitlines():
+        if line.strip().startswith("{group}") and "Tasks:" in line:
+            pytest.fail(f"میان‌بر منوی Start به تسک وابسته است: {line.strip()}")
+
+
+def test_installer_offers_installation_types_including_custom():
+    """گونهٔ نصب (کامل/دلخواه) باید انتخاب شود، مثل نصب‌کننده‌های استاندارد."""
+    sections = _iss_sections(ISS.read_text(encoding="utf-8"))
+    types = sections.get("Types", {})
+    assert types, "بخش [Types] خالی است؛ صفحهٔ گونهٔ نصب دیده نمی‌شود"
+    flags = " ".join(types.values())
+    assert "iscustom" in flags.lower(), (
+        "هیچ گونهٔ نصبِ iscustom نیست؛ کاربر نمی‌تواند اجزا را دستی انتخاب کند"
+    )
+
+
+def test_installer_offers_an_optional_documentation_component():
+    """اجزای قابل انتخاب: برنامه اجباری، مستندات اختیاری."""
+    sections = _iss_sections(ISS.read_text(encoding="utf-8"))
+    components = sections.get("Components", {})
+    assert components, "بخش [Components] خالی است"
+    joined = " ".join(f"{k} {v}" for k, v in components.items())
+    assert "fixed" in joined.lower(), (
+        "برنامهٔ اصلی باید fixed باشد تا کاربر نتواند آن را بردارد"
+    )
+    # یک جزء اختیاریِ واقعی باید باشد تا صفحهٔ گونهٔ نصب معنا داشته باشد.
+    assert any(
+        "fixed" not in v.lower() for v in components.values()
+    ), "هیچ جزء اختیاری وجود ندارد؛ صفحهٔ گونهٔ نصب بی‌معنا است"
+
+
+def test_installer_registers_a_complete_add_remove_programs_entry():
+    """ورودی «برنامه‌ها و قابلیت‌ها» باید کامل باشد، نه فقط یک نام."""
+    setup = _iss_sections(ISS.read_text(encoding="utf-8"))["Setup"]
+    for key in ("appcomments", "appcontact", "apppublisher", "appversion"):
+        assert setup.get(key, "").strip(), f"{key} برای ورودی رجیستری لازم است"
+    assert setup.get("uninstalldisplayname", "").strip()
+    assert setup.get("uninstalldisplayicon", "").strip()
+    assert setup.get("createuninstallregkey", "").lower() == "yes"
+    assert setup.get("uninstallable", "").lower() == "yes"
+
+
+def test_installer_cleans_stale_files_on_upgrade():
+    """``[InstallDelete]`` باید باشد تا فایل‌های کهنهٔ نسخهٔ قبل نمانند."""
+    script = ISS.read_text(encoding="utf-8")
+    assert "[InstallDelete]" in script, (
+        "بدون [InstallDelete]، فایل‌های نسخهٔ قبل روی دیسک می‌مانند"
+    )
+    section = _iss_section_body(script, "InstallDelete")
+    assert any("Type:" in ln for ln in section.splitlines()), (
+        "[InstallDelete] واقعاً چیزی حذف نمی‌کند"
+    )
+
+
+def test_installed_documentation_is_html_so_windows_can_open_it():
+    """راهنمای نصب‌شده باید HTML باشد، نه Markdown.
+
+    ویندوز به‌صورت پیش‌فرض برنامه‌ای برای ``.md`` ندارد؛ باز کردنش می‌شکند.
+    HTML را همیشه مرورگر پیش‌فرض باز می‌کند.
+    """
+    files = _iss_section_body(ISS.read_text(encoding="utf-8"), "Files")
+    assert "USER_GUIDE.html" in files, "راهنمای کاربر به‌عنوان جزء نصب نمی‌شود"
+    assert ".md" not in files, (
+        "فایل .md نصب می‌شود؛ ویندوز بی‌برنامهٔ مرتبط آن را باز نمی‌کند"
+    )
+    assert USER_GUIDE.exists()
+    html = USER_GUIDE.read_text(encoding="utf-8")
+    assert html.lstrip().lower().startswith("<!doctype html")
+    assert 'lang="fa"' in html and 'dir="rtl"' in html, "راهنما باید فارسی و راست‌چین باشد"
+    # باید واقعاً چیزی بگوید، نه یک صفحهٔ خالی.
+    for must in ("راه‌اندازی", "پشتیبان", "حذف نصب"):
+        assert must in html, f"راهنمای کاربر بخش «{must}» را ندارد"
+
+
+def test_user_guide_is_self_contained_and_offline():
+    """راهنمای نصب‌شده نباید به اینترنت وابسته باشد."""
+    html = USER_GUIDE.read_text(encoding="utf-8")
+    for pattern in ("https://", "http://", "src=\"http", "href=\"http"):
+        assert pattern not in html, f"راهنما به بیرون ارجاع می‌دهد: {pattern}"
+    # هیچ فونت یا اسکریپت بیرونی هم نباشد.
+    assert "<script" not in html.lower(), "راهنما به جاوااسکریپت وابسته است"
+
+
+def test_persian_language_file_covers_every_wizard_page_shown():
+    """هیچ صفحه‌ای از جادوار نباید به انگلیسی برگردد.
+
+    Inno برای پیامی که در فایل زبان نباشد خودکار به انگلیسی برمی‌گردد؛ نتیجه
+    نصب‌کننده‌ای است که نصفش فارسی و نصفش انگلیسی است. این تست همهٔ پیام‌های
+    صفحه‌هایی را که این نصب‌کننده نشان می‌دهد پوشش می‌دهد.
+    """
+    text = FARSI_ISL.read_text(encoding="utf-8")
+    script = ISS.read_text(encoding="utf-8")
+
+    # صفحه‌هایی که اسکریپت فعال کرده است.
+    setup = _iss_sections(script)["Setup"]
+    required = {
+        "ClickNext", "ClickInstall", "ClickCancel",
+        "WelcomeLabel1", "WelcomeLabel2",
+        "ReadyLabel1", "ReadyLabel2a", "ReadyLabel2b",
+        "InstallingLabel", "FinishedHeadingLabel", "FinishedLabel",
+        "SetupWindowTitle", "SetupAppTitle",
+        "ButtonNext", "ButtonBack", "ButtonInstall", "ButtonCancel",
+        "StatusExtractFiles", "StatusCreateIcons",
+        "ConfirmTitle", "ConfirmUninstall",
+        "ExitSetupTitle", "ExitSetupMessage",
+    }
+    if setup.get("licensefile", "").strip():
+        required |= {
+            "WizardLicense", "LicenseLabel3", "LicenseAccepted", "LicenseNotAccepted",
+        }
+    if "Types" in _iss_sections(script):
+        required |= {
+            "WizardSelectComponents", "SelectComponentsDesc",
+            "SelectComponentsLabel2", "TypesGroupLabel",
+            "ReadyMemoType", "ReadyMemoComponents",
+        }
+    if setup.get("disableprogramgrouppage", "").lower() != "yes":
+        required |= {
+            "WizardSelectProgramGroup", "SelectStartMenuFolderLabel3",
+            "SelectStartMenuFolderBrowseLabel", "NoProgramGroupCheck2",
+        }
+    if setup.get("allownoicons", "").lower() == "yes":
+        required |= {"WizardSelectTasks", "SelectTasksDesc", "SelectTasksLabel2"}
+
+    missing = sorted(k for k in required if f"{k}=" not in text)
+    assert not missing, f"این پیام‌ها ترجمه نشده و کاربر انگلیسی می‌بیند: {missing}"
+
+
+def test_persian_language_file_has_no_empty_or_untranslated_values():
+    """هیچ پیامی نباید خالی یا همان کلید انگلیسی باشد."""
+    text = FARSI_ISL.read_text(encoding="utf-8")
+    messages = text.split("[Messages]")[1]
+    bad = []
+    for line in messages.splitlines():
+        line = line.strip()
+        if not line or line.startswith(";") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if not value.strip():
+            bad.append(key)
+        elif value.strip() == key.strip():
+            bad.append(key)
+    assert not bad, f"این پیام‌ها خالی یا ترجمه‌نشده‌اند: {bad}"
+
+
+def test_readme_describes_the_standard_wizard_pages():
+    """README نباید کمتر از واقعیت نصب‌کننده را توصیف کند.
+
+    قبلاً README فقط «خوش‌آمد → مقصد → نصب» را می‌گفت، در حالی که کاربر
+    نصب‌کننده را «ناقص» دیده بود. توضیح باید با صفحه‌هایی که اسکریپت واقعاً
+    نشان می‌دهد هم‌خوان باشد.
+    """
+    readme = README.read_text(encoding="utf-8")
+    setup = _iss_sections(ISS.read_text(encoding="utf-8"))["Setup"]
+
+    if setup.get("licensefile", "").strip():
+        assert "توافق‌نامه" in readme, "README صفحهٔ توافق‌نامه را توضیح نمی‌دهد"
+    if setup.get("disableprogramgrouppage", "").lower() != "yes":
+        assert "منوی Start" in readme, "README صفحهٔ منوی Start را توضیح نمی‌دهد"
+    if "Types" in _iss_sections(ISS.read_text(encoding="utf-8")):
+        assert "گونهٔ نصب" in readme, "README صفحهٔ گونهٔ نصب را توضیح نمی‌دهد"
+    if setup.get("allownoicons", "").lower() == "yes":
+        assert "میان‌بر میزکار" in readme, "README کارهای افزودنی را توضیح نمی‌دهد"
+    # هشدار SmartScreen باید باشد، وگرنه کاربر فایل را خراب می‌پندارد.
+    assert "SmartScreen" in readme, "README هشدار SmartScreen را توضیح نمی‌دهد"
