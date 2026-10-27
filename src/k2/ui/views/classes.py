@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import datetime as _dt
-
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -20,21 +18,15 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
-    QTimeEdit,
     QVBoxLayout,
     QWidget,
 )
 
 from ...domain.enums import FixedEventKind, RoutineKind, RoutineScope
 from ...domain.models import FixedEvent, Routine
-from ...jdate import (
-    WEEKDAY_NAMES,
-    clock_to_minutes,
-    format_clock,
-    minutes_to_clock,
-)
+from ...jdate import WEEKDAY_NAMES
 from ...service import AdvisorService
-from ..widgets import Card, info_box, notify
+from ..widgets import Card, TimeRangeInput, format_clock, info_box, notify
 
 WEEKDAYS = [
     (0, "شنبه"), (1, "یک‌شنبه"), (2, "دوشنبه"), (3, "سه‌شنبه"),
@@ -106,12 +98,8 @@ class FixedEventDialog(QDialog):
             self.weekday_combo.addItem(label, value)
         form.addRow("روز هفته:", self.weekday_combo)
 
-        self.start_edit = QTimeEdit()
-        self.start_edit.setDisplayFormat("HH:mm")
-        self.end_edit = QTimeEdit()
-        self.end_edit.setDisplayFormat("HH:mm")
-        form.addRow("شروع:", self.start_edit)
-        form.addRow("پایان:", self.end_edit)
+        self.time_range = TimeRangeInput("15:00", "16:00")
+        form.addRow("بازهٔ جلسه:", self.time_range)
 
         self.recorded_check = QCheckBox("کلاس ضبط‌شده است (قابل تقسیم با نقطهٔ توقف)")
         form.addRow("", self.recorded_check)
@@ -125,6 +113,7 @@ class FixedEventDialog(QDialog):
         buttons.button(QDialogButtonBox.Cancel).setText("انصراف")
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
+        self.time_range.attach_button_box(buttons)
         form.addRow(buttons)
 
         if event_item is not None:
@@ -138,10 +127,8 @@ class FixedEventDialog(QDialog):
             index = self.weekday_combo.findData(event_item.weekday)
             if index >= 0:
                 self.weekday_combo.setCurrentIndex(index)
-            hour, minute = minutes_to_clock(event_item.start_minute)
-            self.start_edit.setTime(_dt.time(hour, minute))
-            hour, minute = minutes_to_clock(event_item.end_minute)
-            self.end_edit.setTime(_dt.time(hour, minute))
+            self.time_range.set_start_minutes(event_item.start_minute)
+            self.time_range.set_end_minutes(event_item.end_minute)
             self.recorded_check.setChecked(event_item.is_recorded)
             self.notes_edit.setText(event_item.notes)
 
@@ -150,15 +137,13 @@ class FixedEventDialog(QDialog):
         if not title:
             QMessageBox.warning(self, "عنوان لازم است", "عنوان رویداد را وارد کن.")
             return
-        start = self.start_edit.time()
-        end = self.end_edit.time()
-        start_minute = clock_to_minutes(start.hour(), start.minute())
-        end_minute = clock_to_minutes(end.hour(), end.minute())
-        if end_minute <= start_minute:
+        if not self.time_range.is_valid():
             QMessageBox.warning(
-                self, "بازهٔ نامعتبر", "زمان پایان باید بعد از شروع باشد."
+                self, "بازهٔ نامعتبر", self.time_range.error_text()
             )
             return
+        start_minute = self.time_range.start_minutes()
+        end_minute = self.time_range.end_minutes()
         self.result_event = FixedEvent(
             id=self.event_item.id if self.event_item else None,
             title=title,
@@ -203,14 +188,11 @@ class RoutineDialog(QDialog):
             self.scope_combo.addItem(label, scope.value)
         form.addRow("تناوب:", self.scope_combo)
 
-        self.start_edit = QTimeEdit()
-        self.start_edit.setDisplayFormat("HH:mm")
-        self.start_edit.setTime(_dt.time(7, 0))
-        self.end_edit = QTimeEdit()
-        self.end_edit.setDisplayFormat("HH:mm")
-        self.end_edit.setTime(_dt.time(7, 30))
-        form.addRow("شروع:", self.start_edit)
-        form.addRow("پایان:", self.end_edit)
+        # خواب از نیمه‌شب می‌گذرد (۲۳:۰۰ تا ۰۶:۰۰) پس end < start مجاز است.
+        self.time_range = TimeRangeInput(
+            "07:00", "07:30", allow_cross_midnight=True,
+        )
+        form.addRow("بازهٔ روال:", self.time_range)
 
         self.weekday_combo = QComboBox()
         for value, label in WEEKDAYS:
@@ -225,6 +207,7 @@ class RoutineDialog(QDialog):
         buttons.button(QDialogButtonBox.Cancel).setText("انصراف")
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
+        self.time_range.attach_button_box(buttons)
         form.addRow(buttons)
 
         if routine is not None:
@@ -235,10 +218,8 @@ class RoutineDialog(QDialog):
             index = self.scope_combo.findData(routine.scope)
             if index >= 0:
                 self.scope_combo.setCurrentIndex(index)
-            hour, minute = minutes_to_clock(routine.start_minute)
-            self.start_edit.setTime(_dt.time(hour, minute))
-            hour, minute = minutes_to_clock(routine.end_minute)
-            self.end_edit.setTime(_dt.time(hour, minute))
+            self.time_range.set_start_minutes(routine.start_minute)
+            self.time_range.set_end_minutes(routine.end_minute)
             days = sorted(routine.weekdays) or [0]
             index = self.weekday_combo.findData(days[0])
             if index >= 0:
@@ -250,15 +231,13 @@ class RoutineDialog(QDialog):
         if not title:
             QMessageBox.warning(self, "عنوان لازم است", "عنوان روال را وارد کن.")
             return
-        start = self.start_edit.time()
-        end = self.end_edit.time()
-        start_minute = clock_to_minutes(start.hour(), start.minute())
-        end_minute = clock_to_minutes(end.hour(), end.minute())
-        if end_minute <= start_minute:
+        if not self.time_range.is_valid():
             QMessageBox.warning(
-                self, "بازهٔ نامعتبر", "زمان پایان باید بعد از شروع باشد."
+                self, "بازهٔ نامعتبر", self.time_range.error_text()
             )
             return
+        start_minute = self.time_range.start_minutes()
+        end_minute = self.time_range.end_minutes()
         weekday = int(self.weekday_combo.currentData())
         scope = self.scope_combo.currentData()
         if scope == RoutineScope.ALTERNATE:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as _dt
 from typing import Optional
 
-from PySide6.QtCore import Qt, QTime
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QStackedWidget,
-    QTimeEdit,
+
     QVBoxLayout,
     QWidget,
 )
@@ -47,7 +47,7 @@ from ...onboarding import (
     summarize,
 )
 from ...service import AdvisorService
-from ..widgets import Card, info_box
+from ..widgets import Card, TimeRangeInput, info_box
 
 
 class OnboardingWizard(QDialog):
@@ -305,18 +305,12 @@ class OnboardingWizard(QDialog):
         weekday = QComboBox()
         for index, day in enumerate(DAY_ORDER):
             weekday.addItem(day, index)
-        start = QTimeEdit()
-        start.setDisplayFormat("HH:mm")
-        start.setTime(QTime(15, 0))
-        end = QTimeEdit()
-        end.setDisplayFormat("HH:mm")
-        end.setTime(QTime(16, 0))
+        time_range = TimeRangeInput("15:00", "16:00")
         form.addRow("عنوان:", title)
         form.addRow("نوع:", kind)
         form.addRow("درس:", subject)
         form.addRow("روز هفته:", weekday)
-        form.addRow("شروع:", start)
-        form.addRow("پایان:", end)
+        form.addRow("بازهٔ جلسه:", time_range)
         layout.addLayout(form)
         actions = QHBoxLayout()
         add = QPushButton("افزودن جلسه/تعهد")
@@ -330,7 +324,7 @@ class OnboardingWizard(QDialog):
         layout.addWidget(rows)
         self._event_editors[key] = {
             "title": title, "kind": kind, "subject": subject,
-            "weekday": weekday, "start": start, "end": end, "rows": rows,
+            "weekday": weekday, "time_range": time_range, "rows": rows,
         }
         add.clicked.connect(lambda: self._add_event_row(key))
         remove.clicked.connect(lambda: self._remove_event_row(key))
@@ -348,12 +342,10 @@ class OnboardingWizard(QDialog):
         kind = QComboBox()
         for label, value in (("خواب", "sleep"), ("غذا", "meal"), ("استراحت", "rest"), ("بهداشت/حمام", "hygiene"), ("رفت‌وآمد", "commute"), ("سایر", "other")):
             kind.addItem(label, value)
-        start = QTimeEdit()
-        start.setDisplayFormat("HH:mm")
-        start.setTime(QTime(12, 0))
-        end = QTimeEdit()
-        end.setDisplayFormat("HH:mm")
-        end.setTime(QTime(12, 30))
+        # خواب از نیمه‌شب می‌گذرد (۲۳:۰۰ تا ۰۶:۰۰) پس end < start مجاز است.
+        time_range = TimeRangeInput(
+            "12:00", "12:30", allow_cross_midnight=True,
+        )
         days = QListWidget()
         days.setMaximumHeight(105)
         for day in DAY_ORDER:
@@ -363,8 +355,7 @@ class OnboardingWizard(QDialog):
             days.addItem(item)
         form.addRow("عنوان:", title)
         form.addRow("نوع بازه:", kind)
-        form.addRow("شروع:", start)
-        form.addRow("پایان:", end)
+        form.addRow("بازهٔ ثابت:", time_range)
         form.addRow("روزهای تکرار (پیش‌فرض: هر روز):", days)
         layout.addLayout(form)
         actions = QHBoxLayout()
@@ -378,7 +369,7 @@ class OnboardingWizard(QDialog):
         rows.setAccessibleName("روال‌های ثابت ثبت‌شده در این مرحله")
         layout.addWidget(rows)
         self._routine_editors[key] = {
-            "title": title, "kind": kind, "start": start, "end": end,
+            "title": title, "kind": kind, "time_range": time_range,
             "days": days, "rows": rows,
         }
         add.clicked.connect(lambda: self._add_routine_row(key))
@@ -405,9 +396,9 @@ class OnboardingWizard(QDialog):
         combo.blockSignals(False)
 
     @staticmethod
-    def _editor_time(widget: QTimeEdit) -> int:
-        value = widget.time()
-        return value.hour() * 60 + value.minute()
+    def _editor_time(widget: TimeRangeInput) -> int:
+        """ساعت شروعِ یک ویجت بازه (برای سازگاری با کد قدیمی)."""
+        return widget.start_minutes()
 
     @staticmethod
     def _clock_text(minutes: int) -> str:
@@ -415,10 +406,11 @@ class OnboardingWizard(QDialog):
 
     def _add_event_row(self, key: str) -> None:
         editor = self._event_editors[key]
-        start, end = self._editor_time(editor["start"]), self._editor_time(editor["end"])
-        if end <= start:
-            QMessageBox.warning(self, "زمان نامعتبر", "پایان جلسه باید بعد از شروع و در همان روز باشد.")
+        time_range = editor["time_range"]
+        if not time_range.is_valid():
+            QMessageBox.warning(self, "بازهٔ نامعتبر", time_range.error_text())
             return
+        start, end = time_range.start_minutes(), time_range.end_minutes()
         subject = str(editor["subject"].currentData() or "")
         title = editor["title"].text().strip() or subject
         if not title:
@@ -463,10 +455,11 @@ class OnboardingWizard(QDialog):
 
     def _add_routine_row(self, key: str) -> None:
         editor = self._routine_editors[key]
-        start, end = self._editor_time(editor["start"]), self._editor_time(editor["end"])
-        if start == end:
-            QMessageBox.warning(self, "زمان نامعتبر", "شروع و پایان بازه نمی‌توانند یکسان باشند.")
+        time_range = editor["time_range"]
+        if not time_range.is_valid():
+            QMessageBox.warning(self, "بازهٔ نامعتبر", time_range.error_text())
             return
+        start, end = time_range.start_minutes(), time_range.end_minutes()
         title = editor["title"].text().strip()
         if not title:
             QMessageBox.warning(self, "عنوان لازم است", "عنوان بازه را وارد کنید.")

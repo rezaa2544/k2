@@ -347,8 +347,8 @@ def test_fixed_event_dialog_validates_range(window, monkeypatch):
 
     dialog = FixedEventDialog(window.service)
     dialog.title_edit.setText("کلاس")
-    dialog.start_edit.setTime(_dt.time(18, 0))
-    dialog.end_edit.setTime(_dt.time(17, 0))
+    dialog.time_range.set_start_minutes(18 * 60)
+    dialog.time_range.set_end_minutes(17 * 60)
     dialog._accept()
     assert not hasattr(dialog, "result_event")
 
