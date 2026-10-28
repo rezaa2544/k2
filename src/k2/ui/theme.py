@@ -266,6 +266,39 @@ def stylesheet() -> str:
     }}
     QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QSpinBox:focus,
     QDoubleSpinBox:focus {{ border: 2px solid {c['accent']}; }}
+
+    /* ---------- کادر ساعت و تاریخ (ترکیبی، یک قالب واحد) ----------
+       بخش‌های درونی باید کاملاً شفاف شوند، وگرنه قاعدهٔ عمومی QLineEdit
+       و QSpinBox برایشان قاب و padding می‌گذارد و جای متن نمی‌ماند. */
+    QFrame#timeBox {{
+        background: {c['surface']}; border: 2px solid {c['border']};
+        border-radius: 9px; padding: 1px 6px;
+    }}
+    QFrame#timeBox[active="true"] {{ border: 2px solid {c['accent']}; }}
+    QFrame#timeBox QLineEdit {{
+        background: transparent; border: none; padding: 0; selection-background-color: {c['accent_soft']};
+    }}
+    QSpinBox#timeHour {{
+        font-size: 15px; font-weight: 700;
+        background: transparent; border: none; padding: 0 1px;
+    }}
+    QSpinBox#timeMinute {{
+        font-size: 13px; font-weight: 400;
+        background: transparent; border: none; padding: 0 1px;
+    }}
+    QSpinBox#timeDate {{
+        font-size: 13px; font-weight: 500;
+        background: transparent; border: none; padding: 0 1px;
+    }}
+    QSpinBox#timeHour:focus, QSpinBox#timeMinute:focus, QSpinBox#timeDate:focus {{
+        background: transparent; border: none;
+    }}
+    QLabel#timeColon {{ font-size: 14px; font-weight: 700; color: {c['muted']}; background: transparent; border: none; padding: 0; }}
+    QLabel#dateSlash {{ font-size: 13px; font-weight: 500; color: {c['muted']}; background: transparent; border: none; padding: 0; }}
+    /* قالب تودرتو: قالب بیرونی کادر را می‌سازد، این یکی فقط چیدمان است. */
+    QFrame#timeBoxInner {{ background: transparent; border: none; padding: 0; }}
+    QFrame#timeBoxInner QLineEdit {{ background: transparent; border: none; padding: 0; }}
+    QFrame#timeBoxInner QSpinBox {{ background: transparent; border: none; }}
     QListWidget::item, QTreeWidget::item {{ padding: 6px 4px; border-radius: 6px; }}
     QListWidget::item:selected, QTreeWidget::item:selected {{
         background: {c['accent_soft']}; color: {c['text']};

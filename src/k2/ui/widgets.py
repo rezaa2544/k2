@@ -10,11 +10,13 @@
 from __future__ import annotations
 
 import datetime as _dt
+from contextlib import contextmanager
 from typing import Optional
 
-from PySide6.QtCore import QDate, QDateTime, QLocale, Qt, Signal, QTime
+from PySide6.QtCore import QDate, QDateTime, QEvent, QLocale, Qt, Signal, QTime
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
     QDialogButtonBox,
     QFrame,
     QHBoxLayout,
@@ -33,6 +35,16 @@ def _repolish(widget: QWidget) -> None:
     """انتخابگر ویژگیِ QSS را روی ویجت اعمال می‌کند."""
     widget.style().unpolish(widget)
     widget.style().polish(widget)
+
+
+@contextmanager
+def _signals_blocked(widget: QWidget):
+    """سیگنال‌های ویجت را موقتاً می‌بندد (برای اندازه‌گیری بی‌عارضه)."""
+    widget.blockSignals(True)
+    try:
+        yield
+    finally:
+        widget.blockSignals(False)
 
 
 class Card(QFrame):
@@ -243,6 +255,52 @@ class _LatinSpinBox(QSpinBox):
         self.setAccelerated(True)
         self.setAlignment(Qt.AlignCenter)
 
+    def make_plain(self, role: str = "minute") -> None:
+        """جعبه را برای نشیدن داخل یک کادر واحد آماده می‌کند.
+
+        ``role`` یکی از ``hour`` / ``minute`` / ``date`` است و **فقط** در QSS
+        تم تعیین می‌کند این بخش چقدر بزرگ و چقدر پررنگ است. اندازه را با
+        ``QFont.setPointSize`` نمی‌توان ست کرد، چون قاعدهٔ
+        ``QWidget {{ font-size: 13px; }}`` در تم همهٔ ویجت‌ها را یک اندازه
+        می‌کند و تفاوت ساعت/دقیقه را می‌پوشاند — اندازه‌گیری نشان داد هر دو
+        ۱۳ پیکسل ارتفاع می‌گیرند و تنها پررنگی می‌ماند.
+
+        قاب و فلش برداشته می‌شود و **عرض ثابت هیچ‌جا تعیین نمی‌شود**: عرض را
+        خود Qt از قلم واقعی ویجت حساب می‌کند. عرض ۶۲ پیکسل ثابت، فلش
+        (۳۲ پیکسل) و padding تم (۲۰ پیکسل) را از خودش می‌کشت و برای متن
+        «۲۳» که ۲۶ پیکسل لازم دارد **منفی ده پیکسل** می‌ماند — عدد بریده
+        دیده می‌شد. هر عدد ثابتی که جایش بگذاریم باز با قلم/DPI دیگری
+        می‌شکند، پس اندازه‌گیری به Qt سپرده شده است.
+        """
+        self.setObjectName(f"time{role.capitalize()}")
+        self.setButtonSymbols(QAbstractSpinBox.NoButtons)
+        self.setFrame(False)
+        self.setAlignment(Qt.AlignCenter)
+        # پشتیبان برای وقتی تم اعمال نشده (مثلاً در آزمون): همان نسبتی که
+        # QSS می‌دهد، تا بدون تم هم ساعت از دقیقه بزرگ‌تر بماند.
+        base = base_font()
+        size = base.pointSize() or 13
+        if role == "hour":
+            self.setFont(base_font(size + 2, 700))
+        elif role == "date":
+            self.setFont(base_font(size, 500))
+        else:
+            self.setFont(base_font(size, 400))
+        # عرض طبیعی ممکن است کم بیاید؛ بعد از polish دوباره اندازه می‌گیریم.
+        self._fit_pending = True
+
+    def showEvent(self, event):  # noqa: N802 - Qt naming
+        super().showEvent(event)
+        if getattr(self, "_fit_pending", False):
+            self._fit_pending = False
+            # تم اکنون اعمال شده، پس sizeHint با قلم واقعی حساب می‌شود.
+            with _signals_blocked(self):
+                previous = self.value()
+                self.setValue(self.maximum())
+                widest = self.sizeHint().width()
+                self.setValue(previous)
+            self.setMinimumWidth(widest + 4)
+
     def textFromValue(self, value: int) -> str:  # noqa: N802 - Qt naming
         return f"{value:02d}"
 
@@ -256,50 +314,62 @@ class _LatinSpinBox(QSpinBox):
         return max(self.minimum(), min(self.maximum(), value))
 
 
-class _TimeField(QWidget):
-    """یک کادر ساعت: دو جعبهٔ چرخش (ساعت و دقیقه) با جداکنندهٔ دونقطه.
+class _TimeField(QFrame):
+    """یک کادر ساعت: «HH : MM» در **یک** قالب واحد.
 
     چرا ``QTimeEdit`` کنار گذاشته شد:
 
     * اعداد را با locale سیستم می‌کشید؛ فارسی «۰۷:۳۰» می‌شد.
-    * در ``QTimeEdit`` کل رشته یک قلم واحد دارد، پس نمی‌شد ساعت را از دقیقه
+    * در ``QTimeEdit`` کل رشته یک قلم واحد داشت، پس نمی‌شد ساعت را از دقیقه
       پررنگ/بزرگ‌تر کرد تا در یک نگاه جدا شود.
     * دو جعبهٔ ۰–۲۳ و ۰–۵۹ قالب ۲۴ ساعته را ساختاراً تضمین می‌کنند، نه فقط
       با یک قالب نمایشی؛ امکان «۱۸:۰۰ بعدازظهر» بودن وجود ندارد.
+
+    چرا یک قالب و نه سه قالب جدا: نسخهٔ پیشین سه جعبهٔ چرخان با قاب و فلش
+    کنار هم بود؛ هر کدام ۶۲ پیکسل عرض ثابت داشتند و فلش (۳۲ پیکسل) به‌همراه
+    padding تم (۲۰ پیکسل) جای متن را کاملاً می‌خورد، پس عدد بریده دیده
+    می‌شد. حالا یک قالب است و بخش‌های درونی شفاف و بی‌قاب‌اند.
 
     ساعت یک درجه بزرگ‌تر و پررنگ‌تر از دقیقه است.
     """
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
+        self.setObjectName("timeBox")
         # اعداد همیشه چپ‌به‌راست می‌مانند حتی وقتی پنجرهٔ کل راست‌به‌چپ است.
         self.setLayoutDirection(Qt.LeftToRight)
+        self.setFocusPolicy(Qt.StrongFocus)
+
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(1)
+        layout.setContentsMargins(4, 0, 4, 0)
+        layout.setSpacing(0)
 
-        self.hour_spin = _LatinSpinBox(0, 23)
-        self.minute_spin = _LatinSpinBox(0, 59)
-
-        self.colon = QLabel(":")
-        self.colon.setObjectName("timeColon")
-
-        # قلم را با helper برنامه می‌سازیم تا خانوادهٔ Vazirmatn و فایل وزن
-        # درست انتخاب شود، حتی اگر هنوز تم روی پنجره اعمال نشده باشد.
+        # قلم را با helper برنامه می‌سازیم تا خانوادهٔ Vazirmatn و وزن درست
+        # انتخاب شود، حتی اگر هنوز تم روی پنجره اعمال نشده باشد.
         base = base_font()
         size = base.pointSize() or 10
         hour_font = base_font(size + 2, 700)
         minute_font = base_font(size, 400)
-        self.hour_spin.setFont(hour_font)
-        self.colon.setFont(hour_font)
-        self.minute_spin.setFont(minute_font)
 
-        for spin in (self.hour_spin, self.minute_spin):
-            spin.setFixedWidth(62)
+        self.hour_spin = _LatinSpinBox(0, 23)
+        self.minute_spin = _LatinSpinBox(0, 59)
+        self.hour_spin.make_plain("hour")
+        self.minute_spin.make_plain("minute")
+
+        self.colon = QLabel(":")
+        self.colon.setObjectName("timeColon")
+        self.colon.setFont(base_font(size + 1, 700))
 
         layout.addWidget(self.hour_spin)
         layout.addWidget(self.colon)
         layout.addWidget(self.minute_spin)
+
+        for spin in (self.hour_spin, self.minute_spin):
+            spin.installEventFilter(self)
+
+    # ------------------------------------------------------------------
+    # مقدار
+    # ------------------------------------------------------------------
 
     def minutes(self) -> int:
         return self.hour_spin.value() * 60 + self.minute_spin.value()
@@ -313,14 +383,27 @@ class _TimeField(QWidget):
         for spin in (self.hour_spin, self.minute_spin):
             spin.setToolTip(text)
 
+    # ------------------------------------------------------------------
+    # حلقهٔ focus روی قالب بیرونی
+    # ------------------------------------------------------------------
 
-class LatinDateTimeField(QWidget):
-    """کادر تاریخ‌وزمان: سال/ماه/روز و ساعت/دقیقه، همه با اعداد لاتین.
+    def eventFilter(self, obj, event):  # noqa: N802 - Qt naming
+        if event.type() in (QEvent.Type.FocusIn, QEvent.Type.FocusOut):
+            active = any(
+                spin.hasFocus() for spin in (self.hour_spin, self.minute_spin)
+            )
+            self.setProperty("active", "true" if active else "false")
+            _repolish(self)
+        return super().eventFilter(obj, event)
+
+
+class LatinDateTimeField(QFrame):
+    """کادر تاریخ‌وزمان: «YYYY / MM / DD   HH : MM» در یک قالب واحد.
 
     چرا ترکیبی و نه ``QDateTimeEdit``: پنجرهٔ برنامه راست‌به‌چپ است و هر سه
     ویرایشگر تاریخ/ساعتِ Qt متن خودشان را راست‌به‌چپ رندر می‌کنند؛
     «2026-10-27 19:45» می‌شود «۴۵:۱۹ ۲۷-۱۰-۲۰۲۶». دادن locale لاتین فقط
-    ارقام را درست می‌کند («45:19 27-10-2026»)، تراضی گروه‌ها نه.
+    ارقام را درست می‌کند («45:19 27-10-2026»)، ترتیب گروه‌ها را نه.
 
     جعبه‌های جدا هر کدام فقط ارقام دارند و ارقام حتی در پاراگراف
     راست‌به‌چپ چپ‌به‌راست می‌مانند، پس ترتیب حفظ می‌شود. سال/ماه/روز
@@ -330,34 +413,63 @@ class LatinDateTimeField(QWidget):
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
+        self.setObjectName("timeBox")
         self.setLayoutDirection(Qt.LeftToRight)
+        self.setFocusPolicy(Qt.StrongFocus)
+
+        base = base_font()
+        size = base.pointSize() or 10
+        part_font = base_font(size, 500)
+        hour_font = base_font(size + 2, 700)
+        minute_font = base_font(size, 400)
+
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(3)
+        layout.setContentsMargins(6, 0, 6, 0)
+        layout.setSpacing(0)
 
         self.year_spin = _LatinSpinBox(1900, 2200)
         self.month_spin = _LatinSpinBox(1, 12)
         self.day_spin = _LatinSpinBox(1, 31)
-        self.time_field = _TimeField()
-
         for spin in (self.year_spin, self.month_spin, self.day_spin):
-            spin.setFixedWidth(62)
+            spin.make_plain("date")
+
+        def slash() -> QLabel:
+            label = QLabel("/")
+            label.setObjectName("dateSlash")
+            label.setFont(part_font)
+            return label
 
         layout.addWidget(self.year_spin)
-        layout.addWidget(QLabel("/"))
+        layout.addWidget(slash())
         layout.addWidget(self.month_spin)
-        layout.addWidget(QLabel("/"))
+        layout.addWidget(slash())
         layout.addWidget(self.day_spin)
-        layout.addSpacing(10)
+
+        layout.addSpacing(12)
+        self.time_field = _TimeField()
+        # قالب درونی نباید قاب خودش را داشته باشد؛ قالب بیرونی کافی است.
+        self.time_field.setObjectName("timeBoxInner")
         layout.addWidget(self.time_field)
+        layout.addStretch(1)
 
         # اگر ماه یا سال عوض شد و روز از طول ماه بیشتر بود، پایین می‌آید؛
         # وگرنه کاربر «۳۱ فوریه» می‌ساخت و مقدار بی‌صدا جا می‌افتاد.
         self.month_spin.valueChanged.connect(self._clamp_day)
         self.year_spin.valueChanged.connect(self._clamp_day)
 
+        for spin in (
+            self.year_spin,
+            self.month_spin,
+            self.day_spin,
+            self.time_field.hour_spin,
+            self.time_field.minute_spin,
+        ):
+            spin.installEventFilter(self)
+
         self.setToolTip("تاریخ میلادی و ساعت ۲۴ ساعته، با اعداد لاتین")
 
+    # ------------------------------------------------------------------
+    # مقدار
     # ------------------------------------------------------------------
 
     def _clamp_day(self) -> None:
@@ -386,6 +498,31 @@ class LatinDateTimeField(QWidget):
         self.month_spin.setValue(local.month)
         self.day_spin.setValue(local.day)
         self.time_field.set_minutes(local.hour * 60 + local.minute)
+
+    def setToolTip(self, text: str) -> None:  # noqa: N802 - Qt naming
+        for spin in (self.year_spin, self.month_spin, self.day_spin):
+            spin.setToolTip(text)
+        self.time_field.setToolTip(text)
+
+    # ------------------------------------------------------------------
+    # حلقهٔ focus روی قالب بیرونی
+    # ------------------------------------------------------------------
+
+    def eventFilter(self, obj, event):  # noqa: N802 - Qt naming
+        if event.type() in (QEvent.Type.FocusIn, QEvent.Type.FocusOut):
+            active = any(
+                spin.hasFocus()
+                for spin in (
+                    self.year_spin,
+                    self.month_spin,
+                    self.day_spin,
+                    self.time_field.hour_spin,
+                    self.time_field.minute_spin,
+                )
+            )
+            self.setProperty("active", "true" if active else "false")
+            _repolish(self)
+        return super().eventFilter(obj, event)
 
 
 class TimeRangeInput(QWidget):
@@ -434,9 +571,8 @@ class TimeRangeInput(QWidget):
 
         self.duration_label = QLabel()
         self.duration_label.setObjectName("muted")
-        duration_font = QFont()
-        duration_font.setPointSize(max(8, duration_font.pointSize() - 1))
-        self.duration_label.setFont(duration_font)
+        base = base_font()
+        self.duration_label.setFont(base_font(max(8, (base.pointSize() or 10) - 1), 500))
 
         layout.addWidget(self.start_label)
         layout.addWidget(self.start_field)
