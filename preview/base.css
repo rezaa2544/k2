@@ -422,3 +422,7 @@ tbody tr:hover td{background:var(--surface-soft)}
 .pill.warn{background:var(--warn-soft);color:var(--warn)}
 .resource-meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:var(--muted);font-size:11px}
 .pill.warn{background:var(--warn-soft);color:var(--warn)}
+
+/* راهنمای کادر ساعت: همان قاعدهٔ نسخهٔ نصب‌شده (۲۴ ساعته، اعداد لاتین). */
+.field-hint{margin:.2rem 0 .6rem;font-size:.78rem;color:var(--muted);line-height:1.7}
+input[type="time"]{direction:ltr;text-align:start;font-variant-numeric:tabular-nums}
